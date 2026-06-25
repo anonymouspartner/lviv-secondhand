@@ -576,7 +576,8 @@ function renderList() {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No stores match</div><div class="empty-sub">Try a different filter</div></div>`;
     return;
   }
-  el.innerHTML = stores.map(s => {
+  el.innerHTML = stores.map(raw => {
+    const s = getStoreData(raw);
     const sd = getSD(s.id);
     const di = getDayInfo(s.id, s.cycle);
     const todayKey = DAYS[new Date().getDay()];
@@ -841,7 +842,8 @@ function startAddPin() {
 function renderPins() {
   mapMarkers.forEach(m => m.remove());
   mapMarkers = [];
-  filtered().forEach(s => {
+  filtered().forEach(raw => {
+    const s = getStoreData(raw);
     const sd = getSD(s.id);
     const color = s.custom ? '#e86c2a' : (s.type === 'humana' ? '#c0392b' : (s.pricing === 'kg' ? '#2471a3' : '#1b5e38'));
     const label = sd.visited ? '✓' : (s.custom ? '+' : (s.type==='humana' ? 'H' : 'S'));
