@@ -198,9 +198,6 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 
 /* ── POPUP ── */
 .leaflet-popup-content-wrapper { border-radius: 14px; }
-.popup-name { font-weight: 800; font-size: 14px; margin-bottom: 4px; }
-.popup-addr { font-size: 12px; color: #666; margin-bottom: 10px; }
-.popup-open-btn { display: block; width: 100%; padding: 9px; background: var(--green); color: white; border: none; border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -263,7 +260,7 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
     </div>
     <div class="help-section">
       <h3>🗺️ The Map</h3>
-      <p>Shows all store locations as pins. <strong>Red pins</strong> = HUMANA. <strong>Blue pins</strong> = others. A ✓ on a pin means you've visited. Tap any pin to see a summary, then tap "View Details".</p>
+      <p>Shows all store locations as pins. <strong>Red pins</strong> = HUMANA. <strong>Blue pins</strong> = others. A ✓ on a pin means you've visited. Tap any pin to open its store details.</p>
     </div>
     <div class="help-section">
       <h3>📦 Inventory Tracker</h3>
@@ -786,16 +783,6 @@ function initMap() {
     openAddStoreModal(e.latlng.lat, e.latlng.lng);
   });
 
-  // Inline onclick handlers inside Leaflet popups get swallowed by Leaflet's
-  // own touch handling on mobile, so wire the button up here instead.
-  mapInst.on('popupopen', function(e) {
-    const btn = e.popup.getElement().querySelector('.popup-open-btn');
-    if (!btn) return;
-    L.DomEvent.on(btn, 'click', L.DomEvent.stop).on(btn, 'click', function() {
-      openDetail(btn.dataset.storeId);
-    });
-  });
-
   renderPins();
 }
 
@@ -817,7 +804,7 @@ function renderPins() {
       iconSize:[36,36], iconAnchor:[18,18]
     });
     const m = L.marker([s.lat, s.lng], {icon}).addTo(mapInst);
-    m.bindPopup(`<div class="popup-name">${s.name}</div><div class="popup-addr">${lang==='ua'?(s.address||s.addressEn):(s.addressEn||s.address)}</div><button class="popup-open-btn" data-store-id="${s.id}">${t('viewDetails')}</button>`);
+    m.on('click', function() { openDetail(s.id); });
     mapMarkers.push(m);
   });
 }
