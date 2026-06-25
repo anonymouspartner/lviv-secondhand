@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1b5e38">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Lviv Second Hand</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --green: #1b5e38;
+  --green2: #2d8653;
+  --green-light: #52b788;
+  --green-pale: #eaf7ee;
+  --red: #c0392b;
+  --red-pale: #fdecea;
+  --blue: #2471a3;
+  --blue-pale: #eaf2fb;
+  --orange: #e86c2a;
+  --bg: #f2f4f6;
+  --card: #ffffff;
+  --text: #1a1a2e;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 15px; }
+
+/* ── HEADER ── */
+header { background: var(--green); color: white; padding: 14px 16px 12px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.hdr-left h1 { font-size: 19px; font-weight: 800; }
+.hdr-left p { font-size: 12px; opacity: 0.75; margin-top: 1px; }
+.help-btn { background: rgba(255,255,255,0.2); border: none; color: white; width: 36px; height: 36px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.lang-pill { display:flex; background:rgba(255,255,255,0.18); border-radius:20px; overflow:hidden; border:1.5px solid rgba(255,255,255,0.3); }
+.lp { padding:5px 10px; font-size:12px; font-weight:800; cursor:pointer; color:rgba(255,255,255,0.65); transition:all 0.15s; letter-spacing:0.3px; }
+.lp.active { background:white; color:var(--green); border-radius:18px; }
+
+/* ── TABS ── */
+.tabs { display: flex; background: white; border-bottom: 2px solid var(--border); flex-shrink: 0; }
+.tab { flex: 1; padding: 11px 6px 9px; text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; letter-spacing: 0.3px; text-transform: uppercase; }
+.tab span { font-size: 20px; display: block; margin-bottom: 2px; }
+.tab.active { color: var(--green); border-bottom-color: var(--green); }
+
+/* ── FILTERS ── */
+.filter-bar { padding: 10px 12px; background: white; border-bottom: 1px solid var(--border); display: flex; gap: 7px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none; }
+.filter-bar::-webkit-scrollbar { display: none; }
+.fbtn { padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: white; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; color: var(--text); transition: all 0.15s; }
+.fbtn.active { background: var(--green); color: white; border-color: var(--green); }
+
+/* ── CONTENT ── */
+.content { flex: 1; overflow: hidden; position: relative; }
+.view { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.view.hidden { display: none; }
+#map { width: 100%; height: 100%; }
+
+/* ── STORE LIST ── */
+.list-wrap { padding: 12px 12px calc(88px + env(safe-area-inset-bottom, 0px)); }
+.section-tip { background: #fff8e1; border: 1px solid #ffe082; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; color: #5d4037; line-height: 1.5; }
+.section-tip strong { display: block; margin-bottom: 3px; }
+
+/* ── STORE CARD ── */
+.store-card { background: white; border-radius: 14px; margin-bottom: 10px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; active: { opacity: 0.85; } transition: transform 0.1s; }
+.store-card:active { transform: scale(0.985); }
+.store-card.visited { border-color: var(--green-light); }
+.card-top { padding: 13px 14px 10px; display: flex; gap: 11px; align-items: flex-start; }
+.store-dot { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.dot-humana { background: var(--red-pale); }
+.dot-other { background: var(--blue-pale); }
+.card-body { flex: 1; min-width: 0; }
+.card-name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+.card-addr { font-size: 12px; color: var(--muted); margin-bottom: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.tag { padding: 3px 9px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+.tag-red { background: var(--red-pale); color: var(--red); }
+.tag-blue { background: var(--blue-pale); color: var(--blue); }
+.tag-green { background: var(--green-pale); color: var(--green); }
+.tag-gray { background: #f3f4f6; color: var(--muted); }
+.tag-gold { background: #fff8e1; color: #7d5c00; }
+.card-check { font-size: 22px; flex-shrink: 0; align-self: center; }
+.card-cycle { margin: 0 14px 12px; padding: 9px 12px; background: var(--bg); border-radius: 9px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; }
+.cycle-label { color: var(--muted); font-size: 12px; }
+.cycle-val { font-weight: 700; }
+.cycle-val.fresh { color: #16a34a; }
+.cycle-val.mid { color: #d97706; }
+.cycle-val.old { color: #dc2626; }
+
+/* ── DETAIL ── */
+#detail-view { background: var(--bg); }
+.det-header { background: var(--green); color: white; padding: 14px 16px 18px; }
+.back-btn { background: none; border: none; color: rgba(255,255,255,0.85); font-size: 15px; cursor: pointer; padding: 0 0 10px 0; display: flex; align-items: center; gap: 5px; }
+.det-name { font-size: 22px; font-weight: 800; line-height: 1.2; }
+.det-sub { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+.det-body { padding: 14px; }
+
+/* ── VISIT BUTTON ── */
+.visit-btn { width: 100%; padding: 16px; border-radius: 14px; font-size: 17px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; transition: all 0.2s; margin-bottom: 14px; border: none; }
+.visit-btn.no { background: var(--green); color: white; }
+.visit-btn.yes { background: var(--green-pale); color: var(--green); border: 2px solid var(--green-light); }
+.visit-btn:active { transform: scale(0.97); }
+
+/* ── INFO CARD ── */
+.info-card { background: white; border-radius: 14px; margin-bottom: 12px; overflow: hidden; border: 1px solid var(--border); }
+.info-card-title { padding: 12px 16px; background: var(--bg); font-weight: 800; font-size: 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.info-row { padding: 13px 16px; display: flex; gap: 13px; align-items: flex-start; border-bottom: 1px solid var(--border); }
+.info-row:last-child { border-bottom: none; }
+.info-icon { font-size: 20px; flex-shrink: 0; width: 26px; text-align: center; }
+.info-lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+.info-val { font-size: 15px; font-weight: 600; }
+.info-sub { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+
+/* ── INVENTORY TRACKER ── */
+.tracker-card { background: white; border-radius: 14px; margin-bottom: 12px; overflow: hidden; border: 1px solid var(--border); }
+.tracker-title { background: var(--green); color: white; padding: 13px 16px; font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.tracker-body { padding: 16px; }
+.tracker-tip { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 11px 14px; font-size: 13px; color: #166534; margin-bottom: 14px; line-height: 1.5; }
+.big-day { text-align: center; margin: 6px 0 14px; }
+.big-day-num { font-size: 64px; font-weight: 900; line-height: 1; }
+.big-day-num.fresh { color: #16a34a; }
+.big-day-num.mid { color: #d97706; }
+.big-day-num.old { color: #dc2626; }
+.big-day-label { font-size: 14px; color: var(--muted); margin-top: 4px; }
+.bar-wrap { margin-bottom: 6px; }
+.bar-bg { height: 12px; background: var(--border); border-radius: 6px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 6px; transition: width 0.5s; }
+.bar-fill.fresh { background: linear-gradient(90deg,#4ade80,#16a34a); }
+.bar-fill.mid { background: linear-gradient(90deg,#fbbf24,#d97706); }
+.bar-fill.old { background: linear-gradient(90deg,#f87171,#dc2626); }
+.bar-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 4px; margin-bottom: 14px; }
+.price-box { background: var(--bg); border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 14px; }
+.price-lbl { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.price-val { font-size: 24px; font-weight: 900; color: var(--green); }
+.price-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.set-del-btn { width: 100%; padding: 14px; background: var(--green); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.set-del-btn:active { background: #12412a; }
+
+/* ── HOURS ── */
+.hrs-table { width: 100%; font-size: 14px; }
+.hrs-table td { padding: 5px 0; }
+.hrs-table td:first-child { color: var(--muted); width: 90px; }
+.hrs-table tr.today td { font-weight: 700; color: var(--green); }
+.hrs-table .closed-cell { color: #dc2626; }
+
+/* ── KG PRICE TABLE ── */
+.kg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.kg-table th { padding: 7px 12px; background: var(--bg); text-align: left; font-size: 11px; color: var(--muted); text-transform: uppercase; }
+.kg-table td { padding: 9px 12px; border-top: 1px solid var(--border); }
+.kg-table tr.today-kg { background: #f0fdf4; font-weight: 700; }
+.kg-table tr.today-kg td { color: var(--green); }
+
+/* ── MAP BUTTONS ── */
+.maps-btns { display: flex; gap: 10px; margin-bottom: 20px; }
+.maps-btn { flex: 1; display: block; background: var(--blue); color: white; text-align: center; padding: 15px 10px; border-radius: 14px; font-weight: 800; font-size: 15px; text-decoration: none; }
+.maps-btn.mapsme { background: var(--orange); }
+.maps-btn:active { opacity: 0.85; }
+
+/* ── MODALS ── */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 900; display: flex; align-items: flex-end; }
+.overlay.hidden { display: none; }
+.sheet { background: white; border-radius: 22px 22px 0 0; padding: 22px 20px 32px; width: 100%; }
+.sheet-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
+.sheet h2 { font-size: 20px; font-weight: 800; margin-bottom: 6px; }
+.sheet p { font-size: 14px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+.field-lbl { font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+.field { width: 100%; padding: 13px 14px; border: 2px solid var(--border); border-radius: 12px; font-size: 16px; margin-bottom: 14px; background: white; }
+.field:focus { outline: none; border-color: var(--green); }
+.sheet-btn { width: 100%; padding: 16px; background: var(--green); color: white; border: none; border-radius: 14px; font-size: 17px; font-weight: 800; cursor: pointer; }
+.sheet-btn:active { background: #12412a; }
+.sheet-cancel { width: 100%; padding: 13px; background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; margin-top: 8px; }
+
+/* ── WELCOME MODAL ── */
+.welcome-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.welcome-overlay.hidden { display: none; }
+.welcome-box { background: white; border-radius: 22px; width: 100%; max-width: 400px; overflow: hidden; }
+.welcome-top { background: var(--green); color: white; padding: 28px 24px 22px; text-align: center; }
+.welcome-top h2 { font-size: 26px; font-weight: 900; margin-bottom: 6px; }
+.welcome-top p { font-size: 14px; opacity: 0.85; }
+.welcome-steps { padding: 20px 24px; }
+.step { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
+.step-num { width: 34px; height: 34px; background: var(--green); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; flex-shrink: 0; }
+.step-text strong { display: block; font-size: 15px; margin-bottom: 2px; }
+.step-text p { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.welcome-btn { display: block; width: calc(100% - 48px); margin: 0 24px 24px; padding: 16px; background: var(--green); color: white; border: none; border-radius: 14px; font-size: 17px; font-weight: 800; cursor: pointer; text-align: center; }
+
+/* ── HELP MODAL ── */
+.help-section { margin-bottom: 18px; }
+.help-section h3 { font-size: 15px; font-weight: 800; margin-bottom: 8px; color: var(--green); }
+.help-section p { font-size: 14px; color: var(--text); line-height: 1.6; }
+.help-section ul { padding-left: 18px; }
+.help-section li { font-size: 14px; color: var(--text); line-height: 1.7; }
+
+/* ── EMPTY ── */
+.empty { text-align: center; padding: 60px 24px; }
+.empty-icon { font-size: 52px; margin-bottom: 14px; }
+.empty-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.empty-sub { font-size: 14px; color: var(--muted); }
+
+/* ── POPUP ── */
+.leaflet-popup-content-wrapper { border-radius: 14px; }
+.popup-name { font-weight: 800; font-size: 14px; margin-bottom: 4px; }
+.popup-addr { font-size: 12px; color: #666; margin-bottom: 10px; }
+.popup-open-btn { display: block; width: 100%; padding: 9px; background: var(--green); color: white; border: none; border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- WELCOME SCREEN (shown on first visit)       -->
+<!-- ══════════════════════════════════════════ -->
+<div class="welcome-overlay hidden" id="welcome">
+  <div class="welcome-box">
+    <div class="welcome-top">
+      <div style="font-size:48px;margin-bottom:10px;">🧥</div>
+      <h2>Lviv Second Hand</h2>
+      <p>Your personal guide to every second-hand store in Lviv</p>
+    </div>
+    <div class="welcome-steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>Browse or search stores</strong>
+          <p>See all 17 stores in a list or on the map. Filter by HUMANA, by KG, by visited, and more.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>Tap a store to see full details</strong>
+          <p>Hours, address, phone, pricing type, and notes are all inside each store card.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>Track inventory & prices</strong>
+          <p>Set the last delivery date for any store — the app counts each day and shows estimated discounts automatically.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text">
+          <strong>Mark stores as visited</strong>
+          <p>Tap the green button inside any store to record your visit. Your progress is saved.</p>
+        </div>
+      </div>
+    </div>
+    <button class="welcome-btn" onclick="closeWelcome()">Let's Go →</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- HELP SHEET                                 -->
+<!-- ══════════════════════════════════════════ -->
+<div class="overlay hidden" id="help-overlay">
+  <div class="sheet" style="max-height:85vh;overflow-y:auto;">
+    <div class="sheet-handle"></div>
+    <h2>How to use this app</h2>
+    <br>
+    <div class="help-section">
+      <h3>📋 The List</h3>
+      <p>Shows all stores. Use the <strong>filter buttons</strong> at the top to show only HUMANA stores, only KG stores, stores you've visited, or ones you haven't been to yet. Scroll the filters sideways if you can't see them all.</p>
+    </div>
+    <div class="help-section">
+      <h3>🗺️ The Map</h3>
+      <p>Shows all store locations as pins. <strong>Red pins</strong> = HUMANA. <strong>Blue pins</strong> = others. A ✓ on a pin means you've visited. Tap any pin to see a summary, then tap "View Details".</p>
+    </div>
+    <div class="help-section">
+      <h3>📦 Inventory Tracker</h3>
+      <p>Inside each store, tap <strong>"Set Last Delivery Date"</strong> to record when new stock arrived. The app will:</p>
+      <ul>
+        <li>Count how many days have passed</li>
+        <li>Show a progress bar through the cycle</li>
+        <li>Estimate the current discount % (or exact KG price for weight stores)</li>
+      </ul>
+      <p style="margin-top:8px;"><strong>Green</strong> = fresh stock, high prices. <strong>Orange</strong> = mid-cycle. <strong>Red</strong> = late cycle, best deals!</p>
+    </div>
+    <div class="help-section">
+      <h3>✅ Visited</h3>
+      <p>Tap the big green <strong>"Mark as Visited"</strong> button inside any store. It turns into a checkmark and the card gets a green border in the list.</p>
+    </div>
+    <div class="help-section">
+      <h3>⚖️ KG vs Itemized</h3>
+      <p><strong>By KG</strong> stores charge by weight — you fill a bag and pay per kilogram. Prices drop every day. <strong>Itemized</strong> stores price each item individually.</p>
+    </div>
+    <div class="help-section">
+      <h3>📤 Maps.me Integration</h3>
+      <p>Tap the <strong>📤</strong> button in the top-right to download a KML file with all store locations. In Maps.me: tap ☰ → Bookmarks → ⋮ → Import → select the file. All stores appear as bookmarks. Inside any store, tap <strong>📍 Maps.me</strong> to jump straight to that store on the Maps.me map. To add a new store you discover, long-press on the spot in Maps.me to drop a pin, then bookmark it.</p>
+    </div>
+    <button class="sheet-btn" onclick="document.getElementById('help-overlay').classList.add('hidden')">Got it!</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- DELIVERY DATE MODAL                        -->
+<!-- ══════════════════════════════════════════ -->
+<div class="overlay hidden" id="del-overlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>📦 Set Delivery Date</h2>
+    <p>When did this store last receive new inventory? The app will count each day since then and track the price cycle.</p>
+    <div class="field-lbl">Date of last delivery</div>
+    <input type="date" class="field" id="del-date-input"/>
+    <div class="field-lbl">Inventory cycle length</div>
+    <select class="field" id="del-cycle-select">
+      <option value="7">Weekly (7 days) — most independent stores</option>
+      <option value="14">2-week cycle (14 days) — some HUMANA</option>
+      <option value="35">5-week cycle (35 days) — large HUMANA</option>
+    </select>
+    <button class="sheet-btn" onclick="saveDelivery()">Save</button>
+    <button class="sheet-cancel" onclick="document.getElementById('del-overlay').classList.add('hidden')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- ADD STORE MODAL                            -->
+<!-- ══════════════════════════════════════════ -->
+<div class="overlay hidden" id="add-overlay">
+  <div class="sheet" style="max-height:92vh;overflow-y:auto;">
+    <div class="sheet-handle"></div>
+    <h2>📍 Add a New Store</h2>
+    <p>Found a store that's not on the map? Add it here. On the map tab, tap any location to auto-fill the coordinates.</p>
+    <div class="field-lbl">Store name *</div>
+    <input type="text" class="field" id="add-name" placeholder="e.g. Sekond-Khend Nova"/>
+    <div class="field-lbl">Address</div>
+    <input type="text" class="field" id="add-addr" placeholder="Street name and number"/>
+    <div class="field-lbl">Phone</div>
+    <input type="tel" class="field" id="add-phone" placeholder="Optional"/>
+    <div class="field-lbl">Pricing type</div>
+    <select class="field" id="add-pricing">
+      <option value="item">🏷️ Itemized (per item)</option>
+      <option value="kg">⚖️ By KG (by weight)</option>
+    </select>
+    <div class="field-lbl">Inventory cycle</div>
+    <select class="field" id="add-cycle">
+      <option value="7">Weekly (7 days)</option>
+      <option value="14">2-week (14 days)</option>
+      <option value="35">5-week (35 days)</option>
+    </select>
+    <div class="field-lbl">Notes (optional)</div>
+    <input type="text" class="field" id="add-note" placeholder="Anything useful to remember"/>
+    <div style="display:flex;gap:10px;margin-bottom:6px;">
+      <div style="flex:1;"><div class="field-lbl">Latitude</div><input type="number" class="field" id="add-lat" step="0.000001" placeholder="49.840…"/></div>
+      <div style="flex:1;"><div class="field-lbl">Longitude</div><input type="number" class="field" id="add-lng" step="0.000001" placeholder="24.025…"/></div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">💡 Tip: Switch to the Map tab first and tap the store's location — coordinates fill in automatically.</p>
+    <button class="sheet-btn" onclick="saveCustomStore()">Save Store</button>
+    <button class="sheet-cancel" onclick="document.getElementById('add-overlay').classList.add('hidden')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- APP SHELL                                  -->
+<!-- ══════════════════════════════════════════ -->
+<header>
+  <div class="hdr-left">
+    <h1>🧥 Lviv Second Hand</h1>
+    <p id="hdr-stats">Loading…</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <div class="lang-pill">
+      <span class="lp active" id="lang-en" onclick="setLang('en')">EN</span>
+      <span class="lp" id="lang-ua" onclick="setLang('ua')">УА</span>
+    </div>
+    <button class="help-btn" onclick="exportKML()" title="Export all stores to Maps.me KML" style="font-size:18px;">📤</button>
+    <button class="help-btn" onclick="document.getElementById('help-overlay').classList.remove('hidden')" title="Help">?</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="list" onclick="switchTab('list')">
+    <span>🗂️</span><span data-i18n="tabList">List</span>
+  </div>
+  <div class="tab" data-tab="map" onclick="switchTab('map')">
+    <span>🗺️</span><span data-i18n="tabMap">Map</span>
+  </div>
+</div>
+
+<div class="filter-bar" id="filter-bar">
+  <button class="fbtn active" onclick="setFilter('all',this)" data-i18n="fAll">All Stores</button>
+  <button class="fbtn" onclick="setFilter('humana',this)">🔴 HUMANA</button>
+  <button class="fbtn" onclick="setFilter('kg',this)" data-i18n="fKg">⚖️ By KG</button>
+  <button class="fbtn" onclick="setFilter('item',this)" data-i18n="fItem">🏷️ Itemized</button>
+  <button class="fbtn" onclick="setFilter('visited',this)" data-i18n="fVisited">✅ Visited</button>
+  <button class="fbtn" onclick="setFilter('unvisited',this)" data-i18n="fUnvisited">🔲 Not Yet</button>
+</div>
+
+<div class="content">
+  <div class="view" id="list-view">
+    <div class="list-wrap">
+      <div class="section-tip" id="list-tip">
+        <strong data-i18n="tipStrong">👋 Tap any store to see full details, hours, and the inventory tracker.</strong>
+        <span data-i18n="tipSub">Use the filter buttons above to find exactly what you're looking for. Scroll the filters sideways to see all options.</span>
+      </div>
+      <div id="store-list"></div>
+    </div>
+  </div>
+
+  <div class="view hidden" id="map-view" style="overflow:hidden;">
+    <div id="map"></div>
+    <button onclick="startAddPin()" id="map-add-btn" style="position:fixed;bottom:20px;right:16px;z-index:999;width:54px;height:54px;border-radius:50%;background:var(--orange);color:white;border:none;font-size:28px;font-weight:900;box-shadow:0 4px 14px rgba(0,0,0,0.3);cursor:pointer;align-items:center;justify-content:center;line-height:1;" title="Add a new store — tap the map to pin location">+</button>
+    <div id="map-tap-hint" style="position:fixed;top:120px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.72);color:white;padding:7px 14px;border-radius:20px;font-size:13px;font-weight:600;z-index:999;display:none;pointer-events:none;">📍 Tap map to set location</div>
+  </div>
+
+  <div class="view hidden" id="detail-view">
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<script>
+
+// ─────────────────────────────────────────────
+// LANGUAGE / TRANSLATIONS
+// ─────────────────────────────────────────────
+let lang = localStorage.getItem('lviv_sh_lang') || 'en';
+const TR = {
+  en:{tabList:'List',tabMap:'Map',fAll:'All Stores',fKg:'⚖️ By KG',fItem:'🏷️ Itemized',fVisited:'✅ Visited',fUnvisited:'🔲 Not Yet',tipStrong:'👋 Tap any store to see full details, hours, and the inventory tracker.',tipSub:"Use the filter buttons above to find exactly what you're looking for. Scroll the filters sideways to see all options.",statsVisited:'stores visited',statsAdded:'added by you',backBtn:'← Back to list',step1:'📍 Step 1 — Have you visited this store?',step2:'📦 Step 2 — Inventory & Price Tracker',markVisited:'📍 Mark as Visited',unmarkVisited:'✅ Visited — tap to unmark',visitSaved:'Your visit history is saved automatically on this device.',setDel:'📅 Set Last Delivery Date',updDel:'🔄 Update Delivery Date',noDelivery:'No delivery date set yet for this store.',storeInfo:'ℹ️ Store Information',addrLbl:'Address',phoneLbl:'Phone',notesLbl:'Notes',hoursLbl:'Opening Hours',removeStore:'🗑️ Remove this store',addedByYou:'📍 Added by you',byKg:'⚖️ By KG',byWeight:'⚖️ By Weight',itemized:'🏷️ Itemized pricing',closedToday:'🔒 Closed today',closedDay:'🔒 Closed',viewDetails:'View Details →',freshToday:'🎉 Fresh today! New stock just arrived',freshLabel:'✅ Fresh stock — prices still high',midLabel:'🟡 Mid-cycle — good selection',oldLabel:'🔥 Late cycle — BEST deals now!',dayLabel:'Day',delivery:'📦 Delivery',endCycle:'🏷️ End of cycle',todayPrice:"Today's price per KG",estDiscount:'Estimated discount vs. delivery day',cycleDay:'-day cycle · prices drop daily',off:'off',inventory:'Inventory cycle',humanaTag:'HUMANA',visitedTag:'Visited'},
+  ua:{tabList:'Список',tabMap:'Карта',fAll:'Всі магазини',fKg:'⚖️ На вагу',fItem:'🏷️ По штуці',fVisited:'✅ Відвідані',fUnvisited:'🔲 Ще ні',tipStrong:'👋 Натисніть на магазин, щоб побачити деталі, години та трекер.',tipSub:'Використовуйте кнопки фільтрів. Проведіть пальцем, щоб побачити всі.',statsVisited:'магазинів відвідано',statsAdded:'додано вами',backBtn:'← Назад',step1:'📍 Крок 1 — Ви відвідали цей магазин?',step2:'📦 Крок 2 — Трекер товарів і цін',markVisited:'📍 Відмітити як відвідане',unmarkVisited:'✅ Відвідано — натисніть, щоб зняти',visitSaved:'Історія відвідувань зберігається на цьому пристрої.',setDel:'📅 Встановити дату поставки',updDel:'🔄 Оновити дату поставки',noDelivery:'Дата поставки ще не вказана.',storeInfo:'ℹ️ Інформація про магазин',addrLbl:'Адреса',phoneLbl:'Телефон',notesLbl:'Примітки',hoursLbl:'Години роботи',removeStore:'🗑️ Видалити магазин',addedByYou:'📍 Додано вами',byKg:'⚖️ На вагу',byWeight:'⚖️ На вагу',itemized:'🏷️ По штуці',closedToday:'🔒 Зачинено сьогодні',closedDay:'🔒 Зачинено',viewDetails:'Деталі →',freshToday:'🎉 Щойно! Нові товари сьогодні',freshLabel:'✅ Свіжі товари — ціни ще високі',midLabel:'🟡 Середина циклу — хороший вибір',oldLabel:'🔥 Кінець циклу — НАЙКРАЩІ ціни!',dayLabel:'День',delivery:'📦 Поставка',endCycle:'🏷️ Кінець циклу',todayPrice:'Ціна сьогодні за кг',estDiscount:'Орієнтовна знижка від поставки',cycleDay:'-денний цикл · ціни знижуються щодня',off:'знижки',inventory:'Цикл поставок',humanaTag:'HUMANA',visitedTag:'Відвідано'}
+};
+function t(k){return(TR[lang]||TR.en)[k]||k;}
+function setLang(l){
+  lang=l;
+  localStorage.setItem('lviv_sh_lang',l);
+  document.getElementById('lang-en').classList.toggle('active',l==='en');
+  document.getElementById('lang-ua').classList.toggle('active',l==='ua');
+  document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(TR[lang][k]!==undefined)el.textContent=TR[lang][k];});
+  updateStats();renderList();
+  if(currentStoreId)openDetail(currentStoreId);
+}
+
+// ─────────────────────────────────────────────
+// DATA
+// ─────────────────────────────────────────────
+const STORES = [
+  { id:'h1', name:'HUMANA — Knyahyni Olhy', brand:'HUMANA', address:'вул. Княгині Ольги, 5а', addressEn:'Knyahyni Olhy St, 5a', phone:'(032) 245-50-09', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:35, lat:49.8430, lng:24.0185, note:'Large store. 5-week inventory cycle. Prices drop every day after delivery. Lucky hours: 30% off all items.' },
+  { id:'h2', name:'HUMANA — Lyubinska', brand:'HUMANA', address:'вул. Любинська, 100 (2 поверх)', addressEn:'Lyubinska St, 100 (2nd floor)', phone:'(032) 24-04-40', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:14, lat:49.8278, lng:24.0015, note:'2nd floor entrance. 2-week inventory cycle.' },
+  { id:'h3', name:'HUMANA — Chornovola', brand:'HUMANA', address:'просп. В. Чорновола, 95', addressEn:'V. Chornovola Ave, 95', phone:'(032) 244-53-98', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:35, lat:49.8562, lng:24.0215, note:'5-week inventory cycle. Prices decrease daily.' },
+  { id:'h4', name:'HUMANA — Sykhivska', brand:'HUMANA', address:'вул. Сиховська, 18', addressEn:'Sykhivska St, 18', phone:'(032) 221-01-40', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:14, lat:49.7985, lng:24.0580, note:'Sykhiv district. 2-week inventory cycle.' },
+  { id:'h5', name:'HUMANA — Shyroka', brand:'HUMANA', address:'вул. Широка, 81а', addressEn:'Shyroka St, 81a', phone:'(032) 245-87-80', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:14, lat:49.8390, lng:23.9875, note:'2-week inventory cycle.' },
+  { id:'h6', name:'HUMANA — Doroshenka', brand:'HUMANA', address:'вул. П. Дорошенка, 1', addressEn:'P. Doroshenka St, 1', phone:'(032) 261-12-60', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:35, lat:49.8394, lng:24.0272, note:'City centre. 5-week cycle. Luxury items in separate section.' },
+  { id:'h7', name:'HUMANA — Valova', brand:'HUMANA', address:'вул. Валова, 13', addressEn:'Valova St, 13', phone:'(032) 235-50-21', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:35, lat:49.8400, lng:24.0355, note:'Central Lviv. 5-week cycle. Luxury section separate. Weekly promos.' },
+  { id:'s1', name:'Yevro Sekond-Khend', brand:'Independent', address:'вул. Словацького, 14', addressEn:'Slovatskoho St, 14', phone:'', type:'other', pricing:'kg', hours:{mon:'09:00–19:00',tue:'09:00–19:00',wed:'09:00–19:00',thu:'09:00–19:00',fri:'09:00–19:00',sat:'09:00–19:00',sun:'09:00–19:00'}, cycle:7, lat:49.8390, lng:24.0208, note:'By weight. Delivery day: Tuesday. Prices drop every day. ⭐ 3.8 (443 reviews)', kgPrices:[209,160,120,80,50,30,23], deliveryDayOfWeek:2 },
+  { id:'s2', name:'Euro Second-Hand', brand:'Independent', address:'просп. Червоної Калини, 59', addressEn:'Chervonoi Kalyny Ave, 59', phone:'050 917 3559', type:'other', pricing:'kg', hours:{mon:'10:00–19:00',tue:'10:00–19:00',wed:'10:00–19:00',thu:'10:00–19:00',fri:'10:00–19:00',sat:'10:00–19:00',sun:'closed'}, cycle:7, lat:49.8622, lng:24.0380, note:'By weight. ⭐ 3.4 (138 reviews). Closed Sundays.' },
+  { id:'s3', name:'Yevromiks', brand:'Independent', address:'вул. Городоцька, 123', addressEn:'Horodetska St, 123', phone:'', type:'other', pricing:'item', hours:{mon:'10:00–19:00',tue:'10:00–19:00',wed:'10:00–19:00',thu:'10:00–19:00',fri:'10:00–19:00',sat:'10:00–18:00',sun:'closed'}, cycle:7, lat:49.8195, lng:23.9855, note:'Mixed new and used. Men\'s, women\'s, shoes, accessories. Closed Sundays.' },
+  { id:'s4', name:'ObnovaNova', brand:'ObnovaStores', address:'просп. В. Чорновола, 16і', addressEn:'V. Chornovola Ave, 16i', phone:'', type:'other', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:7, lat:49.8500, lng:24.0195, note:'Stock and used. Branded items. Updated daily. Frequent sales.' },
+  { id:'s5', name:'Sekond-Khend Bomba', brand:'Independent', address:'вул. Дорошенка, 15', addressEn:'Doroshenka St, 15', phone:'', type:'other', pricing:'item', hours:{mon:'10:00–19:00',tue:'10:00–19:00',wed:'10:00–19:00',thu:'10:00–19:00',fri:'10:00–19:00',sat:'10:00–18:00',sun:'closed'}, cycle:7, lat:49.8402, lng:24.0290, note:'New/near-new items only. FIXED prices — no discounts or markdowns. High quality focus.' },
+  { id:'s6', name:'Birka! Lux', brand:'Birka! Lux', address:'вул. Зелена, 69а', addressEn:'Zelena St, 69a', phone:'', type:'other', pricing:'item', hours:{mon:'10:00–19:00',tue:'10:00–19:00',wed:'10:00–19:00',thu:'10:00–19:00',fri:'10:00–19:00',sat:'10:00–18:00',sun:'closed'}, cycle:7, lat:49.8320, lng:23.9870, note:'Stock and used. Popular for children\'s clothing, shoes and toys.' },
+  { id:'s7', name:'Stocki Lviv', brand:'Independent', address:'вул. Промислова, 60', addressEn:'Promyslova St, 60', phone:'', type:'other', pricing:'item', hours:{mon:'09:00–18:00',tue:'09:00–18:00',wed:'09:00–18:00',thu:'09:00–18:00',fri:'09:00–18:00',sat:'09:00–17:00',sun:'closed'}, cycle:7, lat:49.8420, lng:24.0680, note:'Wholesale + retail. Direct from UK, Germany, Poland, Netherlands warehouses.' },
+  { id:'s8', name:'Umka', brand:'Independent', address:'вул. Генерала Чупринки, 59', addressEn:'Gen. Chuprynky St, 59', phone:'', type:'other', pricing:'item', hours:{mon:'10:00–19:00',tue:'10:00–19:00',wed:'10:00–19:00',thu:'10:00–19:00',fri:'10:00–19:00',sat:'10:00–18:00',sun:'closed'}, cycle:7, lat:49.8180, lng:24.0050, note:'European brands. Furs, leather, bags, jewellery. Accepts items by appointment Mon/Wed/Fri.' },
+  { id:'s9', name:'Planet of Second-Hand', brand:'Independent', address:'вул. Горська, 5а', addressEn:'Horska St, 5a', phone:'096 946 1702', type:'other', pricing:'item', hours:{mon:'10:00–19:00',tue:'10:00–19:00',wed:'10:00–19:00',thu:'10:00–19:00',fri:'10:00–19:00',sat:'10:00–19:00',sun:'10:00–19:00'}, cycle:7, lat:49.8155, lng:24.0495, note:'⭐ 4.1 (179 reviews). Open 7 days.' },
+  { id:'s10', name:'Planeta Second Hand', brand:'Independent', address:'вул. Драгана, 4', addressEn:'Drahana St, 4', phone:'097 146 7226', type:'other', pricing:'item', hours:{mon:'10:00–19:00',tue:'10:00–19:00',wed:'10:00–19:00',thu:'10:00–19:00',fri:'10:00–19:00',sat:'10:00–19:00',sun:'closed'}, cycle:7, lat:49.8130, lng:24.0310, note:'⭐ 3.8 (187 reviews).' }
+];
+
+const DAYS = ['sun','mon','tue','wed','thu','fri','sat'];
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+let currentFilter = 'all';
+let currentTab = 'list';
+let currentStoreId = null;
+let modalStoreId = null;
+let mapInst = null;
+let mapMarkers = [];
+
+// ─────────────────────────────────────────────
+// STORAGE
+// ─────────────────────────────────────────────
+function getData() { try { return JSON.parse(localStorage.getItem('lviv_sh') || '{}'); } catch(e) { return {}; } }
+function saveData(d) { localStorage.setItem('lviv_sh', JSON.stringify(d)); }
+function getSD(id) { const d = getData(); return d[id] || { visited:false, visitedDate:null, lastDelivery:null, cycle:null }; }
+
+// ─────────────────────────────────────────────
+// INVENTORY CALC
+// ─────────────────────────────────────────────
+function getDayInfo(storeId, defaultCycle) {
+  const sd = getSD(storeId);
+  if (!sd.lastDelivery) return null;
+  const cycle = sd.cycle || defaultCycle;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const del = new Date(sd.lastDelivery); del.setHours(0,0,0,0);
+  const total = Math.floor((today - del) / 86400000);
+  if (total < 0) return null;
+  return { day: total % cycle, total, cycle };
+}
+
+function getPhase(day, cycle) {
+  const p = day / cycle;
+  return p < 0.33 ? 'fresh' : p < 0.66 ? 'mid' : 'old';
+}
+
+function phaseLabel(phase, day) {
+  if (day === 0) return t('freshToday');
+  if (phase === 'fresh') return t('freshLabel');
+  if (phase === 'mid') return t('midLabel');
+  return t('oldLabel');
+}
+
+// ─────────────────────────────────────────────
+// STATS
+// ─────────────────────────────────────────────
+function updateStats() {
+  const all = allStores();
+  const visited = all.filter(s => getSD(s.id).visited).length;
+  const custom = getCustomStores().length;
+  document.getElementById('hdr-stats').textContent = `✅ ${visited}/${all.length} ${t('statsVisited')}${custom?' ('+custom+' '+t('statsAdded')+')':''}`;
+}
+
+// ─────────────────────────────────────────────
+// FILTER
+// ─────────────────────────────────────────────
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderList();
+  if (mapInst) renderPins();
+}
+
+function allStores() { return [...STORES, ...getCustomStores()]; }
+
+function filtered() {
+  return allStores().filter(s => {
+    const sd = getSD(s.id);
+    if (currentFilter === 'humana') return s.type === 'humana';
+    if (currentFilter === 'kg') return s.pricing === 'kg';
+    if (currentFilter === 'item') return s.pricing === 'item';
+    if (currentFilter === 'visited') return sd.visited;
+    if (currentFilter === 'unvisited') return !sd.visited;
+    return true;
+  });
+}
+
+// ─────────────────────────────────────────────
+// RENDER LIST
+// ─────────────────────────────────────────────
+function renderList() {
+  const stores = filtered();
+  const el = document.getElementById('store-list');
+  if (!stores.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No stores match</div><div class="empty-sub">Try a different filter</div></div>`;
+    return;
+  }
+  el.innerHTML = stores.map(s => {
+    const sd = getSD(s.id);
+    const di = getDayInfo(s.id, s.cycle);
+    const todayKey = DAYS[new Date().getDay()];
+  const dispAddr = lang==='ua'?(s.address||s.addressEn):(s.addressEn||s.address);
+  const altAddr  = lang==='ua'?(s.addressEn||''):(s.address||'');
+    const hrs = s.hours[todayKey];
+    const addr = lang==='ua'?(s.address||s.addressEn):(s.addressEn||s.address);
+    let cycleHtml = '';
+    if (di) {
+      const phase = getPhase(di.day, di.cycle);
+      const label = phaseLabel(phase, di.day);
+      cycleHtml = `<div class="card-cycle"><span class="cycle-label">${t('inventory')}</span><span class="cycle-val ${phase}">${t('dayLabel')} ${di.day+1}/${di.cycle} — ${label}</span></div>`;
+    }
+    return `<div class="store-card ${sd.visited?'visited':''}" onclick="openDetail('${s.id}')">
+      <div class="card-top">
+        <div class="store-dot ${s.type==='humana'?'dot-humana':'dot-other'}">${s.type==='humana'?'🔴':'🛍️'}</div>
+        <div class="card-body">
+          <div class="card-name">${s.name}</div>
+          <div class="card-addr">${addr}</div>
+          <div class="tags">
+            ${s.custom?'<span class="tag" style="background:#fff3ea;color:#c45a00;">'+t('addedByYou')+'</span>':''}
+            ${s.type==='humana'?'<span class="tag tag-red">'+t('humanaTag')+'</span>':''}
+            ${s.pricing==='kg'?'<span class="tag tag-blue">'+t('byKg')+'</span>':'<span class="tag tag-green">'+t('itemized')+'</span>'}
+            <span class="tag tag-gold">${hrs==='closed'?t('closedToday'):'🕐 '+hrs}</span>
+            ${sd.visited?'<span class="tag tag-green">✅ '+t('visitedTag')+'</span>':''}
+          </div>
+        </div>
+        ${sd.visited?'<div class="card-check">✅</div>':''}
+      </div>
+      ${cycleHtml}
+    </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+// DETAIL
+// ─────────────────────────────────────────────
+function openDetail(id) {
+  currentStoreId = id;
+  const s = STORES.find(x => x.id === id);
+  const sd = getSD(id);
+  const di = getDayInfo(id, s.cycle);
+  const todayKey = DAYS[new Date().getDay()];
+
+  // Hours table
+  const hoursHtml = Object.entries(s.hours).map(([d,h]) =>
+    `<tr class="${d===todayKey?'today':''}"><td>${DAY_NAMES[DAYS.indexOf(d)]}</td><td class="${h==='closed'?'closed-cell':''}">${h==='closed'?t('closedDay'):h}</td></tr>`
+  ).join('');
+
+  // Tracker
+  let trackerBody = '';
+  if (!di) {
+    trackerBody = `
+      <div class="tracker-tip">
+        <strong>💡 How this works:</strong> Set the date when this store last received new inventory. The app will automatically count the days and show you estimated discounts — the longer since delivery, the bigger the deals!
+      </div>
+      <p style="text-align:center;color:var(--muted);font-size:14px;margin-bottom:16px;">${t('noDelivery')}</p>`;
+  } else {
+    const phase = getPhase(di.day, di.cycle);
+    const pct = Math.round((di.day / di.cycle) * 100);
+    const label = phaseLabel(phase, di.day);
+
+    let priceHtml = '';
+    if (s.pricing === 'kg' && s.kgPrices) {
+      const todayPrice = s.kgPrices[Math.min(di.day, s.kgPrices.length-1)];
+      priceHtml = `<div class="price-box"><div class="price-lbl">${t('todayPrice')}</div><div class="price-val">${todayPrice} UAH/kg</div><div class="price-sub">Day ${di.day+1} of ${di.cycle}-day cycle</div></div>`;
+    } else {
+      const disc = Math.round((di.day / di.cycle) * 80);
+      priceHtml = `<div class="price-box"><div class="price-lbl">${t('estDiscount')}</div><div class="price-val">~${disc}% ${t('off')}</div><div class="price-sub">${t('dayLabel')} ${di.day+1} / ${di.cycle}${t('cycleDay')}</div></div>`;
+    }
+
+    trackerBody = `
+      <div class="big-day">
+        <div class="big-day-num ${phase}">Day ${di.day+1}</div>
+        <div class="big-day-label">${label}</div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-bg"><div class="bar-fill ${phase}" style="width:${pct}%"></div></div>
+        <div class="bar-ends"><span>${t('delivery')}</span><span>${t('endCycle')}</span></div>
+      </div>
+      ${priceHtml}`;
+  }
+
+  // KG table
+  let kgTable = '';
+  if (s.pricing === 'kg' && s.kgPrices) {
+    const dayN = di ? di.day : -1;
+    kgTable = `<div class="info-card">
+      <div class="info-card-title">⚖️ Full Weekly Price Schedule</div>
+      <table class="kg-table">
+        <tr><th>Day</th><th>Price per KG</th><th></th></tr>
+        ${s.kgPrices.map((p,i) => `<tr class="${i===dayN?'today-kg':''}"><td>Day ${i+1}${i===0?' (delivery)':''}</td><td>${p} UAH/kg</td><td>${i===dayN?'👈 Today':''}</td></tr>`).join('')}
+      </table>
+    </div>`;
+  }
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="det-header">
+      <button class="back-btn" onclick="closeDetail()">${t('backBtn')}</button>
+      <div class="det-name">${s.name}</div>
+      <div class="det-sub">${s.brand} &nbsp;·&nbsp; ${s.pricing==='kg'?t('byWeight'):t('itemized')}</div>
+    </div>
+    <div class="det-body">
+
+      <!-- STEP 1: MARK VISITED -->
+      <div class="info-card" style="margin-bottom:14px;">
+        <div class="info-card-title">${t('step1')}</div>
+        <div style="padding:14px;">
+          <button class="visit-btn ${sd.visited?'yes':'no'}" onclick="toggleVisit('${id}')">
+            ${sd.visited?t('unmarkVisited'):t('markVisited')}
+          </button>
+          <p style="font-size:12px;color:var(--muted);text-align:center;">${t('visitSaved')}</p>
+        </div>
+      </div>
+
+      <!-- STEP 2: INVENTORY TRACKER -->
+      <div class="tracker-card">
+        <div class="tracker-title">${t('step2')}</div>
+        <div class="tracker-body">
+          ${trackerBody}
+          <button class="set-del-btn" onclick="openDelModal('${id}')">
+            ${di?t('updDel'):t('setDel')}
+          </button>
+        </div>
+      </div>
+
+      ${kgTable}
+
+      <!-- STORE INFO -->
+      <div class="info-card">
+        <div class="info-card-title">${t('storeInfo')}</div>
+        <div class="info-row">
+          <div class="info-icon">📍</div>
+          <div><div class="info-lbl">${t('addrLbl')}</div><div class="info-val">${dispAddr}</div><div class="info-sub">${altAddr}</div></div>
+        </div>
+        ${s.phone ? `<div class="info-row"><div class="info-icon">📞</div><div><div class="info-lbl">${t('phoneLbl')}</div><div class="info-val"><a href="tel:${s.phone}" style="color:var(--green);text-decoration:none;">${s.phone}</a></div></div></div>` : ''}
+        <div class="info-row">
+          <div class="info-icon">💡</div>
+          <div><div class="info-lbl">${t('notesLbl')}</div><div class="info-val" style="font-size:14px;font-weight:400;line-height:1.5;">${s.note}</div></div>
+        </div>
+        <div class="info-row" style="align-items:flex-start;">
+          <div class="info-icon">🕐</div>
+          <div style="flex:1;"><div class="info-lbl">${t('hoursLbl')}</div><br><table class="hrs-table">${hoursHtml}</table></div>
+        </div>
+      </div>
+
+      <!-- OPEN IN MAPS -->
+      <div class="maps-btns">
+        <a class="maps-btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank">🗺️ Google Maps</a>
+        <a class="maps-btn mapsme" href="mapsme://map?v=1&ll=${s.lat},${s.lng}&n=${encodeURIComponent(s.name)}">📍 Maps.me</a>
+      </div>
+      ${s.custom ? `<button onclick="deleteCustomStore('${s.id}')" style="width:100%;padding:14px;background:none;border:2px solid #dc2626;color:#dc2626;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:20px;">${t('removeStore')}</button>` : ''}
+
+    </div>`;
+
+  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+  document.getElementById('detail-view').classList.remove('hidden');
+  document.getElementById('filter-bar').style.display = 'none';
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+}
+
+function closeDetail() {
+  document.getElementById('detail-view').classList.add('hidden');
+  document.getElementById('filter-bar').style.display = 'flex';
+  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+  if (currentTab === 'list') {
+    document.getElementById('list-view').classList.remove('hidden');
+    document.querySelector('[data-tab="list"]').classList.add('active');
+  } else {
+    document.getElementById('map-view').classList.remove('hidden');
+    document.querySelector('[data-tab="map"]').classList.add('active');
+  }
+  renderList();
+  updateStats();
+}
+
+// ─────────────────────────────────────────────
+// VISIT TOGGLE
+// ─────────────────────────────────────────────
+function toggleVisit(id) {
+  const d = getData();
+  if (!d[id]) d[id] = {};
+  d[id].visited = !d[id].visited;
+  d[id].visitedDate = d[id].visited ? new Date().toISOString() : null;
+  saveData(d);
+  openDetail(id);
+  updateStats();
+}
+
+// ─────────────────────────────────────────────
+// DELIVERY MODAL
+// ─────────────────────────────────────────────
+function openDelModal(id) {
+  modalStoreId = id;
+  const sd = getSD(id);
+  const s = STORES.find(x => x.id === id);
+  document.getElementById('del-date-input').value = sd.lastDelivery || new Date().toISOString().split('T')[0];
+  document.getElementById('del-cycle-select').value = String(sd.cycle || s.cycle);
+  document.getElementById('del-overlay').classList.remove('hidden');
+}
+
+function saveDelivery() {
+  const d = getData();
+  if (!d[modalStoreId]) d[modalStoreId] = {};
+  d[modalStoreId].lastDelivery = document.getElementById('del-date-input').value;
+  d[modalStoreId].cycle = parseInt(document.getElementById('del-cycle-select').value);
+  saveData(d);
+  document.getElementById('del-overlay').classList.add('hidden');
+  openDetail(modalStoreId);
+}
+
+// ─────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+  document.getElementById('filter-bar').style.display = 'flex';
+  document.getElementById(`${tab}-view`).classList.remove('hidden');
+  const fab = document.getElementById('map-add-btn');
+  if (fab) fab.style.display = tab === 'map' ? 'flex' : 'none';
+  if (tab === 'map' && !mapInst) initMap();
+  if (tab === 'map' && mapInst) { setTimeout(()=>mapInst.invalidateSize(),150); renderPins(); }
+}
+
+// ─────────────────────────────────────────────
+// MAP
+// ─────────────────────────────────────────────
+let addingPin = false;
+let tempMarker = null;
+
+function initMap() {
+  mapInst = L.map('map').setView([49.835, 24.025], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap contributors', maxZoom:19 }).addTo(mapInst);
+
+  // Tap-to-add: after + button pressed, next map tap opens Add Store with coords prefilled
+  mapInst.on('click', function(e) {
+    if (!addingPin) return;
+    addingPin = false;
+    document.getElementById('map-tap-hint').style.display = 'none';
+    if (tempMarker) { tempMarker.remove(); tempMarker = null; }
+    tempMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(mapInst).bindPopup('New store location').openPopup();
+    openAddStoreModal(e.latlng.lat, e.latlng.lng);
+  });
+  renderPins();
+}
+
+function startAddPin() {
+  addingPin = true;
+  document.getElementById('map-tap-hint').style.display = 'block';
+}
+
+function renderPins() {
+  mapMarkers.forEach(m => m.remove());
+  mapMarkers = [];
+  filtered().forEach(s => {
+    const sd = getSD(s.id);
+    const color = s.custom ? '#e86c2a' : (s.type === 'humana' ? '#c0392b' : (s.pricing === 'kg' ? '#2471a3' : '#1b5e38'));
+    const label = sd.visited ? '✓' : (s.custom ? '+' : (s.type==='humana' ? 'H' : 'S'));
+    const icon = L.divIcon({
+      className:'',
+      html:`<div style="width:36px;height:36px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:15px;color:white;font-weight:900;">${label}</div>`,
+      iconSize:[36,36], iconAnchor:[18,18]
+    });
+    const m = L.marker([s.lat, s.lng], {icon}).addTo(mapInst);
+    m.bindPopup(`<div class="popup-name">${s.name}</div><div class="popup-addr">${lang==='ua'?(s.address||s.addressEn):(s.addressEn||s.address)}</div><button class="popup-open-btn" onclick="openDetail('${s.id}')">${t('viewDetails')}</button>`);
+    mapMarkers.push(m);
+  });
+}
+
+// ─────────────────────────────────────────────
+// MAPS.ME KML EXPORT
+// ─────────────────────────────────────────────
+function exportKML() {
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  const stores = [...STORES, ...getCustomStores()];
+  const marks = stores.map(s => {
+    const hrs = s.hours ? Object.entries(s.hours).map(([d,h])=>d+':'+h).join(', ') : '';
+    const desc = [s.addressEn||s.address||'', s.phone||'', s.pricing==='kg'?'By KG':'Itemized', (s.cycle||7)+'-day cycle', hrs, s.note||''].filter(Boolean).join('\n');
+    return '  <Placemark><name>'+esc(s.name)+'</name><description>'+esc(desc)+'</description><Point><coordinates>'+s.lng+','+s.lat+',0</coordinates></Point></Placemark>';
+  }).join('\n');
+  const kml = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>\n<name>Lviv Second Hand Stores</name>\n'+marks+'\n</Document></kml>';
+  const blob = new Blob([kml],{type:'application/vnd.google-earth.kml+xml'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='lviv-secondhand.kml';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  alert('KML downloaded!\n\nIn Maps.me: tap Menu > Bookmarks > ... > Import KML');
+}
+
+// ─────────────────────────────────────────────
+// CUSTOM STORES
+// ─────────────────────────────────────────────
+function getCustomStores(){
+  try{ return JSON.parse(localStorage.getItem('lviv_sh_custom')||'[]'); }catch(e){ return []; }
+}
+function saveCustomStores(arr){ localStorage.setItem('lviv_sh_custom',JSON.stringify(arr)); }
+
+function openAddStoreModal(lat,lng){
+  document.getElementById('add-lat').value = lat!==null ? lat.toFixed(6) : '';
+  document.getElementById('add-lng').value = lng!==null ? lng.toFixed(6) : '';
+  document.getElementById('add-name').value='';
+  document.getElementById('add-addr').value='';
+  document.getElementById('add-phone').value='';
+  document.getElementById('add-pricing').value='item';
+  document.getElementById('add-cycle').value='7';
+  document.getElementById('add-note').value='';
+  document.getElementById('add-overlay').classList.remove('hidden');
+}
+
+function saveCustomStore(){
+  const name = document.getElementById('add-name').value.trim();
+  if(!name){ alert('Please enter a store name'); return; }
+  const lat = parseFloat(document.getElementById('add-lat').value);
+  const lng = parseFloat(document.getElementById('add-lng').value);
+  if(isNaN(lat)||isNaN(lng)){ alert('Please tap a location on the map first, or enter coordinates'); return; }
+  const arr = getCustomStores();
+  const id = 'u'+Date.now();
+  arr.push({
+    id, name,
+    address: document.getElementById('add-addr').value.trim(),
+    addressEn: document.getElementById('add-addr').value.trim(),
+    phone: document.getElementById('add-phone').value.trim(),
+    type:'other', pricing: document.getElementById('add-pricing').value,
+    cycle: parseInt(document.getElementById('add-cycle').value),
+    lat, lng,
+    note: document.getElementById('add-note').value.trim(),
+    hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'},
+    custom:true
+  });
+  saveCustomStores(arr);
+  if(tempMarker){ tempMarker.remove(); tempMarker=null; }
+  document.getElementById('add-overlay').classList.add('hidden');
+  renderList(); updateStats();
+  if(mapInst) renderPins();
+  alert('Store added!');
+}
+
+function deleteCustomStore(id){
+  if(!confirm('Remove this store from your list?')) return;
+  saveCustomStores(getCustomStores().filter(s=>s.id!==id));
+  closeDetail();
+}
+
+// ─────────────────────────────────────────────
+// WELCOME
+// ─────────────────────────────────────────────
+function closeWelcome(){
+  document.getElementById('welcome').classList.add('hidden');
+  localStorage.setItem('lviv_sh_welcomed','1');
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',()=>{
+  const _sl=localStorage.getItem('lviv_sh_lang');if(_sl)setLang(_sl);
+  renderList();
+  updateStats();
+  if(!localStorage.getItem('lviv_sh_welcomed')){
+    document.getElementById('welcome').classList.remove('hidden');
+  }
+  ['del-overlay','help-overlay','add-overlay'].forEach(id=>{
+    document.getElementById(id).addEventListener('click',e=>{
+      if(e.target.id===id) document.getElementById(id).classList.add('hidden');
+    });
+  });
+});
+</script>
+</body>
+</html>

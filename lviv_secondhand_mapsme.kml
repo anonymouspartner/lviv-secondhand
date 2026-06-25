@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Lviv Second Hand Stores</name>
+  <description>All second-hand clothing stores in Lviv, Ukraine</description>
+
+  <Style id="humana">
+    <IconStyle><color>ff0000cc</color><scale>1.2</scale>
+      <Icon><href>http://maps.google.com/mapfiles/kml/paddle/red-circle.png</href></Icon>
+    </IconStyle>
+  </Style>
+  <Style id="kg">
+    <IconStyle><color>ffcc6600</color><scale>1.1</scale>
+      <Icon><href>http://maps.google.com/mapfiles/kml/paddle/blu-circle.png</href></Icon>
+    </IconStyle>
+  </Style>
+  <Style id="other">
+    <IconStyle><color>ff006600</color><scale>1.1</scale>
+      <Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon>
+    </IconStyle>
+  </Style>
+
+  <Folder><name>🔴 HUMANA Stores (7)</name>
+    <Placemark>
+      <name>HUMANA — Knyahyni Olhy</name>
+      <description>📍 Knyahyni Olhy St, 5a
+📞 (032) 245-50-09
+🕐 Mon-Sun: 10:00–20:00
+🏷️ Itemized pricing
+🔄 5-week inventory cycle
+💡 Large store. Prices drop every day after delivery. Lucky hours: 30% off.</description>
+      <styleUrl>#humana</styleUrl>
+      <Point><coordinates>24.0185,49.8430,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>HUMANA — Lyubinska (2nd floor)</name>
+      <description>📍 Lyubinska St, 100 (2nd floor)
+📞 (032) 24-04-40
+🕐 Mon-Sun: 10:00–20:00
+🏷️ Itemized pricing
+🔄 2-week inventory cycle</description>
+      <styleUrl>#humana</styleUrl>
+      <Point><coordinates>24.0015,49.8278,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>HUMANA — Chornovola</name>
+      <description>📍 V. Chornovola Ave, 95
+📞 (032) 244-53-98
+🕐 Mon-Sun: 10:00–20:00
+🏷️ Itemized pricing
+🔄 5-week inventory cycle</description>
+      <styleUrl>#humana</styleUrl>
+      <Point><coordinates>24.0215,49.8562,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>HUMANA — Sykhivska</name>
+      <description>📍 Sykhivska St, 18
+📞 (032) 221-01-40
+🕐 Mon-Sun: 10:00–20:00
+🏷️ Itemized pricing
+🔄 2-week inventory cycle
+💡 Sykhiv district</description>
+      <styleUrl>#humana</styleUrl>
+      <Point><coordinates>24.0580,49.7985,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>HUMANA — Shyroka</name>
+      <description>📍 Shyroka St, 81a
+📞 (032) 245-87-80
+🕐 Mon-Sun: 10:00–20:00
+🏷️ Itemized pricing
+🔄 2-week inventory cycle</description>
+      <styleUrl>#humana</styleUrl>
+      <Point><coordinates>23.9875,49.8390,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>HUMANA — Doroshenka</name>
+      <description>📍 P. Doroshenka St, 1
+📞 (032) 261-12-60
+🕐 Mon-Sun: 10:00–20:00
+🏷️ Itemized pricing
+🔄 5-week inventory cycle
+💡 City centre. Luxury section separate.</description>
+      <styleUrl>#humana</styleUrl>
+      <Point><coordinates>24.0272,49.8394,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>HUMANA — Valova</name>
+      <description>📍 Valova St, 13
+📞 (032) 235-50-21
+🕐 Mon-Sun: 10:00–20:00
+🏷️ Itemized pricing
+🔄 5-week inventory cycle
+💡 Central Lviv. Luxury section separate.</description>
+      <styleUrl>#humana</styleUrl>
+      <Point><coordinates>24.0355,49.8400,0</coordinates></Point>
+    </Placemark>
+  </Folder>
+
+  <Folder><name>⚖️ By-KG Stores (2)</name>
+    <Placemark>
+      <name>Yevro Sekond-Khend (KG)</name>
+      <description>📍 Slovatskoho St, 14
+⚖️ By WEIGHT — sells by kilogram
+🕐 Mon-Sun: 09:00–19:00
+🔄 Weekly cycle (delivery: Tuesday)
+💰 Day 1: 209 UAH/kg → Day 7: 23 UAH/kg
+⭐ 3.8 (443 reviews)</description>
+      <styleUrl>#kg</styleUrl>
+      <Point><coordinates>24.0208,49.8390,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Euro Second-Hand (KG)</name>
+      <description>📍 Chervonoi Kalyny Ave, 59
+📞 050 917 3559
+⚖️ By WEIGHT — sells by kilogram
+🕐 Mon-Sat: 10:00–19:00 (closed Sun)
+🔄 Weekly cycle
+⭐ 3.4 (138 reviews)</description>
+      <styleUrl>#kg</styleUrl>
+      <Point><coordinates>24.0380,49.8622,0</coordinates></Point>
+    </Placemark>
+  </Folder>
+
+  <Folder><name>🛍️ Other Second-Hand Stores (8)</name>
+    <Placemark>
+      <name>Yevromiks</name>
+      <description>📍 Horodetska St, 123
+🏷️ Itemized pricing
+🕐 Mon-Fri: 10:00–19:00, Sat: 10:00–18:00, closed Sun
+💡 Mixed new and used. Men's, women's, shoes, accessories.</description>
+      <styleUrl>#other</styleUrl>
+      <Point><coordinates>23.9855,49.8195,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>ObnovaNova</name>
+      <description>📍 V. Chornovola Ave, 16i
+🏷️ Itemized pricing
+🕐 Mon-Sun: 10:00–20:00
+💡 Stock and used. Branded items. Updated daily. Frequent sales.</description>
+      <styleUrl>#other</styleUrl>
+      <Point><coordinates>24.0195,49.8500,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Sekond-Khend Bomba</name>
+      <description>📍 Doroshenka St, 15
+🏷️ Itemized — FIXED prices (no markdowns)
+🕐 Mon-Fri: 10:00–19:00, Sat: 10:00–18:00, closed Sun
+💡 New/near-new items only. High quality focus.</description>
+      <styleUrl>#other</styleUrl>
+      <Point><coordinates>24.0290,49.8402,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Birka! Lux</name>
+      <description>📍 Zelena St, 69a
+🏷️ Itemized pricing
+🕐 Mon-Fri: 10:00–19:00, Sat: 10:00–18:00, closed Sun
+💡 Stock and used. Great for children's clothing, shoes, toys.</description>
+      <styleUrl>#other</styleUrl>
+      <Point><coordinates>23.9870,49.8320,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Stocki Lviv</name>
+      <description>📍 Promyslova St, 60
+🏷️ Itemized pricing
+🕐 Mon-Fri: 09:00–18:00, Sat: 09:00–17:00, closed Sun
+💡 Direct from UK, Germany, Poland, Netherlands warehouses.</description>
+      <styleUrl>#other</styleUrl>
+      <Point><coordinates>24.0680,49.8420,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Umka</name>
+      <description>📍 Gen. Chuprynky St, 59
+🏷️ Itemized pricing
+🕐 Mon-Fri: 10:00–19:00, Sat: 10:00–18:00, closed Sun
+💡 European brands. Furs, leather, bags, jewellery. Accepts items Mon/Wed/Fri.</description>
+      <styleUrl>#other</styleUrl>
+      <Point><coordinates>24.0050,49.8180,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Planet of Second-Hand</name>
+      <description>📍 Horska St, 5a
+📞 096 946 1702
+🏷️ Itemized pricing
+🕐 Mon-Sun: 10:00–19:00
+⭐ 4.1 (179 reviews). Open 7 days.</description>
+      <styleUrl>#other</styleUrl>
+      <Point><coordinates>24.0495,49.8155,0</coordinates></Point>
+    </Placemark>
+    <Placemark>
+      <name>Planeta Second Hand</name>
+      <description>📍 Drahana St, 4
+📞 097 146 7226
+🏷️ Itemized pricing
+🕐 Mon-Sat: 10:00–19:00, closed Sun
+⭐ 3.8 (187 reviews)</description>
+      <styleUrl>#other</styleUrl>
+      <Point><coordinates>24.0310,49.8130,0</coordinates></Point>
+    </Placemark>
+  </Folder>
+
+  <!-- PLACEHOLDER FOLDER FOR USER TO ADD NEW STORES -->
+  <Folder><name>➕ New Stores (add yours here)</name>
+    <description>Use Maps.me to add any new stores you discover in Lviv. Long-press on the map, tap the pin, then tap the bookmark icon to save it to this collection.</description>
+  </Folder>
+
+</Document>
+</kml>
