@@ -61,7 +61,7 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 .section-tip strong { display: block; margin-bottom: 3px; }
 
 /* ── STORE CARD ── */
-.store-card { background: white; border-radius: 14px; margin-bottom: 10px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; transition: transform 0.1s; }
+.store-card { background: white; border-radius: 14px; margin-bottom: 10px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; active: { opacity: 0.85; } transition: transform 0.1s; }
 .store-card:active { transform: scale(0.985); }
 .store-card.visited { border-color: var(--green-light); }
 .card-top { padding: 13px 14px 10px; display: flex; gap: 11px; align-items: flex-start; }
@@ -198,6 +198,9 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 
 /* ── POPUP ── */
 .leaflet-popup-content-wrapper { border-radius: 14px; }
+.popup-name { font-weight: 800; font-size: 14px; margin-bottom: 4px; }
+.popup-addr { font-size: 12px; color: #666; margin-bottom: 10px; }
+.popup-open-btn { display: block; width: 100%; padding: 9px; background: var(--green); color: white; border: none; border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -260,7 +263,7 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
     </div>
     <div class="help-section">
       <h3>🗺️ The Map</h3>
-      <p>Shows all store locations as pins. <strong>Red pins</strong> = HUMANA. <strong>Blue pins</strong> = others. A ✓ on a pin means you've visited. Tap any pin to open its store details.</p>
+      <p>Shows all store locations as pins. <strong>Red pins</strong> = HUMANA. <strong>Blue pins</strong> = others. A ✓ on a pin means you've visited. Tap any pin to see a summary, then tap "View Details".</p>
     </div>
     <div class="help-section">
       <h3>📦 Inventory Tracker</h3>
@@ -347,6 +350,44 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 </div>
 
 <!-- ══════════════════════════════════════════ -->
+<!-- EDIT STORE MODAL                           -->
+<!-- ══════════════════════════════════════════ -->
+<div class="overlay hidden" id="edit-overlay">
+  <div class="sheet" style="max-height:92vh;overflow-y:auto;">
+    <div class="sheet-handle"></div>
+    <h2 id="edit-title">✏️ Edit Store</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;margin-top:4px;">Changes are saved on this device only.</p>
+    <div class="field-lbl" id="edit-lbl-name">Store name</div>
+    <input type="text" class="field" id="edit-name" placeholder="Store name"/>
+    <div class="field-lbl" id="edit-lbl-addrEn">Address (English)</div>
+    <input type="text" class="field" id="edit-addrEn" placeholder="English address"/>
+    <div class="field-lbl" id="edit-lbl-addrUa">Address (Ukrainian)</div>
+    <input type="text" class="field" id="edit-addrUa" placeholder="Адреса українською"/>
+    <div class="field-lbl" id="edit-lbl-phone">Phone</div>
+    <input type="tel" class="field" id="edit-phone" placeholder="Optional"/>
+    <div class="field-lbl" id="edit-lbl-pricing">Pricing type</div>
+    <select class="field" id="edit-pricing">
+      <option value="item">🏷️ Itemized (per item)</option>
+      <option value="kg">⚖️ By KG (by weight)</option>
+    </select>
+    <div class="field-lbl" id="edit-lbl-cycle">Inventory cycle</div>
+    <select class="field" id="edit-cycle">
+      <option value="7">Weekly (7 days)</option>
+      <option value="14">2-week (14 days)</option>
+      <option value="35">5-week (35 days)</option>
+    </select>
+    <div class="field-lbl" id="edit-lbl-note">Notes</div>
+    <textarea class="field" id="edit-note" rows="3" style="resize:none;"></textarea>
+    <button class="sheet-btn" onclick="saveEdit()">Save Changes</button>
+    <button class="sheet-cancel" onclick="document.getElementById('edit-overlay').classList.add('hidden')">Cancel</button>
+    <div id="edit-delete-wrap" style="display:none;margin-top:16px;">
+      <hr style="border:none;border-top:1px solid var(--border);margin-bottom:16px;">
+      <button id="edit-delete-btn" onclick="confirmDeleteCustomStore()" style="width:100%;padding:14px;background:none;border:2px solid #dc2626;color:#dc2626;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;">🗑️ Remove this store</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
 <!-- APP SHELL                                  -->
 <!-- ══════════════════════════════════════════ -->
 <header>
@@ -411,8 +452,8 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 // ─────────────────────────────────────────────
 let lang = localStorage.getItem('lviv_sh_lang') || 'en';
 const TR = {
-  en:{tabList:'List',tabMap:'Map',fAll:'All Stores',fKg:'⚖️ By KG',fItem:'🏷️ Itemized',fVisited:'✅ Visited',fUnvisited:'🔲 Not Yet',tipStrong:'👋 Tap any store to see full details, hours, and the inventory tracker.',tipSub:"Use the filter buttons above to find exactly what you're looking for. Scroll the filters sideways to see all options.",statsVisited:'stores visited',statsAdded:'added by you',backBtn:'← Back to list',step1:'📍 Step 1 — Have you visited this store?',step2:'📦 Step 2 — Inventory & Price Tracker',markVisited:'📍 Mark as Visited',unmarkVisited:'✅ Visited — tap to unmark',visitSaved:'Your visit history is saved automatically on this device.',setDel:'📅 Set Last Delivery Date',updDel:'🔄 Update Delivery Date',noDelivery:'No delivery date set yet for this store.',storeInfo:'ℹ️ Store Information',addrLbl:'Address',phoneLbl:'Phone',notesLbl:'Notes',hoursLbl:'Opening Hours',removeStore:'🗑️ Remove this store',addedByYou:'📍 Added by you',byKg:'⚖️ By KG',byWeight:'⚖️ By Weight',itemized:'🏷️ Itemized pricing',closedToday:'🔒 Closed today',closedDay:'🔒 Closed',viewDetails:'View Details →',freshToday:'🎉 Fresh today! New stock just arrived',freshLabel:'✅ Fresh stock — prices still high',midLabel:'🟡 Mid-cycle — good selection',oldLabel:'🔥 Late cycle — BEST deals now!',dayLabel:'Day',delivery:'📦 Delivery',endCycle:'🏷️ End of cycle',todayPrice:"Today's price per KG",estDiscount:'Estimated discount vs. delivery day',cycleDay:'-day cycle · prices drop daily',off:'off',inventory:'Inventory cycle',humanaTag:'HUMANA',visitedTag:'Visited'},
-  ua:{tabList:'Список',tabMap:'Карта',fAll:'Всі магазини',fKg:'⚖️ На вагу',fItem:'🏷️ По штуці',fVisited:'✅ Відвідані',fUnvisited:'🔲 Ще ні',tipStrong:'👋 Натисніть на магазин, щоб побачити деталі, години та трекер.',tipSub:'Використовуйте кнопки фільтрів. Проведіть пальцем, щоб побачити всі.',statsVisited:'магазинів відвідано',statsAdded:'додано вами',backBtn:'← Назад',step1:'📍 Крок 1 — Ви відвідали цей магазин?',step2:'📦 Крок 2 — Трекер товарів і цін',markVisited:'📍 Відмітити як відвідане',unmarkVisited:'✅ Відвідано — натисніть, щоб зняти',visitSaved:'Історія відвідувань зберігається на цьому пристрої.',setDel:'📅 Встановити дату поставки',updDel:'🔄 Оновити дату поставки',noDelivery:'Дата поставки ще не вказана.',storeInfo:'ℹ️ Інформація про магазин',addrLbl:'Адреса',phoneLbl:'Телефон',notesLbl:'Примітки',hoursLbl:'Години роботи',removeStore:'🗑️ Видалити магазин',addedByYou:'📍 Додано вами',byKg:'⚖️ На вагу',byWeight:'⚖️ На вагу',itemized:'🏷️ По штуці',closedToday:'🔒 Зачинено сьогодні',closedDay:'🔒 Зачинено',viewDetails:'Деталі →',freshToday:'🎉 Щойно! Нові товари сьогодні',freshLabel:'✅ Свіжі товари — ціни ще високі',midLabel:'🟡 Середина циклу — хороший вибір',oldLabel:'🔥 Кінець циклу — НАЙКРАЩІ ціни!',dayLabel:'День',delivery:'📦 Поставка',endCycle:'🏷️ Кінець циклу',todayPrice:'Ціна сьогодні за кг',estDiscount:'Орієнтовна знижка від поставки',cycleDay:'-денний цикл · ціни знижуються щодня',off:'знижки',inventory:'Цикл поставок',humanaTag:'HUMANA',visitedTag:'Відвідано'}
+  en:{tabList:'List',tabMap:'Map',fAll:'All Stores',fKg:'⚖️ By KG',fItem:'🏷️ Itemized',fVisited:'✅ Visited',fUnvisited:'🔲 Not Yet',tipStrong:'👋 Tap any store to see full details, hours, and the inventory tracker.',tipSub:"Use the filter buttons above to find exactly what you're looking for. Scroll the filters sideways to see all options.",statsVisited:'stores visited',statsAdded:'added by you',backBtn:'← Back to list',step1:'📍 Step 1 — Have you visited this store?',step2:'📦 Step 2 — Inventory & Price Tracker',markVisited:'📍 Mark as Visited',unmarkVisited:'✅ Visited — tap to unmark',visitSaved:'Your visit history is saved automatically on this device.',setDel:'📅 Set Last Delivery Date',updDel:'🔄 Update Delivery Date',noDelivery:'No delivery date set yet for this store.',storeInfo:'ℹ️ Store Information',addrLbl:'Address',phoneLbl:'Phone',notesLbl:'Notes',hoursLbl:'Opening Hours',removeStore:'🗑️ Remove this store',addedByYou:'📍 Added by you',byKg:'⚖️ By KG',byWeight:'⚖️ By Weight',itemized:'🏷️ Itemized pricing',closedToday:'🔒 Closed today',closedDay:'🔒 Closed',viewDetails:'View Details →',freshToday:'🎉 Fresh today! New stock just arrived',freshLabel:'✅ Fresh stock — prices still high',midLabel:'🟡 Mid-cycle — good selection',oldLabel:'🔥 Late cycle — BEST deals now!',dayLabel:'Day',delivery:'📦 Delivery',endCycle:'🏷️ End of cycle',todayPrice:"Today's price per KG",estDiscount:'Estimated discount vs. delivery day',cycleDay:'-day cycle · prices drop daily',off:'off',inventory:'Inventory cycle',humanaTag:'HUMANA',visitedTag:'Visited',editStore:'Edit Store',saveEdit:'Save Changes',editName:'Store name',editAddrEn:'Address (English)',editAddrUa:'Address (Ukrainian)',editPhone:'Phone',editPricing:'Pricing type',editCycle:'Inventory cycle',editNotes:'Notes'},
+  ua:{tabList:'Список',tabMap:'Карта',fAll:'Всі магазини',fKg:'⚖️ На вагу',fItem:'🏷️ По штуці',fVisited:'✅ Відвідані',fUnvisited:'🔲 Ще ні',tipStrong:'👋 Натисніть на магазин, щоб побачити деталі, години та трекер.',tipSub:'Використовуйте кнопки фільтрів. Проведіть пальцем, щоб побачити всі.',statsVisited:'магазинів відвідано',statsAdded:'додано вами',backBtn:'← Назад',step1:'📍 Крок 1 — Ви відвідали цей магазин?',step2:'📦 Крок 2 — Трекер товарів і цін',markVisited:'📍 Відмітити як відвідане',unmarkVisited:'✅ Відвідано — натисніть, щоб зняти',visitSaved:'Історія відвідувань зберігається на цьому пристрої.',setDel:'📅 Встановити дату поставки',updDel:'🔄 Оновити дату поставки',noDelivery:'Дата поставки ще не вказана.',storeInfo:'ℹ️ Інформація про магазин',addrLbl:'Адреса',phoneLbl:'Телефон',notesLbl:'Примітки',hoursLbl:'Години роботи',removeStore:'🗑️ Видалити магазин',addedByYou:'📍 Додано вами',byKg:'⚖️ На вагу',byWeight:'⚖️ На вагу',itemized:'🏷️ По штуці',closedToday:'🔒 Зачинено сьогодні',closedDay:'🔒 Зачинено',viewDetails:'Деталі →',freshToday:'🎉 Щойно! Нові товари сьогодні',freshLabel:'✅ Свіжі товари — ціни ще високі',midLabel:'🟡 Середина циклу — хороший вибір',oldLabel:'🔥 Кінець циклу — НАЙКРАЩІ ціни!',dayLabel:'День',delivery:'📦 Поставка',endCycle:'🏷️ Кінець циклу',todayPrice:'Ціна сьогодні за кг',estDiscount:'Орієнтовна знижка від поставки',cycleDay:'-денний цикл · ціни знижуються щодня',off:'знижки',inventory:'Цикл поставок',humanaTag:'HUMANA',visitedTag:'Відвідано',editStore:'Редагувати',saveEdit:'Зберегти зміни',editName:'Назва магазину',editAddrEn:'Адреса (англ.)',editAddrUa:'Адреса (укр.)',editPhone:'Телефон',editPricing:'Тип цін',editCycle:'Цикл поставок',editNotes:'Нотатки'}
 };
 function t(k){return(TR[lang]||TR.en)[k]||k;}
 function setLang(l){
@@ -575,7 +616,9 @@ function renderList() {
 // ─────────────────────────────────────────────
 function openDetail(id) {
   currentStoreId = id;
-  const s = allStores().find(x => x.id === id);
+  const raw = allStores().find(x => x.id === id);
+  if(!raw) return;
+  const s = getStoreData(raw);
   const sd = getSD(id);
   const di = getDayInfo(id, s.cycle);
   const todayKey = DAYS[new Date().getDay()];
@@ -684,12 +727,14 @@ function openDetail(id) {
         </div>
       </div>
 
+      <!-- EDIT STORE -->
+      <button onclick="openEditModal('${id}')" style="width:100%;padding:14px;background:white;border:2px solid var(--green);color:var(--green);border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:12px;">✏️ ${t('editStore')}</button>
+
       <!-- OPEN IN MAPS -->
       <div class="maps-btns">
         <a class="maps-btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank">🗺️ Google Maps</a>
         <a class="maps-btn mapsme" href="mapsme://map?v=1&ll=${s.lat},${s.lng}&n=${encodeURIComponent(s.name)}">📍 Maps.me</a>
       </div>
-      ${s.custom ? `<button onclick="deleteCustomStore('${s.id}')" style="width:100%;padding:14px;background:none;border:2px solid #dc2626;color:#dc2626;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:20px;">${t('removeStore')}</button>` : ''}
 
     </div>`;
 
@@ -734,6 +779,7 @@ function openDelModal(id) {
   modalStoreId = id;
   const sd = getSD(id);
   const s = allStores().find(x => x.id === id);
+  if(!s) return;
   document.getElementById('del-date-input').value = sd.lastDelivery || new Date().toISOString().split('T')[0];
   document.getElementById('del-cycle-select').value = String(sd.cycle || s.cycle);
   document.getElementById('del-overlay').classList.remove('hidden');
@@ -784,7 +830,6 @@ function initMap() {
     tempMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(mapInst).bindPopup('New store location').openPopup();
     openAddStoreModal(e.latlng.lat, e.latlng.lng);
   });
-
   renderPins();
 }
 
@@ -806,7 +851,7 @@ function renderPins() {
       iconSize:[36,36], iconAnchor:[18,18]
     });
     const m = L.marker([s.lat, s.lng], {icon}).addTo(mapInst);
-    m.on('click', function() { openDetail(s.id); });
+    m.on('click', function(){ openDetail(s.id); });
     mapMarkers.push(m);
   });
 }
@@ -839,6 +884,18 @@ function getCustomStores(){
   try{ return JSON.parse(localStorage.getItem('lviv_sh_custom')||'[]'); }catch(e){ return []; }
 }
 function saveCustomStores(arr){ localStorage.setItem('lviv_sh_custom',JSON.stringify(arr)); }
+
+// ─────────────────────────────────────────────
+// STORE OVERRIDES (edits to built-in stores)
+// ─────────────────────────────────────────────
+function getStoreOverrides(){
+  try{ return JSON.parse(localStorage.getItem('lviv_sh_overrides')||'{}'); }catch(e){ return {}; }
+}
+function saveStoreOverrides(obj){ localStorage.setItem('lviv_sh_overrides',JSON.stringify(obj)); }
+function getStoreData(s){
+  const ov = getStoreOverrides()[s.id]||{};
+  return Object.assign({},s,ov);
+}
 
 function openAddStoreModal(lat,lng){
   document.getElementById('add-lat').value = lat!==null ? lat.toFixed(6) : '';
@@ -887,6 +944,74 @@ function deleteCustomStore(id){
 }
 
 // ─────────────────────────────────────────────
+// EDIT STORE MODAL
+// ─────────────────────────────────────────────
+let editStoreId = null;
+
+function openEditModal(id){
+  editStoreId = id;
+  const raw = allStores().find(x => x.id === id);
+  if(!raw) return;
+  const s = getStoreData(raw);
+  document.getElementById('edit-name').value = s.name||'';
+  document.getElementById('edit-addrEn').value = s.addressEn||s.address||'';
+  document.getElementById('edit-addrUa').value = s.address||'';
+  document.getElementById('edit-phone').value = s.phone||'';
+  document.getElementById('edit-pricing').value = s.pricing||'item';
+  document.getElementById('edit-cycle').value = String(s.cycle||7);
+  document.getElementById('edit-note').value = s.note||'';
+  // Show delete button only for custom stores
+  document.getElementById('edit-delete-wrap').style.display = raw.custom ? 'block' : 'none';
+  // Update labels with current language
+  document.getElementById('edit-title').textContent = '✏️ '+t('editStore');
+  document.getElementById('edit-lbl-name').textContent = t('editName');
+  document.getElementById('edit-lbl-addrEn').textContent = t('editAddrEn');
+  document.getElementById('edit-lbl-addrUa').textContent = t('editAddrUa');
+  document.getElementById('edit-lbl-phone').textContent = t('editPhone');
+  document.getElementById('edit-lbl-pricing').textContent = t('editPricing');
+  document.getElementById('edit-lbl-cycle').textContent = t('editCycle');
+  document.getElementById('edit-lbl-note').textContent = t('editNotes');
+  document.getElementById('edit-overlay').classList.remove('hidden');
+}
+
+function saveEdit(){
+  if(!editStoreId) return;
+  const name = document.getElementById('edit-name').value.trim();
+  if(!name){ alert('Please enter a store name'); return; }
+  const changes = {
+    name,
+    addressEn: document.getElementById('edit-addrEn').value.trim(),
+    address:   document.getElementById('edit-addrUa').value.trim(),
+    phone:     document.getElementById('edit-phone').value.trim(),
+    pricing:   document.getElementById('edit-pricing').value,
+    cycle:     parseInt(document.getElementById('edit-cycle').value),
+    note:      document.getElementById('edit-note').value.trim()
+  };
+  const raw = allStores().find(x => x.id === editStoreId);
+  if(raw && raw.custom){
+    const arr = getCustomStores();
+    const idx = arr.findIndex(x => x.id === editStoreId);
+    if(idx>=0){ arr[idx] = Object.assign({},arr[idx],changes); saveCustomStores(arr); }
+  } else {
+    const ov = getStoreOverrides();
+    ov[editStoreId] = Object.assign({},ov[editStoreId]||{},changes);
+    saveStoreOverrides(ov);
+  }
+  document.getElementById('edit-overlay').classList.add('hidden');
+  renderList(); updateStats();
+  if(mapInst) renderPins();
+  openDetail(editStoreId);
+}
+
+function confirmDeleteCustomStore(){
+  if(!editStoreId) return;
+  if(!confirm('Remove this store from your list?')) return;
+  document.getElementById('edit-overlay').classList.add('hidden');
+  saveCustomStores(getCustomStores().filter(s=>s.id!==editStoreId));
+  closeDetail();
+}
+
+// ─────────────────────────────────────────────
 // WELCOME
 // ─────────────────────────────────────────────
 function closeWelcome(){
@@ -904,7 +1029,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   if(!localStorage.getItem('lviv_sh_welcomed')){
     document.getElementById('welcome').classList.remove('hidden');
   }
-  ['del-overlay','help-overlay','add-overlay'].forEach(id=>{
+  ['del-overlay','help-overlay','add-overlay','edit-overlay'].forEach(id=>{
     document.getElementById(id).addEventListener('click',e=>{
       if(e.target.id===id) document.getElementById(id).classList.add('hidden');
     });
