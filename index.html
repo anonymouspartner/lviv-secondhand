@@ -579,6 +579,8 @@ function openDetail(id) {
   const sd = getSD(id);
   const di = getDayInfo(id, s.cycle);
   const todayKey = DAYS[new Date().getDay()];
+  const dispAddr = lang==='ua'?(s.address||s.addressEn):(s.addressEn||s.address);
+  const altAddr  = lang==='ua'?(s.addressEn||''):(s.address||'');
 
   // Hours table
   const hoursHtml = Object.entries(s.hours).map(([d,h]) =>
@@ -731,7 +733,7 @@ function toggleVisit(id) {
 function openDelModal(id) {
   modalStoreId = id;
   const sd = getSD(id);
-  const s = STORES.find(x => x.id === id);
+  const s = allStores().find(x => x.id === id);
   document.getElementById('del-date-input').value = sd.lastDelivery || new Date().toISOString().split('T')[0];
   document.getElementById('del-cycle-select').value = String(sd.cycle || s.cycle);
   document.getElementById('del-overlay').classList.remove('hidden');
