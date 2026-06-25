@@ -61,7 +61,7 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 .section-tip strong { display: block; margin-bottom: 3px; }
 
 /* ── STORE CARD ── */
-.store-card { background: white; border-radius: 14px; margin-bottom: 10px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; active: { opacity: 0.85; } transition: transform 0.1s; }
+.store-card { background: white; border-radius: 14px; margin-bottom: 10px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; transition: transform 0.1s; }
 .store-card:active { transform: scale(0.985); }
 .store-card.visited { border-color: var(--green-light); }
 .card-top { padding: 13px 14px 10px; display: flex; gap: 11px; align-items: flex-start; }
@@ -578,7 +578,7 @@ function renderList() {
 // ─────────────────────────────────────────────
 function openDetail(id) {
   currentStoreId = id;
-  const s = STORES.find(x => x.id === id);
+  const s = allStores().find(x => x.id === id);
   const sd = getSD(id);
   const di = getDayInfo(id, s.cycle);
   const todayKey = DAYS[new Date().getDay()];
@@ -785,6 +785,17 @@ function initMap() {
     tempMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(mapInst).bindPopup('New store location').openPopup();
     openAddStoreModal(e.latlng.lat, e.latlng.lng);
   });
+
+  // Inline onclick handlers inside Leaflet popups get swallowed by Leaflet's
+  // own touch handling on mobile, so wire the button up here instead.
+  mapInst.on('popupopen', function(e) {
+    const btn = e.popup.getElement().querySelector('.popup-open-btn');
+    if (!btn) return;
+    L.DomEvent.on(btn, 'click', L.DomEvent.stop).on(btn, 'click', function() {
+      openDetail(btn.dataset.storeId);
+    });
+  });
+
   renderPins();
 }
 
@@ -806,7 +817,7 @@ function renderPins() {
       iconSize:[36,36], iconAnchor:[18,18]
     });
     const m = L.marker([s.lat, s.lng], {icon}).addTo(mapInst);
-    m.bindPopup(`<div class="popup-name">${s.name}</div><div class="popup-addr">${lang==='ua'?(s.address||s.addressEn):(s.addressEn||s.address)}</div><button class="popup-open-btn" onclick="openDetail('${s.id}')">${t('viewDetails')}</button>`);
+    m.bindPopup(`<div class="popup-name">${s.name}</div><div class="popup-addr">${lang==='ua'?(s.address||s.addressEn):(s.addressEn||s.address)}</div><button class="popup-open-btn" data-store-id="${s.id}">${t('viewDetails')}</button>`);
     mapMarkers.push(m);
   });
 }
