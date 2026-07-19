@@ -1,0 +1,63 @@
+name: 🗺️ Map contribution
+description: Submit a new second-hand store, or a correction to a store already on the map.
+title: "Map contribution: "
+labels: ["map-contribution"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the **Lviv Second Hand** map! 🧥
+
+        💡 The easiest way to contribute is straight from the app: open it, tap the **🤝** button, then **🌍 Contribute to the official map** — it pre-fills everything for you, including exact coordinates. You can also fill this in by hand below.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you contributing?
+      options:
+        - A new store (not on the map yet)
+        - A correction to an existing store
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Store name
+      placeholder: e.g. Sekond-Khend Nova
+    validations:
+      required: true
+  - type: input
+    id: address
+    attributes:
+      label: Address
+      placeholder: Street name and number
+  - type: input
+    id: coords
+    attributes:
+      label: Coordinates (latitude, longitude)
+      description: On the app's Map tab, tap the store's location to read these off. Or right-click the spot in Google Maps and copy the numbers.
+      placeholder: 49.8400, 24.0355
+  - type: dropdown
+    id: pricing
+    attributes:
+      label: Pricing type
+      options:
+        - Itemized (per item)
+        - By KG (by weight)
+        - Not sure
+  - type: input
+    id: phone
+    attributes:
+      label: Phone
+      placeholder: Optional
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / what to change
+      description: Opening hours, delivery day, discounts, or exactly what's wrong on an existing store.
+  - type: textarea
+    id: raw
+    attributes:
+      label: Raw data from the app (optional)
+      description: If you used the app's Contribute button or the "Download file" / "Show code" share options, paste the JSON here so it can be merged directly.
+      render: json
