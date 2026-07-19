@@ -63,6 +63,10 @@ You can export every store on the map as a `.kml` file and import it straight in
 3. Select the downloaded `.kml` file
 4. All stores now appear as bookmarks on your Maps.me map, even offline
 
+## 🔒 Privacy
+
+No accounts, no ads, no tracking. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. Full details: **[Privacy Policy](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (also linked from the in-app **?** Help panel).
+
 ---
 
 # 🇺🇦 Lviv Second Hand — Пошук секонд-хендів
@@ -125,3 +129,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 2. Відкрийте Maps.me → **Закладки** → **Імпорт**
 3. Виберіть завантажений файл `.kml`
 4. Усі магазини з'являться як закладки на вашій карті Maps.me, навіть офлайн
+
+## 🔒 Конфіденційність
+
+Без облікових записів, реклами та стеження. Усе, що ви робите, залишається у вашому браузері на вашому пристрої — воно ніколи не надсилається на сервер і не залишає ваш телефон, доки ви самі не вирішите поділитися. Докладніше: **[Політика конфіденційності](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (також доступна з панелі довідки **?** у застосунку).
