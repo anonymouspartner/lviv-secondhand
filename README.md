@@ -32,13 +32,15 @@ No app store, no install required to use it in a browser — but adding it to yo
 ## ✨ Features
 
 - 🗺️ **Map** of all second-hand stores in Lviv
+- 📍 **Show my location** — see yourself on the map with a live GPS toggle
 - ⏱️ **Inventory cycle tracker** — counts days since last delivery, estimates current discounts
 - ⚖️ Supports both **by-KG** and **itemized** stores
 - 🌐 **EN / UA** language toggle
 - ✅ Mark stores as **visited**
-- ➕ **Add stores** missing from the map
+- ➕ **Add**, ✏️ **edit**, and 🗑️ **remove/hide** stores
 - 🤝 **Share your map** & **contribute** additions/edits to everyone
 - 📤 **Export** all store locations to Maps.me (KML)
+- 📶 **Works offline** — installable PWA with on-device caching, no CDN dependency
 
 ## 🤝 Sharing & Contributing
 
@@ -103,13 +105,15 @@ PWA (прогресивний веб-додаток) для пошуку та в
 ## ✨ Можливості
 
 - 🗺️ **Карта** усіх секонд-хенд магазинів Львова
+- 📍 **Показати моє місцезнаходження** — ви на карті з перемикачем GPS
 - ⏱️ **Трекер циклу завезення товару** — лічить дні з останньої доставки та оцінює поточні знижки
 - ⚖️ Підтримка магазинів **на кіло** та **поштучно**
 - 🌐 Перемикач мови **EN / UA**
 - ✅ Позначення магазинів як **відвіданих**
-- ➕ **Додавання магазинів**, яких немає на карті
+- ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 📤 **Експорт** усіх магазинів у Maps.me (KML)
+- 📶 **Працює офлайн** — встановлюваний застосунок (PWA) із локальним кешуванням, без залежності від CDN
 
 ## 🤝 Обмін і внесок
 
