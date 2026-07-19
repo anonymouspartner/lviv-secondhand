@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#1b5e38">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -234,7 +234,7 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 <!-- WELCOME SCREEN (shown on first visit)       -->
 <!-- ══════════════════════════════════════════ -->
 <div class="welcome-overlay hidden" id="welcome">
-  <div class="welcome-box">
+  <div class="welcome-box" id="welcome-box">
     <div class="welcome-top">
       <div style="font-size:48px;margin-bottom:10px;">🧥</div>
       <h2>Lviv Second Hand</h2>
@@ -278,7 +278,7 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 <!-- HELP SHEET                                 -->
 <!-- ══════════════════════════════════════════ -->
 <div class="overlay hidden" id="help-overlay">
-  <div class="sheet" style="max-height:85dvh;overflow-y:auto;">
+  <div class="sheet" id="help-sheet" style="max-height:85dvh;overflow-y:auto;">
     <div class="sheet-handle"></div>
     <h2>How to use this app</h2>
     <br>
@@ -482,22 +482,22 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
     <p id="hdr-stats">Loading…</p>
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
-    <div class="lang-pill">
-      <span class="lp active" id="lang-en" onclick="setLang('en')">EN</span>
-      <span class="lp" id="lang-ua" onclick="setLang('ua')">УА</span>
+    <div class="lang-pill" role="group" aria-label="Language">
+      <span class="lp active" id="lang-en" role="button" tabindex="0" aria-pressed="true" onclick="setLang('en')">EN</span>
+      <span class="lp" id="lang-ua" role="button" tabindex="0" aria-pressed="false" onclick="setLang('ua')">УА</span>
     </div>
-    <button class="help-btn" onclick="openShareModal()" title="Share your map & contribute stores" style="font-size:18px;">🤝</button>
-    <button class="help-btn" onclick="exportKML()" title="Export all stores to Maps.me KML" style="font-size:18px;">📤</button>
-    <button class="help-btn" onclick="document.getElementById('help-overlay').classList.remove('hidden')" title="Help">?</button>
+    <button class="help-btn" onclick="openShareModal()" title="Share your map & contribute stores" aria-label="Share your map and contribute stores" style="font-size:18px;">🤝</button>
+    <button class="help-btn" onclick="exportKML()" title="Export all stores to Maps.me KML" aria-label="Export all stores to Maps.me KML" style="font-size:18px;">📤</button>
+    <button class="help-btn" onclick="document.getElementById('help-overlay').classList.remove('hidden')" title="Help" aria-label="Help">?</button>
   </div>
 </header>
 
-<div class="tabs">
-  <div class="tab active" data-tab="list" onclick="switchTab('list')">
-    <span>🗂️</span><span data-i18n="tabList">List</span>
+<div class="tabs" role="tablist">
+  <div class="tab active" data-tab="list" role="tab" tabindex="0" aria-selected="true" onclick="switchTab('list')">
+    <span aria-hidden="true">🗂️</span><span data-i18n="tabList">List</span>
   </div>
-  <div class="tab" data-tab="map" onclick="switchTab('map')">
-    <span>🗺️</span><span data-i18n="tabMap">Map</span>
+  <div class="tab" data-tab="map" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('map')">
+    <span aria-hidden="true">🗺️</span><span data-i18n="tabMap">Map</span>
   </div>
 </div>
 
@@ -523,8 +523,8 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 
   <div class="view hidden" id="map-view" style="overflow:hidden;">
     <div id="map"></div>
-    <button onclick="locateUser()" id="map-locate-btn" style="position:fixed;bottom:calc(84px + env(safe-area-inset-bottom, 0px));right:16px;z-index:999;width:54px;height:54px;border-radius:50%;background:white;color:var(--green);border:none;font-size:24px;box-shadow:0 4px 14px rgba(0,0,0,0.3);cursor:pointer;align-items:center;justify-content:center;line-height:1;" title="Show my location">📍</button>
-    <button onclick="startAddPin()" id="map-add-btn" style="position:fixed;bottom:calc(20px + env(safe-area-inset-bottom, 0px));right:16px;z-index:999;width:54px;height:54px;border-radius:50%;background:var(--orange);color:white;border:none;font-size:28px;font-weight:900;box-shadow:0 4px 14px rgba(0,0,0,0.3);cursor:pointer;align-items:center;justify-content:center;line-height:1;" title="Add a new store — tap the map to pin location">+</button>
+    <button onclick="locateUser()" id="map-locate-btn" style="position:fixed;bottom:calc(84px + env(safe-area-inset-bottom, 0px));right:16px;z-index:999;width:54px;height:54px;border-radius:50%;background:white;color:var(--green);border:none;font-size:24px;box-shadow:0 4px 14px rgba(0,0,0,0.3);cursor:pointer;align-items:center;justify-content:center;line-height:1;" title="Show my location" aria-label="Show my location">📍</button>
+    <button onclick="startAddPin()" id="map-add-btn" style="position:fixed;bottom:calc(20px + env(safe-area-inset-bottom, 0px));right:16px;z-index:999;width:54px;height:54px;border-radius:50%;background:var(--orange);color:white;border:none;font-size:28px;font-weight:900;box-shadow:0 4px 14px rgba(0,0,0,0.3);cursor:pointer;align-items:center;justify-content:center;line-height:1;" title="Add a new store" aria-label="Add a new store">+</button>
     <div id="map-tap-hint" style="position:fixed;top:120px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.72);color:white;padding:7px 14px;border-radius:20px;font-size:13px;font-weight:600;z-index:999;display:none;pointer-events:none;">📍 Tap map to set location</div>
   </div>
 
@@ -540,8 +540,8 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 // ─────────────────────────────────────────────
 let lang = localStorage.getItem('lviv_sh_lang') || 'en';
 const TR = {
-  en:{tabList:'List',tabMap:'Map',fAll:'All Stores',fKg:'⚖️ By KG',fItem:'🏷️ Itemized',fVisited:'✅ Visited',fUnvisited:'🔲 Not Yet',tipStrong:'👋 Tap any store to see full details, hours, and the inventory tracker.',tipSub:"Use the filter buttons above to find exactly what you're looking for. Scroll the filters sideways to see all options.",statsVisited:'stores visited',statsAdded:'added by you',backBtn:'← Back to list',step1:'📍 Step 1 — Have you visited this store?',step2:'📦 Step 2 — Inventory & Price Tracker',markVisited:'📍 Mark as Visited',unmarkVisited:'✅ Visited — tap to unmark',visitSaved:'Your visit history is saved automatically on this device.',setDel:'📅 Set Last Delivery Date',updDel:'🔄 Update Delivery Date',noDelivery:'No delivery date set yet for this store.',storeInfo:'ℹ️ Store Information',addrLbl:'Address',phoneLbl:'Phone',notesLbl:'Notes',hoursLbl:'Opening Hours',removeStore:'🗑️ Remove this store',addedByYou:'📍 Added by you',byKg:'⚖️ By KG',byWeight:'⚖️ By Weight',itemized:'🏷️ Itemized pricing',closedToday:'🔒 Closed today',closedDay:'🔒 Closed',viewDetails:'View Details →',freshToday:'🎉 Fresh today! New stock just arrived',freshLabel:'✅ Fresh stock — prices still high',midLabel:'🟡 Mid-cycle — good selection',oldLabel:'🔥 Late cycle — BEST deals now!',dayLabel:'Day',delivery:'📦 Delivery',endCycle:'🏷️ End of cycle',todayPrice:"Today's price per KG",estDiscount:'Estimated discount vs. delivery day',cycleDay:'-day cycle · prices drop daily',off:'off',inventory:'Inventory cycle',humanaTag:'HUMANA',visitedTag:'Visited',editStore:'Edit Store',saveEdit:'Save Changes',editName:'Store name',editAddrEn:'Address (English)',editAddrUa:'Address (Ukrainian)',editPhone:'Phone',editPricing:'Pricing type',editCycle:'Inventory cycle',editNotes:'Notes',shareTitle:'Share & Contribute',shareIntro:'Stores you add or edit are saved on this device. Share them with friends, or contribute them to the official map so everyone gets them.',shareYoursHdr:'📤 Share your map',shareYoursHint:'Send your added & edited stores to anyone. They open the link (or import the file) and your stores appear on their map.',shareCopyLink:'🔗 Copy share link',shareDownload:'💾 Download file',shareShowCode:'🔡 Show code',shareContribHdr:'🌍 Contribute to the official map',shareContribHint:'Submit your additions & corrections so the maintainer can merge them into the map everyone downloads. Opens a pre-filled GitHub form (a free GitHub account is required to post).',shareContribBtn:'🚀 Submit on GitHub',shareImportHdr:'📥 Import from others',shareImportHint:'Got a share link, code, or file from someone? Paste the code below or load their file — their stores merge into yours (duplicates are skipped).',shareImportBtn:'📥 Import code',shareLoadFile:'📂 Load file…',sharePastePlaceholder:'Paste a share code here…',shareDone:'Done',shareNothing:"You haven't added or edited any stores yet. Add a store from the Map tab, then come back here to share it.",shareYouHave:'You have {added} store(s) added and {edited} correction(s) to share.',shareLinkCopied:'Share link copied to clipboard! Send it to anyone — opening it adds your stores to their map.',shareImportError:"Sorry, that doesn't look like a valid Lviv Second Hand share code or file.",shareImportDone:'Import complete!\n\n➕ {added} store(s) added\n✏️ {edited} correction(s) applied\n⏭️ {skipped} skipped (duplicates or already edited)',shareIncoming:'This link shares up to {added} store(s) and {edited} correction(s) (duplicates already on your map are skipped).\n\nImport them?',locYouAreHere:'📍 You are here',locDenied:'Location access is blocked. To see yourself on the map, allow location for this site in your browser settings, then tap 📍 again.',locUnavailable:"Couldn't get your location. Make sure location services are on and try again.",locUnsupported:'Your browser does not support location.',locStart:'Show my location',locStop:'Turn off location',invalidDate:'Please pick a valid delivery date (today or earlier).',contribTooBig:'Your contribution is large, so the store data could not be embedded in the GitHub form. Please also tap "Download file" and attach the .json to the issue.',removeHintCustom:'This deletes the store you added.',removeHintBuiltin:'This hides the store on this device only. You can restore it anytime.',confirmRemoveCustom:'Remove this store from your list?',confirmHideBuiltin:'Hide this store from your map? It only affects this device — you can restore it anytime from the bottom of the list.',hiddenCount:'{n} store(s) hidden',restoreHidden:'Restore all'},
-  ua:{tabList:'Список',tabMap:'Карта',fAll:'Всі магазини',fKg:'⚖️ На вагу',fItem:'🏷️ По штуці',fVisited:'✅ Відвідані',fUnvisited:'🔲 Ще ні',tipStrong:'👋 Натисніть на магазин, щоб побачити деталі, години та трекер.',tipSub:'Використовуйте кнопки фільтрів. Проведіть пальцем, щоб побачити всі.',statsVisited:'магазинів відвідано',statsAdded:'додано вами',backBtn:'← Назад',step1:'📍 Крок 1 — Ви відвідали цей магазин?',step2:'📦 Крок 2 — Трекер товарів і цін',markVisited:'📍 Відмітити як відвідане',unmarkVisited:'✅ Відвідано — натисніть, щоб зняти',visitSaved:'Історія відвідувань зберігається на цьому пристрої.',setDel:'📅 Встановити дату поставки',updDel:'🔄 Оновити дату поставки',noDelivery:'Дата поставки ще не вказана.',storeInfo:'ℹ️ Інформація про магазин',addrLbl:'Адреса',phoneLbl:'Телефон',notesLbl:'Примітки',hoursLbl:'Години роботи',removeStore:'🗑️ Видалити магазин',addedByYou:'📍 Додано вами',byKg:'⚖️ На вагу',byWeight:'⚖️ На вагу',itemized:'🏷️ По штуці',closedToday:'🔒 Зачинено сьогодні',closedDay:'🔒 Зачинено',viewDetails:'Деталі →',freshToday:'🎉 Щойно! Нові товари сьогодні',freshLabel:'✅ Свіжі товари — ціни ще високі',midLabel:'🟡 Середина циклу — хороший вибір',oldLabel:'🔥 Кінець циклу — НАЙКРАЩІ ціни!',dayLabel:'День',delivery:'📦 Поставка',endCycle:'🏷️ Кінець циклу',todayPrice:'Ціна сьогодні за кг',estDiscount:'Орієнтовна знижка від поставки',cycleDay:'-денний цикл · ціни знижуються щодня',off:'знижки',inventory:'Цикл поставок',humanaTag:'HUMANA',visitedTag:'Відвідано',editStore:'Редагувати',saveEdit:'Зберегти зміни',editName:'Назва магазину',editAddrEn:'Адреса (англ.)',editAddrUa:'Адреса (укр.)',editPhone:'Телефон',editPricing:'Тип цін',editCycle:'Цикл поставок',editNotes:'Нотатки',shareTitle:'Поділитися та зробити внесок',shareIntro:'Магазини, які ви додали чи відредагували, зберігаються на цьому пристрої. Поділіться ними з друзями або внесіть їх до офіційної карти, щоб їх отримали всі.',shareYoursHdr:'📤 Поділитися картою',shareYoursHint:'Надішліть свої додані та змінені магазини будь-кому. Вони відкривають посилання (або імпортують файл) — і ваші магазини з’являються на їхній карті.',shareCopyLink:'🔗 Копіювати посилання',shareDownload:'💾 Завантажити файл',shareShowCode:'🔡 Показати код',shareContribHdr:'🌍 Внести до офіційної карти',shareContribHint:'Надішліть свої доповнення та виправлення, щоб супровідник додав їх до карти, яку завантажують усі. Відкриється попередньо заповнена форма GitHub (для публікації потрібен безкоштовний акаунт GitHub).',shareContribBtn:'🚀 Надіслати на GitHub',shareImportHdr:'📥 Імпорт від інших',shareImportHint:'Отримали посилання, код чи файл від когось? Вставте код нижче або завантажте файл — їхні магазини додадуться до ваших (дублікати пропускаються).',shareImportBtn:'📥 Імпортувати код',shareLoadFile:'📂 Завантажити файл…',sharePastePlaceholder:'Вставте код для обміну сюди…',shareDone:'Готово',shareNothing:'Ви ще не додали й не редагували жодного магазину. Додайте магазин на вкладці «Карта», а потім поверніться сюди, щоб поділитися.',shareYouHave:'У вас є {added} доданих магазинів і {edited} виправлень для обміну.',shareLinkCopied:'Посилання скопійовано! Надішліть його будь-кому — відкривши його, вони додадуть ваші магазини на свою карту.',shareImportError:'Вибачте, це не схоже на дійсний код або файл Lviv Second Hand.',shareImportDone:'Імпорт завершено!\n\n➕ Додано магазинів: {added}\n✏️ Застосовано виправлень: {edited}\n⏭️ Пропущено: {skipped} (дублікати або вже змінені)',shareIncoming:'Це посилання ділиться щонайбільше {added} магазинами та {edited} виправленнями (дублікати пропускаються).\n\nІмпортувати?',locYouAreHere:'📍 Ви тут',locDenied:'Доступ до місцезнаходження заблоковано. Щоб побачити себе на карті, дозвольте доступ до геолокації для цього сайту в налаштуваннях браузера, а потім знову натисніть 📍.',locUnavailable:'Не вдалося визначити місцезнаходження. Переконайтеся, що геолокацію ввімкнено, і спробуйте ще раз.',locUnsupported:'Ваш браузер не підтримує геолокацію.',locStart:'Показати моє місцезнаходження',locStop:'Вимкнути геолокацію',invalidDate:'Виберіть коректну дату поставки (сьогодні або раніше).',contribTooBig:'Ваш внесок великий, тому дані не вдалося вставити у форму GitHub. Будь ласка, також натисніть «Завантажити файл» і додайте .json до звернення.',removeHintCustom:'Це видалить доданий вами магазин.',removeHintBuiltin:'Це приховає магазин лише на цьому пристрої. Ви можете відновити його будь-коли.',confirmRemoveCustom:'Видалити цей магазин зі списку?',confirmHideBuiltin:'Приховати цей магазин з вашої карти? Це стосується лише цього пристрою — ви можете відновити його будь-коли внизу списку.',hiddenCount:'Приховано магазинів: {n}',restoreHidden:'Відновити всі'}
+  en:{tabList:'List',tabMap:'Map',fAll:'All Stores',fKg:'⚖️ By KG',fItem:'🏷️ Itemized',fVisited:'✅ Visited',fUnvisited:'🔲 Not Yet',tipStrong:'👋 Tap any store to see full details, hours, and the inventory tracker.',tipSub:"Use the filter buttons above to find exactly what you're looking for. Scroll the filters sideways to see all options.",statsVisited:'stores visited',statsAdded:'added by you',backBtn:'← Back to list',step1:'📍 Step 1 — Have you visited this store?',step2:'📦 Step 2 — Inventory & Price Tracker',markVisited:'📍 Mark as Visited',unmarkVisited:'✅ Visited — tap to unmark',visitSaved:'Your visit history is saved automatically on this device.',setDel:'📅 Set Last Delivery Date',updDel:'🔄 Update Delivery Date',noDelivery:'No delivery date set yet for this store.',storeInfo:'ℹ️ Store Information',addrLbl:'Address',phoneLbl:'Phone',notesLbl:'Notes',hoursLbl:'Opening Hours',removeStore:'🗑️ Remove this store',addedByYou:'📍 Added by you',byKg:'⚖️ By KG',byWeight:'⚖️ By Weight',itemized:'🏷️ Itemized pricing',closedToday:'🔒 Closed today',closedDay:'🔒 Closed',viewDetails:'View Details →',freshToday:'🎉 Fresh today! New stock just arrived',freshLabel:'✅ Fresh stock — prices still high',midLabel:'🟡 Mid-cycle — good selection',oldLabel:'🔥 Late cycle — BEST deals now!',dayLabel:'Day',delivery:'📦 Delivery',endCycle:'🏷️ End of cycle',todayPrice:"Today's price per KG",estDiscount:'Estimated discount vs. delivery day',cycleDay:'-day cycle · prices drop daily',off:'off',inventory:'Inventory cycle',humanaTag:'HUMANA',visitedTag:'Visited',editStore:'Edit Store',saveEdit:'Save Changes',editName:'Store name',editAddrEn:'Address (English)',editAddrUa:'Address (Ukrainian)',editPhone:'Phone',editPricing:'Pricing type',editCycle:'Inventory cycle',editNotes:'Notes',shareTitle:'Share & Contribute',shareIntro:'Stores you add or edit are saved on this device. Share them with friends, or contribute them to the official map so everyone gets them.',shareYoursHdr:'📤 Share your map',shareYoursHint:'Send your added & edited stores to anyone. They open the link (or import the file) and your stores appear on their map.',shareCopyLink:'🔗 Copy share link',shareDownload:'💾 Download file',shareShowCode:'🔡 Show code',shareContribHdr:'🌍 Contribute to the official map',shareContribHint:'Submit your additions & corrections so the maintainer can merge them into the map everyone downloads. Opens a pre-filled GitHub form (a free GitHub account is required to post).',shareContribBtn:'🚀 Submit on GitHub',shareImportHdr:'📥 Import from others',shareImportHint:'Got a share link, code, or file from someone? Paste the code below or load their file — their stores merge into yours (duplicates are skipped).',shareImportBtn:'📥 Import code',shareLoadFile:'📂 Load file…',sharePastePlaceholder:'Paste a share code here…',shareDone:'Done',shareNothing:"You haven't added or edited any stores yet. Add a store from the Map tab, then come back here to share it.",shareYouHave:'You have {added} store(s) added and {edited} correction(s) to share.',shareLinkCopied:'Share link copied to clipboard! Send it to anyone — opening it adds your stores to their map.',shareImportError:"Sorry, that doesn't look like a valid Lviv Second Hand share code or file.",shareImportDone:'Import complete!\n\n➕ {added} store(s) added\n✏️ {edited} correction(s) applied\n⏭️ {skipped} skipped (duplicates or already edited)',shareIncoming:'This link shares up to {added} store(s) and {edited} correction(s) (duplicates already on your map are skipped).\n\nImport them?',locYouAreHere:'📍 You are here',locDenied:'Location access is blocked. To see yourself on the map, allow location for this site in your browser settings, then tap 📍 again.',locUnavailable:"Couldn't get your location. Make sure location services are on and try again.",locUnsupported:'Your browser does not support location.',locStart:'Show my location',locStop:'Turn off location',invalidDate:'Please pick a valid delivery date (today or earlier).',contribTooBig:'Your contribution is large, so the store data could not be embedded in the GitHub form. Please also tap "Download file" and attach the .json to the issue.',removeHintCustom:'This deletes the store you added.',removeHintBuiltin:'This hides the store on this device only. You can restore it anytime.',confirmRemoveCustom:'Remove this store from your list?',confirmHideBuiltin:'Hide this store from your map? It only affects this device — you can restore it anytime from the bottom of the list.',hiddenCount:'{n} store(s) hidden',restoreHidden:'Restore all',emptyTitle:'No stores match',emptySub:'Try a different filter',kgSchedule:'Full Weekly Price Schedule',kgPriceHdr:'Price per KG',deliveryShort:'delivery',uahKg:'UAH/kg',todayShort:'Today',googleMaps:'Google Maps',alertNoName:'Please enter a store name',alertNoLoc:'Please tap a location on the map first, or enter coordinates',alertAdded:'Store added!',kmlDone:'KML downloaded!\n\nIn Maps.me: tap Menu > Bookmarks > ... > Import KML'},
+  ua:{tabList:'Список',tabMap:'Карта',fAll:'Всі магазини',fKg:'⚖️ На вагу',fItem:'🏷️ По штуці',fVisited:'✅ Відвідані',fUnvisited:'🔲 Ще ні',tipStrong:'👋 Натисніть на магазин, щоб побачити деталі, години та трекер.',tipSub:'Використовуйте кнопки фільтрів. Проведіть пальцем, щоб побачити всі.',statsVisited:'магазинів відвідано',statsAdded:'додано вами',backBtn:'← Назад',step1:'📍 Крок 1 — Ви відвідали цей магазин?',step2:'📦 Крок 2 — Трекер товарів і цін',markVisited:'📍 Відмітити як відвідане',unmarkVisited:'✅ Відвідано — натисніть, щоб зняти',visitSaved:'Історія відвідувань зберігається на цьому пристрої.',setDel:'📅 Встановити дату поставки',updDel:'🔄 Оновити дату поставки',noDelivery:'Дата поставки ще не вказана.',storeInfo:'ℹ️ Інформація про магазин',addrLbl:'Адреса',phoneLbl:'Телефон',notesLbl:'Примітки',hoursLbl:'Години роботи',removeStore:'🗑️ Видалити магазин',addedByYou:'📍 Додано вами',byKg:'⚖️ На вагу',byWeight:'⚖️ На вагу',itemized:'🏷️ По штуці',closedToday:'🔒 Зачинено сьогодні',closedDay:'🔒 Зачинено',viewDetails:'Деталі →',freshToday:'🎉 Щойно! Нові товари сьогодні',freshLabel:'✅ Свіжі товари — ціни ще високі',midLabel:'🟡 Середина циклу — хороший вибір',oldLabel:'🔥 Кінець циклу — НАЙКРАЩІ ціни!',dayLabel:'День',delivery:'📦 Поставка',endCycle:'🏷️ Кінець циклу',todayPrice:'Ціна сьогодні за кг',estDiscount:'Орієнтовна знижка від поставки',cycleDay:'-денний цикл · ціни знижуються щодня',off:'знижки',inventory:'Цикл поставок',humanaTag:'HUMANA',visitedTag:'Відвідано',editStore:'Редагувати',saveEdit:'Зберегти зміни',editName:'Назва магазину',editAddrEn:'Адреса (англ.)',editAddrUa:'Адреса (укр.)',editPhone:'Телефон',editPricing:'Тип цін',editCycle:'Цикл поставок',editNotes:'Нотатки',shareTitle:'Поділитися та зробити внесок',shareIntro:'Магазини, які ви додали чи відредагували, зберігаються на цьому пристрої. Поділіться ними з друзями або внесіть їх до офіційної карти, щоб їх отримали всі.',shareYoursHdr:'📤 Поділитися картою',shareYoursHint:'Надішліть свої додані та змінені магазини будь-кому. Вони відкривають посилання (або імпортують файл) — і ваші магазини з’являються на їхній карті.',shareCopyLink:'🔗 Копіювати посилання',shareDownload:'💾 Завантажити файл',shareShowCode:'🔡 Показати код',shareContribHdr:'🌍 Внести до офіційної карти',shareContribHint:'Надішліть свої доповнення та виправлення, щоб супровідник додав їх до карти, яку завантажують усі. Відкриється попередньо заповнена форма GitHub (для публікації потрібен безкоштовний акаунт GitHub).',shareContribBtn:'🚀 Надіслати на GitHub',shareImportHdr:'📥 Імпорт від інших',shareImportHint:'Отримали посилання, код чи файл від когось? Вставте код нижче або завантажте файл — їхні магазини додадуться до ваших (дублікати пропускаються).',shareImportBtn:'📥 Імпортувати код',shareLoadFile:'📂 Завантажити файл…',sharePastePlaceholder:'Вставте код для обміну сюди…',shareDone:'Готово',shareNothing:'Ви ще не додали й не редагували жодного магазину. Додайте магазин на вкладці «Карта», а потім поверніться сюди, щоб поділитися.',shareYouHave:'У вас є {added} доданих магазинів і {edited} виправлень для обміну.',shareLinkCopied:'Посилання скопійовано! Надішліть його будь-кому — відкривши його, вони додадуть ваші магазини на свою карту.',shareImportError:'Вибачте, це не схоже на дійсний код або файл Lviv Second Hand.',shareImportDone:'Імпорт завершено!\n\n➕ Додано магазинів: {added}\n✏️ Застосовано виправлень: {edited}\n⏭️ Пропущено: {skipped} (дублікати або вже змінені)',shareIncoming:'Це посилання ділиться щонайбільше {added} магазинами та {edited} виправленнями (дублікати пропускаються).\n\nІмпортувати?',locYouAreHere:'📍 Ви тут',locDenied:'Доступ до місцезнаходження заблоковано. Щоб побачити себе на карті, дозвольте доступ до геолокації для цього сайту в налаштуваннях браузера, а потім знову натисніть 📍.',locUnavailable:'Не вдалося визначити місцезнаходження. Переконайтеся, що геолокацію ввімкнено, і спробуйте ще раз.',locUnsupported:'Ваш браузер не підтримує геолокацію.',locStart:'Показати моє місцезнаходження',locStop:'Вимкнути геолокацію',invalidDate:'Виберіть коректну дату поставки (сьогодні або раніше).',contribTooBig:'Ваш внесок великий, тому дані не вдалося вставити у форму GitHub. Будь ласка, також натисніть «Завантажити файл» і додайте .json до звернення.',removeHintCustom:'Це видалить доданий вами магазин.',removeHintBuiltin:'Це приховає магазин лише на цьому пристрої. Ви можете відновити його будь-коли.',confirmRemoveCustom:'Видалити цей магазин зі списку?',confirmHideBuiltin:'Приховати цей магазин з вашої карти? Це стосується лише цього пристрою — ви можете відновити його будь-коли внизу списку.',hiddenCount:'Приховано магазинів: {n}',restoreHidden:'Відновити всі',emptyTitle:'Немає магазинів',emptySub:'Спробуйте інший фільтр',kgSchedule:'Повний тижневий графік цін',kgPriceHdr:'Ціна за кг',deliveryShort:'поставка',uahKg:'грн/кг',todayShort:'Сьогодні',googleMaps:'Google Maps',alertNoName:'Будь ласка, введіть назву магазину',alertNoLoc:'Спочатку торкніться місця на карті або введіть координати',alertAdded:'Магазин додано!',kmlDone:'KML завантажено!\n\nУ Maps.me: Меню > Закладки > ... > Імпорт KML'}
 };
 function t(k){return(TR[lang]||TR.en)[k]||k;}
 // Escape user/imported data before it goes into innerHTML (text or double-quoted attr).
@@ -551,7 +551,10 @@ function setLang(l){
   localStorage.setItem('lviv_sh_lang',l);
   document.getElementById('lang-en').classList.toggle('active',l==='en');
   document.getElementById('lang-ua').classList.toggle('active',l==='ua');
+  document.getElementById('lang-en').setAttribute('aria-pressed', String(l==='en'));
+  document.getElementById('lang-ua').setAttribute('aria-pressed', String(l==='ua'));
   document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(TR[lang][k]!==undefined)el.textContent=TR[lang][k];});
+  renderWelcome(); renderHelp();
   updateStats();renderList();
   if(currentStoreId)openDetail(currentStoreId);
 }
@@ -683,9 +686,9 @@ function renderList() {
   const stores = filtered();
   const el = document.getElementById('store-list');
   const hiddenCount = getHiddenStores().length;
-  const restoreBanner = hiddenCount ? `<div class="restore-banner" onclick="restoreAllHidden()">🙈 ${t('hiddenCount').replace('{n}', hiddenCount)} · <strong>${t('restoreHidden')}</strong></div>` : '';
+  const restoreBanner = hiddenCount ? `<div class="restore-banner" role="button" tabindex="0" onclick="restoreAllHidden()">🙈 ${t('hiddenCount').replace('{n}', hiddenCount)} · <strong>${t('restoreHidden')}</strong></div>` : '';
   if (!stores.length) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No stores match</div><div class="empty-sub">Try a different filter</div></div>` + restoreBanner;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">${t('emptyTitle')}</div><div class="empty-sub">${t('emptySub')}</div></div>` + restoreBanner;
     return;
   }
   el.innerHTML = stores.map(raw => {
@@ -703,7 +706,7 @@ function renderList() {
       const label = phaseLabel(phase, di.day);
       cycleHtml = `<div class="card-cycle"><span class="cycle-label">${t('inventory')}</span><span class="cycle-val ${phase}">${t('dayLabel')} ${di.day+1}/${di.cycle} — ${label}</span></div>`;
     }
-    return `<div class="store-card ${sd.visited?'visited':''}" onclick="openDetail('${s.id}')">
+    return `<div class="store-card ${sd.visited?'visited':''}" role="button" tabindex="0" aria-label="${escHtml(s.name)}" onclick="openDetail('${s.id}')">
       <div class="card-top">
         <div class="store-dot ${s.type==='humana'?'dot-humana':'dot-other'}">${s.type==='humana'?'🔴':'🛍️'}</div>
         <div class="card-body">
@@ -784,10 +787,10 @@ function openDetail(id) {
   if (s.pricing === 'kg' && Array.isArray(s.kgPrices)) {
     const dayN = di ? di.day : -1;
     kgTable = `<div class="info-card">
-      <div class="info-card-title">⚖️ Full Weekly Price Schedule</div>
+      <div class="info-card-title">⚖️ ${t('kgSchedule')}</div>
       <table class="kg-table">
-        <tr><th>Day</th><th>Price per KG</th><th></th></tr>
-        ${s.kgPrices.map((p,i) => `<tr class="${i===dayN?'today-kg':''}"><td>Day ${i+1}${i===0?' (delivery)':''}</td><td>${escHtml(p)} UAH/kg</td><td>${i===dayN?'👈 Today':''}</td></tr>`).join('')}
+        <tr><th>${t('dayLabel')}</th><th>${t('kgPriceHdr')}</th><th></th></tr>
+        ${s.kgPrices.map((p,i) => `<tr class="${i===dayN?'today-kg':''}"><td>${t('dayLabel')} ${i+1}${i===0?' ('+t('deliveryShort')+')':''}</td><td>${escHtml(p)} ${t('uahKg')}</td><td>${i===dayN?'👈 '+t('todayShort'):''}</td></tr>`).join('')}
       </table>
     </div>`;
   }
@@ -847,7 +850,7 @@ function openDetail(id) {
 
       <!-- OPEN IN MAPS -->
       <div class="maps-btns">
-        <a class="maps-btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank">🗺️ Google Maps</a>
+        <a class="maps-btn" href="https://maps.google.com/?q=${s.lat},${s.lng}" target="_blank">🗺️ ${t('googleMaps')}</a>
         <a class="maps-btn mapsme" href="mapsme://map?v=1&ll=${s.lat},${s.lng}&n=${encodeURIComponent(s.name)}">📍 Maps.me</a>
       </div>
 
@@ -925,8 +928,9 @@ function saveDelivery() {
 // ─────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+  const activeTab = document.querySelector(`[data-tab="${tab}"]`);
+  activeTab.classList.add('active'); activeTab.setAttribute('aria-selected','true');
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
   document.getElementById('filter-bar').style.display = 'flex';
   document.getElementById(`${tab}-view`).classList.remove('hidden');
@@ -1069,7 +1073,7 @@ function exportKML() {
   a.href=url; a.download='lviv-secondhand.kml';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
-  alert('KML downloaded!\n\nIn Maps.me: tap Menu > Bookmarks > ... > Import KML');
+  alert(t('kmlDone'));
 }
 
 // ─────────────────────────────────────────────
@@ -1123,10 +1127,10 @@ function openAddStoreModal(lat,lng){
 
 function saveCustomStore(){
   const name = document.getElementById('add-name').value.trim();
-  if(!name){ alert('Please enter a store name'); return; }
+  if(!name){ alert(t('alertNoName')); return; }
   const lat = parseFloat(document.getElementById('add-lat').value);
   const lng = parseFloat(document.getElementById('add-lng').value);
-  if(isNaN(lat)||isNaN(lng)){ alert('Please tap a location on the map first, or enter coordinates'); return; }
+  if(isNaN(lat)||isNaN(lng)){ alert(t('alertNoLoc')); return; }
   const arr = getCustomStores();
   const id = uid();
   arr.push({
@@ -1146,7 +1150,7 @@ function saveCustomStore(){
   document.getElementById('add-overlay').classList.add('hidden');
   renderList(); updateStats();
   if(mapInst) renderPins();
-  alert('Store added!');
+  alert(t('alertAdded'));
 }
 
 
@@ -1186,7 +1190,7 @@ function openEditModal(id){
 function saveEdit(){
   if(!editStoreId) return;
   const name = document.getElementById('edit-name').value.trim();
-  if(!name){ alert('Please enter a store name'); return; }
+  if(!name){ alert(t('alertNoName')); return; }
   const changes = {
     name,
     addressEn: document.getElementById('edit-addrEn').value.trim(),
@@ -1524,6 +1528,60 @@ function checkShareInURL(){
 }
 
 // ─────────────────────────────────────────────
+// WELCOME + HELP (bilingual, rendered from JS)
+// ─────────────────────────────────────────────
+const WELCOME = {
+  en: { sub:'Your personal guide to every second-hand store in Lviv',
+    steps:[['Browse or search stores','See all '+STORES.length+' stores in a list or on the map. Filter by HUMANA, by KG, by visited, and more.'],
+      ['Tap a store to see full details','Hours, address, phone, pricing type, and notes are all inside each store card.'],
+      ['Track inventory & prices','Set the last delivery date for any store — the app counts each day and shows estimated discounts automatically.'],
+      ['Mark stores as visited','Tap the green button inside any store to record your visit. Your progress is saved.']],
+    btn:"Let's Go →" },
+  ua: { sub:'Ваш особистий гід по секонд-хендах Львова',
+    steps:[['Переглядайте або шукайте магазини','Усі '+STORES.length+' магазинів у списку чи на карті. Фільтри: HUMANA, на вагу, відвідані тощо.'],
+      ['Натисніть магазин, щоб побачити деталі','Години, адреса, телефон, тип цін і примітки — усе всередині картки магазину.'],
+      ['Стежте за товаром і цінами','Вкажіть дату останньої поставки — додаток рахує дні та показує орієнтовні знижки.'],
+      ['Позначайте відвідані магазини','Натисніть зелену кнопку в магазині, щоб зберегти візит. Прогрес зберігається.']],
+    btn:'Почати →' }
+};
+function renderWelcome(){
+  const w = WELCOME[lang] || WELCOME.en;
+  document.getElementById('welcome-box').innerHTML =
+    `<div class="welcome-top"><div style="font-size:48px;margin-bottom:10px;">🧥</div><h2>Lviv Second Hand</h2><p>${escHtml(w.sub)}</p></div>`
+    + `<div class="welcome-steps">` + w.steps.map((s,i)=>
+        `<div class="step"><div class="step-num">${i+1}</div><div class="step-text"><strong>${escHtml(s[0])}</strong><p>${escHtml(s[1])}</p></div></div>`).join('')
+    + `</div><button class="welcome-btn" onclick="closeWelcome()">${escHtml(w.btn)}</button>`;
+}
+const HELP = {
+  en: { title:'How to use this app', got:'Got it!', sections:[
+    ['📋 The List','Shows all stores. Use the <strong>filter buttons</strong> at the top to show only HUMANA stores, only KG stores, stores you\'ve visited, or ones you haven\'t been to yet. Scroll the filters sideways if you can\'t see them all.'],
+    ['🗺️ The Map','Shows all store locations as pins. <strong>Red pins</strong> = HUMANA. <strong>Blue pins</strong> = others. A ✓ on a pin means you\'ve visited. Tap any pin to see a summary, then tap "View Details".<br><br>Tap the <strong>📍</strong> button (bottom-right) to turn <strong>your location</strong> on — you\'ll appear as a blue dot that follows you. The button turns green while it\'s on; tap again to turn it off. Your browser asks for permission the first time.'],
+    ['📦 Inventory Tracker','Inside each store, tap <strong>"Set Last Delivery Date"</strong> to record when new stock arrived. The app counts the days, shows a progress bar, and estimates the current discount (or exact KG price). <strong>Green</strong> = fresh, high prices. <strong>Orange</strong> = mid-cycle. <strong>Red</strong> = late cycle, best deals!'],
+    ['✅ Visited','Tap the big green <strong>"Mark as Visited"</strong> button inside any store. It turns into a checkmark and the card gets a green border in the list.'],
+    ['✏️ Edit or remove a store','Open any store and tap <strong>Edit Store</strong> to fix its details, or <strong>🗑️ Remove this store</strong> at the bottom. Stores <em>you</em> added are deleted; built-in stores are just hidden on your device — a <strong>"Restore all"</strong> link at the bottom of the list brings them back anytime.'],
+    ['⚖️ KG vs Itemized','<strong>By KG</strong> stores charge by weight — you fill a bag and pay per kilogram, and prices drop every day. <strong>Itemized</strong> stores price each item individually.'],
+    ['🤝 Share & Contribute','Tap <strong>🤝</strong> to share the stores you\'ve added or edited via a link, file, or code — anyone who opens it merges them onto their map (duplicates are skipped). Tap <strong>🌍 Contribute to the official map</strong> to open a pre-filled GitHub form so your changes can ship with the app.'],
+    ['📤 Maps.me Integration','Tap <strong>📤</strong> to download a KML file with all store locations. In Maps.me: ☰ → Bookmarks → ⋮ → Import → select the file. Inside any store, tap <strong>📍 Maps.me</strong> to jump straight there.'] ] },
+  ua: { title:'Як користуватися додатком', got:'Зрозуміло!', sections:[
+    ['📋 Список','Показує всі магазини. Використовуйте <strong>кнопки фільтрів</strong> угорі, щоб показати лише HUMANA, лише на вагу, відвідані чи ще не відвідані. Проведіть фільтри вбік, якщо не всі видно.'],
+    ['🗺️ Карта','Показує розташування магазинів як позначки. <strong>Червоні</strong> = HUMANA. <strong>Сині</strong> = інші. ✓ означає, що ви відвідали. Натисніть позначку для короткого опису, потім «Деталі».<br><br>Натисніть кнопку <strong>📍</strong> (внизу праворуч), щоб увімкнути <strong>ваше місцезнаходження</strong> — ви з\'явитесь синьою крапкою, що рухається за вами. Кнопка стає зеленою, коли ввімкнено; натисніть ще раз, щоб вимкнути. Уперше браузер запитає дозвіл.'],
+    ['📦 Трекер товару','У магазині натисніть <strong>«Встановити дату поставки»</strong>, щоб вказати, коли завезли товар. Додаток рахує дні, показує смугу прогресу й оцінює знижку (чи точну ціну за кг). <strong>Зелений</strong> = свіжий, високі ціни. <strong>Помаранчевий</strong> = середина. <strong>Червоний</strong> = кінець циклу, найкращі ціни!'],
+    ['✅ Відвідані','Натисніть велику зелену кнопку <strong>«Відмітити як відвідане»</strong> у магазині. Вона стане галочкою, а картка отримає зелену рамку у списку.'],
+    ['✏️ Редагувати чи видалити','Відкрийте магазин і натисніть <strong>«Редагувати»</strong>, щоб змінити деталі, або <strong>🗑️ Видалити магазин</strong> внизу. Магазини, <em>додані вами</em>, видаляються; вбудовані просто ховаються на вашому пристрої — посилання <strong>«Відновити всі»</strong> внизу списку поверне їх будь-коли.'],
+    ['⚖️ На вагу чи поштучно','Магазини <strong>на вагу</strong> рахують за кілограм — наповнюєте пакет і платите за кг, ціни падають щодня. <strong>Поштучні</strong> оцінюють кожну річ окремо.'],
+    ['🤝 Обмін і внесок','Натисніть <strong>🤝</strong>, щоб поділитися доданими чи зміненими магазинами через посилання, файл або код — хто відкриє, додасть їх на свою карту (дублікати пропускаються). Натисніть <strong>🌍 Внести до офіційної карти</strong>, щоб відкрити заповнену форму GitHub і додати зміни до додатка.'],
+    ['📤 Інтеграція з Maps.me','Натисніть <strong>📤</strong>, щоб завантажити файл KML з усіма магазинами. У Maps.me: ☰ → Закладки → ⋮ → Імпорт → виберіть файл. У магазині натисніть <strong>📍 Maps.me</strong>, щоб одразу перейти туди.'] ] }
+};
+function renderHelp(){
+  const hp = HELP[lang] || HELP.en;
+  document.getElementById('help-sheet').innerHTML =
+    `<div class="sheet-handle"></div><h2>${escHtml(hp.title)}</h2><br>`
+    + hp.sections.map(sec => `<div class="help-section"><h3>${escHtml(sec[0])}</h3><p>${sec[1]}</p></div>`).join('')
+    + `<button class="sheet-btn" onclick="document.getElementById('help-overlay').classList.add('hidden')">${escHtml(hp.got)}</button>`
+    + `<p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);"><a href="privacy.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">🔒 Privacy Policy · Політика конфіденційності</a></p>`;
+}
+
+// ─────────────────────────────────────────────
 // WELCOME
 // ─────────────────────────────────────────────
 function closeWelcome(){
@@ -1535,6 +1593,7 @@ function closeWelcome(){
 // INIT
 // ─────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded',()=>{
+  renderWelcome(); renderHelp();
   const _sl=localStorage.getItem('lviv_sh_lang');if(_sl)setLang(_sl);
   renderList();
   updateStats();
@@ -1542,6 +1601,14 @@ window.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('welcome').classList.remove('hidden');
   }
   checkShareInURL();
+  // Keyboard activation for non-native controls (tabs, language pills, store cards, restore banner)
+  document.addEventListener('keydown', e => {
+    if((e.key === 'Enter' || e.key === ' ') && e.target instanceof HTMLElement
+       && e.target.matches('.tab, .lp, .store-card, .restore-banner')){
+      e.preventDefault();
+      e.target.click();
+    }
+  });
   ['del-overlay','help-overlay','add-overlay','edit-overlay','share-overlay'].forEach(id=>{
     document.getElementById(id).addEventListener('click',e=>{
       if(e.target.id===id) document.getElementById(id).classList.add('hidden');
