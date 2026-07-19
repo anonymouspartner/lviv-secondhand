@@ -196,6 +196,12 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 .empty-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
 .empty-sub { font-size: 14px; color: var(--muted); }
 
+/* ── SHARE ── */
+.share-action { flex: 1 1 auto; min-width: 130px; padding: 12px 14px; background: #fff; border: 2px solid var(--border); border-radius: 12px; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer; transition: border-color .15s, background .15s; }
+.share-action:hover { border-color: var(--orange); }
+.share-action.share-primary { width: 100%; flex: 1 1 100%; background: var(--orange); border-color: var(--orange); color: #fff; }
+.share-action.share-primary:hover { filter: brightness(1.05); }
+
 /* ── POPUP ── */
 .leaflet-popup-content-wrapper { border-radius: 14px; }
 .popup-name { font-weight: 800; font-size: 14px; margin-bottom: 4px; }
@@ -282,6 +288,11 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
     <div class="help-section">
       <h3>⚖️ KG vs Itemized</h3>
       <p><strong>By KG</strong> stores charge by weight — you fill a bag and pay per kilogram. Prices drop every day. <strong>Itemized</strong> stores price each item individually.</p>
+    </div>
+    <div class="help-section">
+      <h3>🤝 Share & Contribute</h3>
+      <p>Tap the <strong>🤝</strong> button in the top-right to share the stores you've added or edited. <strong>Copy share link</strong> gives you a link — anyone who opens it gets your stores merged onto their map. You can also download a file, or paste in a link/file someone sent you to import theirs. Duplicates are skipped automatically.</p>
+      <p style="margin-top:8px;">To help everyone, tap <strong>🌍 Contribute to the official map</strong> — it opens a pre-filled GitHub form with your additions and corrections so they can be merged into the map that ships with the app.</p>
     </div>
     <div class="help-section">
       <h3>📤 Maps.me Integration</h3>
@@ -388,6 +399,53 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 </div>
 
 <!-- ══════════════════════════════════════════ -->
+<!-- SHARE & CONTRIBUTE MODAL                    -->
+<!-- ══════════════════════════════════════════ -->
+<div class="overlay hidden" id="share-overlay">
+  <div class="sheet" style="max-height:92vh;overflow-y:auto;">
+    <div class="sheet-handle"></div>
+    <h2 id="share-title">🤝 Share &amp; Contribute</h2>
+    <p id="share-intro" style="font-size:13px;color:var(--muted);margin-bottom:16px;margin-top:4px;">Stores you add or edit are saved on this device. Share them with friends, or contribute them to the official map so everyone gets them.</p>
+
+    <!-- Count summary -->
+    <div id="share-summary" style="background:var(--card,#f7f4ef);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:18px;font-size:14px;font-weight:600;"></div>
+
+    <!-- 1. Share your map -->
+    <div class="help-section" id="share-yours-wrap">
+      <h3 id="share-yours-hdr">📤 Share your map</h3>
+      <p id="share-yours-hint" style="font-size:13px;color:var(--muted);margin-bottom:10px;">Send your added &amp; edited stores to anyone. They open the link (or import the file) and your stores appear on their map.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="share-action" onclick="copyShareLink()"><span id="share-lbl-copy">🔗 Copy share link</span></button>
+        <button class="share-action" onclick="downloadShareFile()"><span id="share-lbl-file">💾 Download file</span></button>
+        <button class="share-action" onclick="showShareCode()"><span id="share-lbl-code">🔡 Show code</span></button>
+      </div>
+      <textarea id="share-code-box" readonly onclick="this.select()" style="display:none;width:100%;margin-top:10px;font-family:monospace;font-size:11px;height:80px;resize:none;border:1px solid var(--border);border-radius:10px;padding:8px;box-sizing:border-box;background:#fff;"></textarea>
+    </div>
+
+    <!-- 2. Contribute to official map -->
+    <div class="help-section" id="share-contrib-wrap">
+      <h3 id="share-contrib-hdr">🌍 Contribute to the official map</h3>
+      <p id="share-contrib-hint" style="font-size:13px;color:var(--muted);margin-bottom:10px;">Submit your additions &amp; corrections so the maintainer can merge them into the map everyone downloads. Opens a pre-filled GitHub form (a free GitHub account is required to post).</p>
+      <button class="share-action share-primary" onclick="contributeGitHub()"><span id="share-lbl-contrib">🚀 Submit on GitHub</span></button>
+    </div>
+
+    <!-- 3. Import from others -->
+    <div class="help-section" id="share-import-wrap" style="border-bottom:none;">
+      <h3 id="share-import-hdr">📥 Import from others</h3>
+      <p id="share-import-hint" style="font-size:13px;color:var(--muted);margin-bottom:10px;">Got a share link, code, or file from someone? Paste the code below or load their file — their stores merge into yours (duplicates are skipped).</p>
+      <textarea id="share-import-box" placeholder="Paste a share code here…" style="width:100%;font-family:monospace;font-size:11px;height:70px;resize:none;border:1px solid var(--border);border-radius:10px;padding:8px;box-sizing:border-box;"></textarea>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        <button class="share-action" onclick="importFromCode()"><span id="share-lbl-import">📥 Import code</span></button>
+        <button class="share-action" onclick="document.getElementById('share-file-input').click()"><span id="share-lbl-loadfile">📂 Load file…</span></button>
+        <input type="file" id="share-file-input" accept=".json,application/json" style="display:none;" onchange="importFromFile(event)"/>
+      </div>
+    </div>
+
+    <button class="sheet-btn" onclick="document.getElementById('share-overlay').classList.add('hidden')" id="share-close-btn" style="margin-top:8px;">Done</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
 <!-- APP SHELL                                  -->
 <!-- ══════════════════════════════════════════ -->
 <header>
@@ -400,6 +458,7 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
       <span class="lp active" id="lang-en" onclick="setLang('en')">EN</span>
       <span class="lp" id="lang-ua" onclick="setLang('ua')">УА</span>
     </div>
+    <button class="help-btn" onclick="openShareModal()" title="Share your map & contribute stores" style="font-size:18px;">🤝</button>
     <button class="help-btn" onclick="exportKML()" title="Export all stores to Maps.me KML" style="font-size:18px;">📤</button>
     <button class="help-btn" onclick="document.getElementById('help-overlay').classList.remove('hidden')" title="Help">?</button>
   </div>
@@ -452,8 +511,8 @@ header { background: var(--green); color: white; padding: 14px 16px 12px; displa
 // ─────────────────────────────────────────────
 let lang = localStorage.getItem('lviv_sh_lang') || 'en';
 const TR = {
-  en:{tabList:'List',tabMap:'Map',fAll:'All Stores',fKg:'⚖️ By KG',fItem:'🏷️ Itemized',fVisited:'✅ Visited',fUnvisited:'🔲 Not Yet',tipStrong:'👋 Tap any store to see full details, hours, and the inventory tracker.',tipSub:"Use the filter buttons above to find exactly what you're looking for. Scroll the filters sideways to see all options.",statsVisited:'stores visited',statsAdded:'added by you',backBtn:'← Back to list',step1:'📍 Step 1 — Have you visited this store?',step2:'📦 Step 2 — Inventory & Price Tracker',markVisited:'📍 Mark as Visited',unmarkVisited:'✅ Visited — tap to unmark',visitSaved:'Your visit history is saved automatically on this device.',setDel:'📅 Set Last Delivery Date',updDel:'🔄 Update Delivery Date',noDelivery:'No delivery date set yet for this store.',storeInfo:'ℹ️ Store Information',addrLbl:'Address',phoneLbl:'Phone',notesLbl:'Notes',hoursLbl:'Opening Hours',removeStore:'🗑️ Remove this store',addedByYou:'📍 Added by you',byKg:'⚖️ By KG',byWeight:'⚖️ By Weight',itemized:'🏷️ Itemized pricing',closedToday:'🔒 Closed today',closedDay:'🔒 Closed',viewDetails:'View Details →',freshToday:'🎉 Fresh today! New stock just arrived',freshLabel:'✅ Fresh stock — prices still high',midLabel:'🟡 Mid-cycle — good selection',oldLabel:'🔥 Late cycle — BEST deals now!',dayLabel:'Day',delivery:'📦 Delivery',endCycle:'🏷️ End of cycle',todayPrice:"Today's price per KG",estDiscount:'Estimated discount vs. delivery day',cycleDay:'-day cycle · prices drop daily',off:'off',inventory:'Inventory cycle',humanaTag:'HUMANA',visitedTag:'Visited',editStore:'Edit Store',saveEdit:'Save Changes',editName:'Store name',editAddrEn:'Address (English)',editAddrUa:'Address (Ukrainian)',editPhone:'Phone',editPricing:'Pricing type',editCycle:'Inventory cycle',editNotes:'Notes'},
-  ua:{tabList:'Список',tabMap:'Карта',fAll:'Всі магазини',fKg:'⚖️ На вагу',fItem:'🏷️ По штуці',fVisited:'✅ Відвідані',fUnvisited:'🔲 Ще ні',tipStrong:'👋 Натисніть на магазин, щоб побачити деталі, години та трекер.',tipSub:'Використовуйте кнопки фільтрів. Проведіть пальцем, щоб побачити всі.',statsVisited:'магазинів відвідано',statsAdded:'додано вами',backBtn:'← Назад',step1:'📍 Крок 1 — Ви відвідали цей магазин?',step2:'📦 Крок 2 — Трекер товарів і цін',markVisited:'📍 Відмітити як відвідане',unmarkVisited:'✅ Відвідано — натисніть, щоб зняти',visitSaved:'Історія відвідувань зберігається на цьому пристрої.',setDel:'📅 Встановити дату поставки',updDel:'🔄 Оновити дату поставки',noDelivery:'Дата поставки ще не вказана.',storeInfo:'ℹ️ Інформація про магазин',addrLbl:'Адреса',phoneLbl:'Телефон',notesLbl:'Примітки',hoursLbl:'Години роботи',removeStore:'🗑️ Видалити магазин',addedByYou:'📍 Додано вами',byKg:'⚖️ На вагу',byWeight:'⚖️ На вагу',itemized:'🏷️ По штуці',closedToday:'🔒 Зачинено сьогодні',closedDay:'🔒 Зачинено',viewDetails:'Деталі →',freshToday:'🎉 Щойно! Нові товари сьогодні',freshLabel:'✅ Свіжі товари — ціни ще високі',midLabel:'🟡 Середина циклу — хороший вибір',oldLabel:'🔥 Кінець циклу — НАЙКРАЩІ ціни!',dayLabel:'День',delivery:'📦 Поставка',endCycle:'🏷️ Кінець циклу',todayPrice:'Ціна сьогодні за кг',estDiscount:'Орієнтовна знижка від поставки',cycleDay:'-денний цикл · ціни знижуються щодня',off:'знижки',inventory:'Цикл поставок',humanaTag:'HUMANA',visitedTag:'Відвідано',editStore:'Редагувати',saveEdit:'Зберегти зміни',editName:'Назва магазину',editAddrEn:'Адреса (англ.)',editAddrUa:'Адреса (укр.)',editPhone:'Телефон',editPricing:'Тип цін',editCycle:'Цикл поставок',editNotes:'Нотатки'}
+  en:{tabList:'List',tabMap:'Map',fAll:'All Stores',fKg:'⚖️ By KG',fItem:'🏷️ Itemized',fVisited:'✅ Visited',fUnvisited:'🔲 Not Yet',tipStrong:'👋 Tap any store to see full details, hours, and the inventory tracker.',tipSub:"Use the filter buttons above to find exactly what you're looking for. Scroll the filters sideways to see all options.",statsVisited:'stores visited',statsAdded:'added by you',backBtn:'← Back to list',step1:'📍 Step 1 — Have you visited this store?',step2:'📦 Step 2 — Inventory & Price Tracker',markVisited:'📍 Mark as Visited',unmarkVisited:'✅ Visited — tap to unmark',visitSaved:'Your visit history is saved automatically on this device.',setDel:'📅 Set Last Delivery Date',updDel:'🔄 Update Delivery Date',noDelivery:'No delivery date set yet for this store.',storeInfo:'ℹ️ Store Information',addrLbl:'Address',phoneLbl:'Phone',notesLbl:'Notes',hoursLbl:'Opening Hours',removeStore:'🗑️ Remove this store',addedByYou:'📍 Added by you',byKg:'⚖️ By KG',byWeight:'⚖️ By Weight',itemized:'🏷️ Itemized pricing',closedToday:'🔒 Closed today',closedDay:'🔒 Closed',viewDetails:'View Details →',freshToday:'🎉 Fresh today! New stock just arrived',freshLabel:'✅ Fresh stock — prices still high',midLabel:'🟡 Mid-cycle — good selection',oldLabel:'🔥 Late cycle — BEST deals now!',dayLabel:'Day',delivery:'📦 Delivery',endCycle:'🏷️ End of cycle',todayPrice:"Today's price per KG",estDiscount:'Estimated discount vs. delivery day',cycleDay:'-day cycle · prices drop daily',off:'off',inventory:'Inventory cycle',humanaTag:'HUMANA',visitedTag:'Visited',editStore:'Edit Store',saveEdit:'Save Changes',editName:'Store name',editAddrEn:'Address (English)',editAddrUa:'Address (Ukrainian)',editPhone:'Phone',editPricing:'Pricing type',editCycle:'Inventory cycle',editNotes:'Notes',shareTitle:'Share & Contribute',shareIntro:'Stores you add or edit are saved on this device. Share them with friends, or contribute them to the official map so everyone gets them.',shareYoursHdr:'📤 Share your map',shareYoursHint:'Send your added & edited stores to anyone. They open the link (or import the file) and your stores appear on their map.',shareCopyLink:'🔗 Copy share link',shareDownload:'💾 Download file',shareShowCode:'🔡 Show code',shareContribHdr:'🌍 Contribute to the official map',shareContribHint:'Submit your additions & corrections so the maintainer can merge them into the map everyone downloads. Opens a pre-filled GitHub form (a free GitHub account is required to post).',shareContribBtn:'🚀 Submit on GitHub',shareImportHdr:'📥 Import from others',shareImportHint:'Got a share link, code, or file from someone? Paste the code below or load their file — their stores merge into yours (duplicates are skipped).',shareImportBtn:'📥 Import code',shareLoadFile:'📂 Load file…',sharePastePlaceholder:'Paste a share code here…',shareDone:'Done',shareNothing:"You haven't added or edited any stores yet. Add a store from the Map tab, then come back here to share it.",shareYouHave:'You have {added} store(s) added and {edited} correction(s) to share.',shareLinkCopied:'Share link copied to clipboard! Send it to anyone — opening it adds your stores to their map.',shareImportError:"Sorry, that doesn't look like a valid Lviv Second Hand share code or file.",shareImportDone:'Import complete!\n\n➕ {added} store(s) added\n✏️ {edited} correction(s) applied\n⏭️ {skipped} skipped (duplicates or already edited)',shareIncoming:'This link contains a shared map: {added} store(s) added and {edited} correction(s).\n\nImport them onto your map?'},
+  ua:{tabList:'Список',tabMap:'Карта',fAll:'Всі магазини',fKg:'⚖️ На вагу',fItem:'🏷️ По штуці',fVisited:'✅ Відвідані',fUnvisited:'🔲 Ще ні',tipStrong:'👋 Натисніть на магазин, щоб побачити деталі, години та трекер.',tipSub:'Використовуйте кнопки фільтрів. Проведіть пальцем, щоб побачити всі.',statsVisited:'магазинів відвідано',statsAdded:'додано вами',backBtn:'← Назад',step1:'📍 Крок 1 — Ви відвідали цей магазин?',step2:'📦 Крок 2 — Трекер товарів і цін',markVisited:'📍 Відмітити як відвідане',unmarkVisited:'✅ Відвідано — натисніть, щоб зняти',visitSaved:'Історія відвідувань зберігається на цьому пристрої.',setDel:'📅 Встановити дату поставки',updDel:'🔄 Оновити дату поставки',noDelivery:'Дата поставки ще не вказана.',storeInfo:'ℹ️ Інформація про магазин',addrLbl:'Адреса',phoneLbl:'Телефон',notesLbl:'Примітки',hoursLbl:'Години роботи',removeStore:'🗑️ Видалити магазин',addedByYou:'📍 Додано вами',byKg:'⚖️ На вагу',byWeight:'⚖️ На вагу',itemized:'🏷️ По штуці',closedToday:'🔒 Зачинено сьогодні',closedDay:'🔒 Зачинено',viewDetails:'Деталі →',freshToday:'🎉 Щойно! Нові товари сьогодні',freshLabel:'✅ Свіжі товари — ціни ще високі',midLabel:'🟡 Середина циклу — хороший вибір',oldLabel:'🔥 Кінець циклу — НАЙКРАЩІ ціни!',dayLabel:'День',delivery:'📦 Поставка',endCycle:'🏷️ Кінець циклу',todayPrice:'Ціна сьогодні за кг',estDiscount:'Орієнтовна знижка від поставки',cycleDay:'-денний цикл · ціни знижуються щодня',off:'знижки',inventory:'Цикл поставок',humanaTag:'HUMANA',visitedTag:'Відвідано',editStore:'Редагувати',saveEdit:'Зберегти зміни',editName:'Назва магазину',editAddrEn:'Адреса (англ.)',editAddrUa:'Адреса (укр.)',editPhone:'Телефон',editPricing:'Тип цін',editCycle:'Цикл поставок',editNotes:'Нотатки',shareTitle:'Поділитися та зробити внесок',shareIntro:'Магазини, які ви додали чи відредагували, зберігаються на цьому пристрої. Поділіться ними з друзями або внесіть їх до офіційної карти, щоб їх отримали всі.',shareYoursHdr:'📤 Поділитися картою',shareYoursHint:'Надішліть свої додані та змінені магазини будь-кому. Вони відкривають посилання (або імпортують файл) — і ваші магазини з’являються на їхній карті.',shareCopyLink:'🔗 Копіювати посилання',shareDownload:'💾 Завантажити файл',shareShowCode:'🔡 Показати код',shareContribHdr:'🌍 Внести до офіційної карти',shareContribHint:'Надішліть свої доповнення та виправлення, щоб супровідник додав їх до карти, яку завантажують усі. Відкриється попередньо заповнена форма GitHub (для публікації потрібен безкоштовний акаунт GitHub).',shareContribBtn:'🚀 Надіслати на GitHub',shareImportHdr:'📥 Імпорт від інших',shareImportHint:'Отримали посилання, код чи файл від когось? Вставте код нижче або завантажте файл — їхні магазини додадуться до ваших (дублікати пропускаються).',shareImportBtn:'📥 Імпортувати код',shareLoadFile:'📂 Завантажити файл…',sharePastePlaceholder:'Вставте код для обміну сюди…',shareDone:'Готово',shareNothing:'Ви ще не додали й не редагували жодного магазину. Додайте магазин на вкладці «Карта», а потім поверніться сюди, щоб поділитися.',shareYouHave:'У вас є {added} доданих магазинів і {edited} виправлень для обміну.',shareLinkCopied:'Посилання скопійовано! Надішліть його будь-кому — відкривши його, вони додадуть ваші магазини на свою карту.',shareImportError:'Вибачте, це не схоже на дійсний код або файл Lviv Second Hand.',shareImportDone:'Імпорт завершено!\n\n➕ Додано магазинів: {added}\n✏️ Застосовано виправлень: {edited}\n⏭️ Пропущено: {skipped} (дублікати або вже змінені)',shareIncoming:'Це посилання містить спільну карту: {added} доданих магазинів і {edited} виправлень.\n\nІмпортувати їх на вашу карту?'}
 };
 function t(k){return(TR[lang]||TR.en)[k]||k;}
 function setLang(l){
@@ -1014,6 +1073,247 @@ function confirmDeleteCustomStore(){
 }
 
 // ─────────────────────────────────────────────
+// SHARE & CONTRIBUTE
+// ─────────────────────────────────────────────
+const GH_REPO = 'anonymouspartner/lviv-secondhand';
+
+// UTF-8 safe base64 (handles Ukrainian text)
+function _b64enc(str){ return btoa(unescape(encodeURIComponent(str))); }
+function _b64dec(str){ return decodeURIComponent(escape(atob(str))); }
+
+// Gather everything this device has added or edited into a portable bundle.
+function buildBundle(){
+  const custom = getCustomStores();
+  const overrides = getStoreOverrides();
+  // Attach a human-readable name to each override so contributions are reviewable.
+  const overrideList = Object.keys(overrides).map(id => {
+    const base = STORES.find(s => s.id === id);
+    return { id, name: base ? base.name : id, changes: overrides[id] };
+  });
+  return {
+    app: 'lviv-secondhand',
+    v: 1,
+    exported: new Date().toISOString().slice(0,10),
+    custom: custom,
+    overrides: overrides,
+    overrideList: overrideList
+  };
+}
+
+function bundleCounts(b){
+  return { added: (b.custom||[]).length, edited: Object.keys(b.overrides||{}).length };
+}
+
+function shareCode(){ return _b64enc(JSON.stringify(buildBundle())); }
+function shareLink(){ return location.origin + location.pathname + '#share=' + shareCode(); }
+
+function openShareModal(){
+  const b = buildBundle();
+  const c = bundleCounts(b);
+  const total = c.added + c.edited;
+  const box = document.getElementById('share-code-box');
+  box.style.display = 'none'; box.value = '';
+  document.getElementById('share-import-box').value = '';
+
+  // Localised labels
+  document.getElementById('share-title').textContent = '🤝 ' + t('shareTitle');
+  document.getElementById('share-intro').textContent = t('shareIntro');
+  document.getElementById('share-yours-hdr').textContent = t('shareYoursHdr');
+  document.getElementById('share-yours-hint').textContent = t('shareYoursHint');
+  document.getElementById('share-lbl-copy').textContent = t('shareCopyLink');
+  document.getElementById('share-lbl-file').textContent = t('shareDownload');
+  document.getElementById('share-lbl-code').textContent = t('shareShowCode');
+  document.getElementById('share-contrib-hdr').textContent = t('shareContribHdr');
+  document.getElementById('share-contrib-hint').textContent = t('shareContribHint');
+  document.getElementById('share-lbl-contrib').textContent = t('shareContribBtn');
+  document.getElementById('share-import-hdr').textContent = t('shareImportHdr');
+  document.getElementById('share-import-hint').textContent = t('shareImportHint');
+  document.getElementById('share-lbl-import').textContent = t('shareImportBtn');
+  document.getElementById('share-lbl-loadfile').textContent = t('shareLoadFile');
+  document.getElementById('share-import-box').placeholder = t('sharePastePlaceholder');
+  document.getElementById('share-close-btn').textContent = t('shareDone');
+
+  const summary = document.getElementById('share-summary');
+  const yoursWrap = document.getElementById('share-yours-wrap');
+  const contribWrap = document.getElementById('share-contrib-wrap');
+  if(total === 0){
+    summary.textContent = t('shareNothing');
+    yoursWrap.style.opacity = '.5'; yoursWrap.style.pointerEvents = 'none';
+    contribWrap.style.opacity = '.5'; contribWrap.style.pointerEvents = 'none';
+  } else {
+    summary.textContent = t('shareYouHave')
+      .replace('{added}', c.added).replace('{edited}', c.edited);
+    yoursWrap.style.opacity = ''; yoursWrap.style.pointerEvents = '';
+    contribWrap.style.opacity = ''; contribWrap.style.pointerEvents = '';
+  }
+  document.getElementById('share-overlay').classList.remove('hidden');
+}
+
+function copyShareLink(){
+  const link = shareLink();
+  const done = () => alert(t('shareLinkCopied'));
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(done).catch(()=>showShareCode(link));
+  } else {
+    showShareCode(link);
+  }
+}
+
+function showShareCode(text){
+  const box = document.getElementById('share-code-box');
+  box.value = (typeof text === 'string') ? text : shareCode();
+  box.style.display = 'block';
+  box.focus(); box.select();
+}
+
+function downloadShareFile(){
+  const blob = new Blob([JSON.stringify(buildBundle(),null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'lviv-secondhand-stores.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function contributeGitHub(){
+  const b = buildBundle();
+  const c = bundleCounts(b);
+  if(c.added + c.edited === 0){ alert(t('shareNothing')); return; }
+  const title = 'Map contribution: ' + c.added + ' added, ' + c.edited + ' edited';
+  const lines = [];
+  lines.push('Thanks for reviewing my second-hand map contribution!');
+  lines.push('');
+  if(c.added){
+    lines.push('### ➕ Stores added (' + c.added + ')');
+    (b.custom||[]).forEach(s => {
+      lines.push('- **' + s.name + '** — ' + (s.addressEn||s.address||'') +
+        ' (`' + s.lat + ', ' + s.lng + '`)' +
+        (s.pricing==='kg'?' · by KG':' · itemized') +
+        (s.note ? ' — ' + s.note : ''));
+    });
+    lines.push('');
+  }
+  if(c.edited){
+    lines.push('### ✏️ Corrections to existing stores (' + c.edited + ')');
+    (b.overrideList||[]).forEach(o => {
+      const fields = Object.keys(o.changes||{}).map(k => k + ': ' + o.changes[k]).join('; ');
+      lines.push('- **' + o.name + '** (`' + o.id + '`) → ' + fields);
+    });
+    lines.push('');
+  }
+  lines.push('<details><summary>Raw data (for the maintainer to merge)</summary>');
+  lines.push('');
+  lines.push('```json');
+  lines.push(JSON.stringify({custom:b.custom, overrides:b.overrides}, null, 2));
+  lines.push('```');
+  lines.push('</details>');
+  const body = lines.join('\n');
+  const url = 'https://github.com/' + GH_REPO + '/issues/new'
+    + '?title=' + encodeURIComponent(title)
+    + '&labels=' + encodeURIComponent('map-contribution')
+    + '&body=' + encodeURIComponent(body);
+  window.open(url, '_blank', 'noopener');
+}
+
+// ── IMPORT ──
+function parseBundle(raw){
+  raw = (raw||'').trim();
+  if(!raw) return null;
+  let obj = null;
+  // Accept: full share link, bare base64 code, or raw JSON
+  const hashIdx = raw.indexOf('#share=');
+  if(hashIdx >= 0) raw = raw.slice(hashIdx + 7);
+  if(raw[0] === '{'){
+    try { obj = JSON.parse(raw); } catch(e){ obj = null; }
+  } else {
+    try { obj = JSON.parse(_b64dec(raw)); } catch(e){ obj = null; }
+  }
+  if(!obj || obj.app !== 'lviv-secondhand') return null;
+  return obj;
+}
+
+// Are two stores the same place? Match name + nearby coords (~40m).
+function sameStore(a, b){
+  const near = (x,y) => Math.abs((x||0)-(y||0)) < 0.0004;
+  return (a.name||'').trim().toLowerCase() === (b.name||'').trim().toLowerCase()
+    && near(a.lat,b.lat) && near(a.lng,b.lng);
+}
+
+function applyBundle(bundle){
+  let added = 0, edited = 0, skipped = 0;
+  // Custom stores
+  const mine = getCustomStores();
+  const builtinNames = STORES.map(s => (s.name||'').trim().toLowerCase());
+  (bundle.custom||[]).forEach((s,i) => {
+    if(typeof s.lat !== 'number' || typeof s.lng !== 'number' || !s.name){ skipped++; return; }
+    // Skip if it duplicates one of my custom stores or a built-in store
+    if(mine.some(m => sameStore(m,s)) || builtinNames.includes((s.name||'').trim().toLowerCase())){ skipped++; return; }
+    const copy = Object.assign({}, s, {
+      id: 'u' + Date.now() + '_' + i,
+      type: s.type || 'other',
+      custom: true,
+      hours: s.hours || {mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}
+    });
+    mine.push(copy); added++;
+  });
+  if(added) saveCustomStores(mine);
+
+  // Overrides — only fill in stores I haven't edited myself, and only for known stores
+  const ov = getStoreOverrides();
+  const knownIds = STORES.map(s => s.id);
+  Object.keys(bundle.overrides||{}).forEach(id => {
+    if(!knownIds.includes(id)) return;
+    if(ov[id]) { skipped++; return; }
+    ov[id] = bundle.overrides[id]; edited++;
+  });
+  if(edited) saveStoreOverrides(ov);
+
+  return { added, edited, skipped };
+}
+
+function importFromCode(){
+  const raw = document.getElementById('share-import-box').value;
+  const bundle = parseBundle(raw);
+  if(!bundle){ alert(t('shareImportError')); return; }
+  finishImport(bundle);
+}
+
+function importFromFile(ev){
+  const file = ev.target.files && ev.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const bundle = parseBundle(String(reader.result));
+    if(!bundle){ alert(t('shareImportError')); ev.target.value=''; return; }
+    finishImport(bundle);
+    ev.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function finishImport(bundle){
+  const r = applyBundle(bundle);
+  renderList(); updateStats();
+  if(mapInst) renderPins();
+  document.getElementById('share-import-box').value = '';
+  alert(t('shareImportDone')
+    .replace('{added}', r.added).replace('{edited}', r.edited).replace('{skipped}', r.skipped));
+}
+
+// On load: if the URL carries a shared map, offer to import it.
+function checkShareInURL(){
+  if(!location.hash || location.hash.indexOf('#share=') !== 0) return;
+  const bundle = parseBundle(location.hash);
+  // Clear the hash so a refresh doesn't re-prompt
+  history.replaceState(null, '', location.pathname + location.search);
+  if(!bundle){ return; }
+  const c = bundleCounts(bundle);
+  if(confirm(t('shareIncoming').replace('{added}', c.added).replace('{edited}', c.edited))){
+    finishImport(bundle);
+  }
+}
+
+// ─────────────────────────────────────────────
 // WELCOME
 // ─────────────────────────────────────────────
 function closeWelcome(){
@@ -1031,7 +1331,8 @@ window.addEventListener('DOMContentLoaded',()=>{
   if(!localStorage.getItem('lviv_sh_welcomed')){
     document.getElementById('welcome').classList.remove('hidden');
   }
-  ['del-overlay','help-overlay','add-overlay','edit-overlay'].forEach(id=>{
+  checkShareInURL();
+  ['del-overlay','help-overlay','add-overlay','edit-overlay','share-overlay'].forEach(id=>{
     document.getElementById(id).addEventListener('click',e=>{
       if(e.target.id===id) document.getElementById(id).classList.add('hidden');
     });

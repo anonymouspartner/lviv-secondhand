@@ -37,7 +37,22 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🌐 **EN / UA** language toggle
 - ✅ Mark stores as **visited**
 - ➕ **Add stores** missing from the map
+- 🤝 **Share your map** & **contribute** additions/edits to everyone
 - 📤 **Export** all store locations to Maps.me (KML)
+
+## 🤝 Sharing & Contributing
+
+Stores you add or edit are normally saved only on your own device. The **🤝 button** (top-right) lets you share them:
+
+- **🔗 Copy share link** — sends your added & edited stores to anyone. When they open the link, your stores merge onto their map (duplicates are skipped automatically). You can also **download a file** or **copy a short code** instead.
+- **📥 Import from others** — paste a link/code someone sent you, or load their `.json` file, to add their stores to yours.
+- **🌍 Contribute to the official map** — opens a pre-filled [GitHub issue](https://github.com/anonymouspartner/lviv-secondhand/issues) with your additions and corrections. Once a maintainer merges it, your changes ship in the map everyone downloads. (A free GitHub account is needed to post.)
+
+> Because the app is a static site with no server, peer sharing is instant and private, while contributions to the *official* map go through GitHub so a maintainer can review and merge them.
+
+### For maintainers
+
+Contributions arrive as GitHub issues labelled `map-contribution`. Each issue lists the added/edited stores in plain text plus a collapsible `json` block. To merge, copy the objects from the `custom` array into the `STORES` array in `index.html` (assign a stable `id`, fill in `hours`), and fold any `overrides` into the matching store's fields.
 
 ## 🗺️ Maps.me Integration
 
@@ -89,7 +104,18 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - 🌐 Перемикач мови **EN / UA**
 - ✅ Позначення магазинів як **відвіданих**
 - ➕ **Додавання магазинів**, яких немає на карті
+- 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 📤 **Експорт** усіх магазинів у Maps.me (KML)
+
+## 🤝 Обмін і внесок
+
+Магазини, які ви додаєте чи редагуєте, зазвичай зберігаються лише на вашому пристрої. Кнопка **🤝** (праворуч зверху) дозволяє поділитися ними:
+
+- **🔗 Копіювати посилання** — надсилає ваші додані та змінені магазини будь-кому. Відкривши посилання, людина додає ваші магазини на свою карту (дублікати пропускаються). Також можна **завантажити файл** або **скопіювати короткий код**.
+- **📥 Імпорт від інших** — вставте посилання/код, який вам надіслали, або завантажте файл `.json`, щоб додати їхні магазини до своїх.
+- **🌍 Внести до офіційної карти** — відкриває попередньо заповнене [звернення на GitHub](https://github.com/anonymouspartner/lviv-secondhand/issues) з вашими доповненнями та виправленнями. Після того як супровідник їх додасть, ваші зміни з’являться на карті, яку завантажують усі. (Для публікації потрібен безкоштовний акаунт GitHub.)
+
+> Оскільки застосунок — це статичний сайт без сервера, обмін між користувачами миттєвий і приватний, а внески до *офіційної* карти проходять через GitHub, щоб супровідник міг їх переглянути та додати.
 
 ## 🗺️ Інтеграція з Maps.me
 
