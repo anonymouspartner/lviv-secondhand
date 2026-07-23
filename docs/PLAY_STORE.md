@@ -120,7 +120,7 @@ In https://play.google.com/console → **Create app**:
 
 ### Store listing assets (already generated in this repo)
 - [ ] **App icon** 512×512 — use `icon-512.png`.
-- [ ] **Feature graphic** 1024×500 — *not yet generated; ask and I can make one.*
+- [ ] **Feature graphic** 1024×500 — use `screenshots/feature-graphic-1024x500.png`.
 - [ ] **Phone screenshots** (2–8, min 320px) — use `screenshots/01-list.png`,
       `02-store.png`, `03-share.png` (1080×2160).
 - [ ] **Short description** (≤80 chars), e.g.
@@ -193,5 +193,5 @@ This app is privacy-friendly; answer honestly:
 | Play screenshots generated | ✅ `screenshots/` |
 | `assetlinks.json` template | ✅ (fill in fingerprint) |
 | Custom domain for origin-root asset links | ⬜ your call |
-| Feature graphic 1024×500 | ⬜ can generate on request |
+| Feature graphic 1024×500 | ✅ `screenshots/feature-graphic-1024x500.png` |
 | Play Console account + listing + Data Safety | ⬜ your part |
