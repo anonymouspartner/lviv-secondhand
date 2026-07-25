@@ -2,7 +2,7 @@
    - App shell + Leaflet are precached so the app opens offline.
    - HTML is network-first so an online visit always gets the latest build.
    - Map tiles are cached opportunistically for offline panning of visited areas. */
-const SHELL_CACHE = 'lviv-sh-shell-v1';
+const SHELL_CACHE = 'lviv-sh-shell-v2';
 const TILE_CACHE  = 'lviv-sh-tiles-v1';
 const MAX_TILES = 400;
 
@@ -10,7 +10,7 @@ const SHELL = [
   './', 'index.html', 'privacy.html', 'manifest.webmanifest',
   'favicon.svg', 'favicon-32.png', 'apple-touch-icon.png',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
-  'vendor/leaflet.css', 'vendor/leaflet.js'
+  'vendor/leaflet.css', 'vendor/leaflet.js', 'vendor/qrcode.js'
 ];
 
 self.addEventListener('install', (e) => {
