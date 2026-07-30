@@ -45,6 +45,9 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
+  // Version checks bypass the cache entirely (always straight to network).
+  if (url.searchParams.has('vcheck')) return;
+
   // OpenStreetMap tiles: cache-first into a capped runtime cache.
   if (/(^|\.)tile\.openstreetmap\.org$/.test(url.hostname)) {
     e.respondWith((async () => {
