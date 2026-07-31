@@ -618,7 +618,6 @@ const STORES = [
   { id:'c15', name:'Euro marke', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.790719, lng:24.058095, note:'' },
   { id:'c16', name:'Euro Second Hand', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.78499, lng:24.06067, note:'' },
   { id:'c17', name:'Євро секонд-хенд', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.785544, lng:24.060836, note:'' },
-  { id:'c18', name:'Economy class', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.785169, lng:24.05725, note:'' },
   { id:'c19', name:'Second Hand super', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'item', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.840224, lng:24.048986, note:'' },
   { id:'c20', name:'Second hand Bomba', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'item', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.8393, lng:24.035811, note:'' },
   { id:'c21', name:'Second Hand — Chornovola 101', brand:'Independent', address:'проспект В\'ячеслава Чорновола, 101', addressEn:'101 Chornovola Ave', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.865577, lng:24.015615, note:'By weight. Restocked Mondays.' },
@@ -1839,7 +1838,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-07-30.4';
+const APP_VERSION = '2026-07-30.5';
 let _updateShown = false;
 async function checkForUpdate(){
   if (_updateShown || !navigator.onLine) return;
