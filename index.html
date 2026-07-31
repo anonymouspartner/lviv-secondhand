@@ -620,7 +620,17 @@ const STORES = [
   { id:'c17', name:'Євро секонд-хенд', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.785544, lng:24.060836, note:'' },
   { id:'c18', name:'Economy class', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.785169, lng:24.05725, note:'' },
   { id:'c19', name:'Second Hand super', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'item', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.840224, lng:24.048986, note:'' },
-  { id:'c20', name:'Second hand Bomba', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'item', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.8393, lng:24.035811, note:'' }
+  { id:'c20', name:'Second hand Bomba', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'item', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.8393, lng:24.035811, note:'' },
+  { id:'c21', name:'Second Hand — Chornovola 101', brand:'Independent', address:'проспект В\'ячеслава Чорновола, 101', addressEn:'101 Chornovola Ave', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.865577, lng:24.015615, note:'By weight. Restocked Mondays.' },
+  { id:'c22', name:'Second Hand — Shyroka 31', brand:'Independent', address:'вулиця Широка, 31', addressEn:'31 Shyroka St', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.842187, lng:23.975855, note:'By weight. Restocked Tuesdays.' },
+  { id:'c23', name:'Second Hand — Horodotska 67', brand:'Independent', address:'вулиця Городоцька, 67', addressEn:'67 Horodotska St', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.841631, lng:24.016137, note:'By weight. Restocked Wednesdays.' },
+  { id:'c24', name:'Second Hand — Horska 2A', brand:'Independent', address:'вулиця Горська, 2', addressEn:'2A Horska St', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.8156, lng:24.0497, note:'By weight. Restocked Wednesdays. (Approx. location.)' },
+  { id:'c25', name:'Second Hand — Chervonoi Kalyny 59', brand:'Independent', address:'проспект Червоної Калини, 59', addressEn:'59 Chervonoi Kalyny Ave', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.796834, lng:24.054224, note:'By weight. Restocked Wednesdays.' },
+  { id:'c26', name:'Second Hand — Naukova 47', brand:'Independent', address:'вулиця Наукова, 47', addressEn:'47 Naukova St', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.804155, lng:23.990601, note:'By weight. Restocked Thursdays.' },
+  { id:'c27', name:'Second Hand — Kotliarska 6', brand:'Independent', address:'вулиця Котлярська, 6', addressEn:'6 Kotliarska St', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.845323, lng:24.023052, note:'By weight. Restocked Thursdays.' },
+  { id:'c28', name:'Second Hand — Sykhivska 18', brand:'Independent', address:'вулиця Сихівська, 18', addressEn:'18 Sykhivska St', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.794862, lng:24.063585, note:'By weight. Restocked Fridays.' },
+  { id:'c29', name:'Second Hand — V. Velykoho 59B', brand:'Independent', address:'вулиця Володимира Великого, 59б', addressEn:'59B V. Velykoho St', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.809116, lng:24.00112, note:'By weight. Restocked Fridays.' },
+  { id:'c30', name:'Second Hand — B. Khmelnytskoho 176', brand:'Independent', address:'вулиця Богдана Хмельницького, 176', addressEn:'176 B. Khmelnytskoho St', phone:'', type:'other', pricing:'kg', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.861805, lng:24.051611, note:'By weight. Restocked Fridays.' }
 ];
 
 const DAYS = ['sun','mon','tue','wed','thu','fri','sat'];
@@ -1808,7 +1818,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-07-30.2';
+const APP_VERSION = '2026-07-30.3';
 let _updateShown = false;
 async function checkForUpdate(){
   if (_updateShown || !navigator.onLine) return;
