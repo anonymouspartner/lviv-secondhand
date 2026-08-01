@@ -1915,14 +1915,14 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-01.1';
+const APP_VERSION = '2026-08-01.2';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
 // live in this static file; the whole flow happens on Stripe's own page.
 // Leave blank to hide the ❤️ button entirely. Paste your buy.stripe.com URL:
 // ─────────────────────────────────────────────
-const DONATE_URL = '';
+const DONATE_URL = 'https://buy.stripe.com/aFafZbaOs97C15r0gigA802';
 function openDonate(){
   if (!DONATE_URL) return;
   window.open(DONATE_URL, '_blank', 'noopener');
