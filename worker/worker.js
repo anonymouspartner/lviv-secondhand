@@ -147,7 +147,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
-    if (request.method === 'GET') return new Response('ok', { status: 200, headers: cors() });
+    if (request.method === 'GET') {
+      if (url.pathname === '/status') return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE });
+      return new Response('ok', { status: 200, headers: cors() });
+    }
     if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: cors() });
 
     // Per-IP rate limit (guarded — skip if binding absent).
@@ -202,6 +205,24 @@ export default {
         await env.DB.prepare('DELETE FROM push_subs WHERE endpoint = ?').bind(endpoint).run();
       }
       return new Response(null, { status: 204, headers: cors() });
+    }
+
+    // ── Send a test push to an already-subscribed device (on-demand verify) ──
+    if (url.pathname === '/test-push') {
+      const endpoint = body && body.endpoint;
+      if (!endpoint || typeof endpoint !== 'string') return new Response('bad request', { status: 400, headers: cors() });
+      await ensureSchema(env);
+      const sub = await env.DB.prepare('SELECT endpoint, p256dh, auth FROM push_subs WHERE endpoint = ?').bind(endpoint).first();
+      if (!sub) return json({ ok: false, reason: 'not_subscribed' }, 404);
+      if (!env.VAPID_PRIVATE) return json({ ok: false, reason: 'push_not_configured' }, 503);
+      const payload = JSON.stringify({
+        title: '✅ Test — Lviv Second Hand',
+        body: 'Notifications are working! You will get an alert when a store you follow restocks.',
+        url: 'https://anonymouspartner.github.io/lviv-secondhand/',
+        tag: 'test',
+      });
+      try { await sendPush(sub, payload, env); } catch { return json({ ok: false, reason: 'send_failed' }, 500); }
+      return json({ ok: true }, 200);
     }
 
     // ── Usage metrics (root POST) ──
