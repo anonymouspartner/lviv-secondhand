@@ -502,8 +502,8 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <div class="lang-pill" role="group" aria-label="Language">
-      <span class="lp active" id="lang-en" role="button" tabindex="0" aria-pressed="true" onclick="setLang('en')">EN</span>
-      <span class="lp" id="lang-ua" role="button" tabindex="0" aria-pressed="false" onclick="setLang('ua')">УА</span>
+      <span class="lp active" id="lang-en" role="button" tabindex="0" aria-pressed="true" onclick="setLang('en',true)">EN</span>
+      <span class="lp" id="lang-ua" role="button" tabindex="0" aria-pressed="false" onclick="setLang('ua',true)">УА</span>
     </div>
     <button class="help-btn" onclick="openShareModal()" title="Share your map & contribute stores" aria-label="Share your map and contribute stores" style="font-size:18px;">🤝</button>
     <button class="help-btn" onclick="exportKML()" title="Export all stores to Maps.me KML" aria-label="Export all stores to Maps.me KML" style="font-size:18px;">📤</button>
@@ -576,8 +576,9 @@ const TR = {
 function t(k){return(TR[lang]||TR.en)[k]||k;}
 // Escape user/imported data before it goes into innerHTML (text or double-quoted attr).
 function escHtml(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-function setLang(l){
+function setLang(l, viaUser){
   lang=l;
+  if(viaUser) track('lang', l);
   localStorage.setItem('lviv_sh_lang',l);
   document.getElementById('lang-en').classList.toggle('active',l==='en');
   document.getElementById('lang-ua').classList.toggle('active',l==='ua');
@@ -798,6 +799,7 @@ function setFilter(f, btn) {
   // "Near me" needs a location first — fetch it, then apply.
   if (f === 'nearby' && !filterUserPos) { requestNearbyFilter(btn); return; }
   currentFilter = f;
+  track('filter', f);
   document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   renderList();
@@ -897,7 +899,7 @@ function renderList() {
       const label = phaseLabel(phase, di.day);
       cycleHtml = `<div class="card-cycle"><span class="cycle-label">${t('inventory')}</span><span class="cycle-val ${phase}">${t('dayLabel')} ${di.day+1}/${di.cycle} — ${label}</span></div>`;
     }
-    return `<div class="store-card ${sd.visited?'visited':''}" role="button" tabindex="0" aria-label="${escHtml(s.name)}" onclick="openDetail('${s.id}')">
+    return `<div class="store-card ${sd.visited?'visited':''}" role="button" tabindex="0" aria-label="${escHtml(s.name)}" onclick="openStore('${s.id}')">
       <div class="card-top">
         <div class="store-dot ${s.type==='humana'?'dot-humana':'dot-other'}">${s.type==='humana'?'🔴':'🛍️'}</div>
         <div class="card-body">
@@ -922,6 +924,10 @@ function renderList() {
 // ─────────────────────────────────────────────
 // DETAIL
 // ─────────────────────────────────────────────
+// User-initiated store open (tap on a card or map pin). Wraps openDetail so
+// programmatic re-opens (after edit/visit/delivery) aren't counted as views.
+function openStore(id){ track('store_open', id); openDetail(id); }
+
 function openDetail(id) {
   currentStoreId = id;
   const raw = allStores().find(x => x.id === id);
@@ -1120,6 +1126,7 @@ function saveDelivery() {
 // ─────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
+  track('tab', tab);
   document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
   const activeTab = document.querySelector(`[data-tab="${tab}"]`);
   activeTab.classList.add('active'); activeTab.setAttribute('aria-selected','true');
@@ -1247,7 +1254,7 @@ function renderPins() {
       iconSize:[36,36], iconAnchor:[18,18]
     });
     const m = L.marker([s.lat, s.lng], {icon}).addTo(mapInst);
-    m.on('click', function(){ openDetail(s.id); });
+    m.on('click', function(){ openStore(s.id); });
     mapMarkers.push(m);
   });
 }
@@ -1256,6 +1263,7 @@ function renderPins() {
 // MAPS.ME KML EXPORT
 // ─────────────────────────────────────────────
 function exportKML() {
+  track('action','export');
   function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   const hidden = new Set(getHiddenStores());
   const stores = [...STORES, ...getCustomStores()].filter(s => !hidden.has(s.id));
@@ -1344,6 +1352,7 @@ function saveCustomStore(){
     custom:true
   });
   saveCustomStores(arr);
+  track('action','add');
   if(tempMarker){ tempMarker.remove(); tempMarker=null; }
   document.getElementById('add-overlay').classList.add('hidden');
   renderList(); updateStats();
@@ -1571,6 +1580,7 @@ function openShareModal(){
 }
 
 function copyShareLink(){
+  track('action','share');
   const link = shareLink();
   const done = () => alert(t('shareLinkCopied'));
   if(navigator.clipboard && navigator.clipboard.writeText){
@@ -1616,6 +1626,7 @@ function renderAppQr(){
 }
 
 function downloadShareFile(){
+  track('action','share');
   const blob = new Blob([JSON.stringify(buildBundle(),null,2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1628,6 +1639,7 @@ function contributeGitHub(){
   const b = buildBundle();
   const c = bundleCounts(b);
   if(c.added + c.edited + c.removed === 0){ alert(t('shareNothing')); return; }
+  track('action','contribute');
   const title = 'Map contribution: ' + c.added + ' added, ' + c.edited + ' edited, ' + c.removed + ' removed';
   const lines = [];
   lines.push('Thanks for reviewing my second-hand map contribution!');
@@ -1929,7 +1941,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-03';
+const APP_VERSION = '2026-08-03.1';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
@@ -1961,6 +1973,23 @@ function initAnalytics(){
   s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
   s.setAttribute('data-cf-beacon', JSON.stringify({ token: CF_ANALYTICS_TOKEN }));
   document.head.appendChild(s);
+}
+
+// ─────────────────────────────────────────────
+// USAGE METRICS — anonymous, aggregate in-app events sent to our own Cloudflare
+// Worker + D1. NO personal data: no IP is stored, no user id, no coordinates,
+// no free text — only an event type and a short whitelisted key (store id,
+// filter name, tab, language, action). Fire-and-forget via sendBeacon; inert
+// until METRICS_URL is set. Disclosed in privacy.html before it was enabled.
+// ─────────────────────────────────────────────
+const METRICS_URL = '';
+function track(type, key){
+  if (!METRICS_URL) return;
+  try {
+    const body = JSON.stringify({ type, key: key == null ? '' : String(key), lang });
+    if (navigator.sendBeacon) navigator.sendBeacon(METRICS_URL, body);
+    else fetch(METRICS_URL, { method:'POST', body, keepalive:true }).catch(()=>{});
+  } catch(e){ /* metrics must never break the app */ }
 }
 
 let _updateShown = false;

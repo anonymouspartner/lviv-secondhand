@@ -1,0 +1,10 @@
+name = "lviv-metrics"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+# Anonymous usage-metrics store (see worker.js). Created via the Cloudflare
+# Developer Platform; database_id is not a secret.
+[[d1_databases]]
+binding = "DB"
+database_name = "lviv-metrics"
+database_id = "ed588947-b668-4082-8e2a-5eee35234832"
