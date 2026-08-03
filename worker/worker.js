@@ -15,20 +15,10 @@ const LANGS = new Set(['en', 'ua']);
 const MAX_BATCH = 20;
 const MAX_BODY = 8192;
 const VAPID_SUBJECT = 'mailto:lviv.secondhand@example.com';
-
-// Mirrors the `restockDay` field in index.html's STORES. Keep in sync.
-const RESTOCK_STORES = [
-  { id: 'c21', day: 'mon', name: 'Second Hand — Chornovola 101' },
-  { id: 'c22', day: 'tue', name: 'Second Hand — Shyroka 31' },
-  { id: 'c23', day: 'wed', name: 'Second Hand — Horodotska 67' },
-  { id: 'c24', day: 'wed', name: 'Second Hand — Horska 2A' },
-  { id: 'c25', day: 'wed', name: 'Second Hand — Chervonoi Kalyny 59' },
-  { id: 'c26', day: 'thu', name: 'Second Hand — Naukova 47' },
-  { id: 'c27', day: 'thu', name: 'Second Hand — Kotliarska 6' },
-  { id: 'c28', day: 'fri', name: 'Second Hand — Sykhivska 18' },
-  { id: 'c29', day: 'fri', name: 'Second Hand — V. Velykoho 59B' },
-  { id: 'c30', day: 'fri', name: 'Second Hand — B. Khmelnytskoho 176' },
-];
+const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
+// Each follow now carries its own restock day + name (supplied by the client —
+// from a store's known restockDay, or asked from the user when it's missing),
+// so notifications work for ANY store without a server-side schedule.
 
 function cors() {
   return {
@@ -173,15 +163,20 @@ export default {
     if (url.pathname === '/subscribe') {
       const sub = body && body.subscription;
       const storeId = body && body.storeId;
-      if (!sub || !sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth || typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)) {
+      const day = body && body.day;
+      const name = clean(body && body.name, 80);
+      if (!sub || !sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth
+          || typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId) || !DAYS.has(day)) {
         return new Response('bad request', { status: 400, headers: cors() });
       }
       await ensureSchema(env);
       const existing = await env.DB.prepare('SELECT stores FROM push_subs WHERE endpoint = ?').bind(sub.endpoint).first();
       let stores = [];
       if (existing) { try { stores = JSON.parse(existing.stores) || []; } catch {} }
-      if (!stores.includes(storeId)) stores.push(storeId);
-      stores = stores.slice(0, 200);
+      // stores = array of {id, day, name}; replace any existing entry for this id.
+      stores = stores.filter((x) => x && typeof x === 'object' && x.id !== storeId);
+      stores.push({ id: storeId, day, name });
+      stores = stores.slice(-200);
       await env.DB.prepare(
         'INSERT INTO push_subs (endpoint, p256dh, auth, stores) VALUES (?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, stores = excluded.stores'
       ).bind(sub.endpoint, clean(sub.keys.p256dh, 200), clean(sub.keys.auth, 100), JSON.stringify(stores)).run();
@@ -197,7 +192,7 @@ export default {
         const ex = await env.DB.prepare('SELECT stores FROM push_subs WHERE endpoint = ?').bind(endpoint).first();
         if (ex) {
           let s = []; try { s = JSON.parse(ex.stores) || []; } catch {}
-          s = s.filter((x) => x !== storeId);
+          s = s.filter((x) => !(x && x.id === storeId));
           if (s.length) await env.DB.prepare('UPDATE push_subs SET stores = ? WHERE endpoint = ?').bind(JSON.stringify(s), endpoint).run();
           else await env.DB.prepare('DELETE FROM push_subs WHERE endpoint = ?').bind(endpoint).run();
         }
@@ -246,17 +241,14 @@ export default {
   // ── Daily cron: notify followers of stores restocking today ──
   async scheduled(event, env, ctx) {
     const day = kyivWeekday();
-    const todays = RESTOCK_STORES.filter((s) => s.day === day);
-    if (!todays.length) return;
     await ensureSchema(env);
-    const ids = new Set(todays.map((s) => s.id));
     const res = await env.DB.prepare('SELECT endpoint, p256dh, auth, stores FROM push_subs').all();
     const rows = (res && res.results) || [];
     for (const r of rows) {
       let follows = []; try { follows = JSON.parse(r.stores) || []; } catch {}
-      const hits = todays.filter((s) => follows.includes(s.id) && ids.has(s.id));
+      const hits = follows.filter((f) => f && f.id && f.day === day);
       if (!hits.length) continue;
-      const names = hits.map((s) => s.name);
+      const names = hits.map((f) => f.name || 'A store you follow');
       const bodyText = names.length === 1
         ? `${names[0]} restocks today — fresh stock just in!`
         : `${names.length} stores you follow restock today: ${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}`;
