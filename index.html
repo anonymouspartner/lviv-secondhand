@@ -1891,7 +1891,7 @@ function closeWelcome(){
 // INIT
 // ─────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded',()=>{
-  renderWelcome(); renderHelp(); initDonate();
+  renderWelcome(); renderHelp(); initDonate(); initAnalytics();
   expireVisits();
   const _sl=localStorage.getItem('lviv_sh_lang');if(_sl)setLang(_sl);
   renderList();
@@ -1929,7 +1929,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-01.5';
+const APP_VERSION = '2026-08-03';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
@@ -1945,6 +1945,22 @@ function initDonate(){
   if (!DONATE_URL) return;
   const b = document.getElementById('donate-btn');
   if (b) b.style.display = '';
+}
+
+// ─────────────────────────────────────────────
+// ANALYTICS — Cloudflare Web Analytics (cookieless, aggregate, no personal
+// data, no cross-site tracking). Injected only when a token is set; loading
+// it from the CDN fails silently offline. Leave blank to disable entirely.
+// See privacy.html §5. Disclosed there before this was enabled.
+// ─────────────────────────────────────────────
+const CF_ANALYTICS_TOKEN = '61b8929700694fe1b45730eb1f796d7c';
+function initAnalytics(){
+  if (!CF_ANALYTICS_TOKEN) return;
+  const s = document.createElement('script');
+  s.defer = true;
+  s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+  s.setAttribute('data-cf-beacon', JSON.stringify({ token: CF_ANALYTICS_TOKEN }));
+  document.head.appendChild(s);
 }
 
 let _updateShown = false;

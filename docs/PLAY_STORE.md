@@ -135,17 +135,25 @@ In https://play.google.com/console → **Create app**:
 - [ ] Link `https://your-domain/privacy.html` in **Store settings → Privacy policy**.
 
 ### Data safety form (App content → Data safety)
-This app is privacy-friendly; answer honestly:
-- **Does your app collect or share user data?** No data is collected or sent to
-  you — all user content (added/edited/hidden stores, visits, settings) stays in
-  the browser's local storage on the device.
+This app is privacy-friendly, but it **does** use cookieless analytics, so answer
+honestly:
+- **Does your app collect or share user data?** **Yes — a small amount.** All
+  *user content* (added/edited/hidden stores, visits, settings) stays in the
+  browser's local storage on the device and is never sent anywhere. But the app
+  loads **Cloudflare Web Analytics**, which collects aggregate, non-identifying
+  usage data (page views / visits, plus the coarse technical info any web request
+  exposes). Declare this under **App activity → App interactions** (and/or **Web
+  page views**): **collected**, processed by a third party (Cloudflare),
+  **not shared** onward for advertising, and **not used to track** users across
+  apps/sites. It is cookieless and does not identify individuals.
 - **Location:** the app *uses* approximate/precise location (the "Show my
   location" feature) but does **not** collect, store, or transmit it — it's used
   only on-device to center the map. Declare it as **used, not collected/shared**.
-- **Data handling:** processed on-device; not shared with third parties.
-- Note in your own words that opening the app contacts GitHub Pages (hosting)
-  and OpenStreetMap (map tiles), which see the device IP like any website —
-  this matches `privacy.html`.
+- **Data handling:** user content is processed on-device; analytics is aggregate
+  and handled by Cloudflare. Nothing is sold. Data is **not** used for tracking.
+- Note in your own words that opening the app contacts GitHub Pages (hosting),
+  OpenStreetMap (map tiles), and Cloudflare (analytics), which see the device IP
+  like any website — this matches `privacy.html`.
 
 ### Content rating (App content → Content ratings)
 - Complete the IARC questionnaire. This is a utility with no objectionable
