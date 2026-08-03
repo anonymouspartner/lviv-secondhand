@@ -71,7 +71,7 @@ You can export every store on the map as a `.kml` file and import it straight in
 
 ## 🔒 Privacy
 
-No accounts, no ads, no personal tracking. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. The only thing measured is anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** — cookieless, with no individual-visitor or cross-site tracking. Full details: **[Privacy Policy](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (also linked from the in-app **?** Help panel).
+No accounts, no ads, no personal tracking. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking. Full details: **[Privacy Policy](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (also linked from the in-app **?** Help panel).
 
 ---
 
@@ -140,4 +140,4 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 ## 🔒 Конфіденційність
 
-Без облікових записів, реклами та персонального стеження. Усе, що ви робите, залишається у вашому браузері на вашому пристрої — воно ніколи не надсилається на сервер і не залишає ваш телефон, доки ви самі не вирішите поділитися. Єдине, що вимірюється, — це анонімний, узагальнений трафік (перегляди та відвідування) через **Cloudflare Web Analytics** — без файлів cookie, без відстеження окремих відвідувачів чи міжсайтового стеження. Докладніше: **[Політика конфіденційності](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (також доступна з панелі довідки **?** у застосунку).
+Без облікових записів, реклами та персонального стеження. Усе, що ви робите, залишається у вашому браузері на вашому пристрої — воно ніколи не надсилається на сервер і не залишає ваш телефон, доки ви самі не вирішите поділитися. Єдине, що вимірюється, — це анонімний, узагальнений трафік (перегляди та відвідування) через **Cloudflare Web Analytics** та анонімне використання додатка (які магазини/фільтри застосовують) через невеликий власний сервіс на Cloudflare — обидва без файлів cookie, без персональних даних і без відстеження окремих відвідувачів чи міжсайтового стеження. Докладніше: **[Політика конфіденційності](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (також доступна з панелі довідки **?** у застосунку).

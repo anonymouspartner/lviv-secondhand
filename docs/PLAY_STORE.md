@@ -140,12 +140,15 @@ honestly:
 - **Does your app collect or share user data?** **Yes — a small amount.** All
   *user content* (added/edited/hidden stores, visits, settings) stays in the
   browser's local storage on the device and is never sent anywhere. But the app
-  loads **Cloudflare Web Analytics**, which collects aggregate, non-identifying
-  usage data (page views / visits, plus the coarse technical info any web request
-  exposes). Declare this under **App activity → App interactions** (and/or **Web
-  page views**): **collected**, processed by a third party (Cloudflare),
-  **not shared** onward for advertising, and **not used to track** users across
-  apps/sites. It is cookieless and does not identify individuals.
+  loads **Cloudflare Web Analytics** (aggregate page views / visits) **and** sends
+  **anonymous in-app usage events** (which stores/filters are opened, tab/language
+  switches, share/export actions) to a small first-party service we run on
+  Cloudflare (a Worker + D1 database). Declare this under **App activity → App
+  interactions** (and/or **Web page views**): **collected**, some processing by a
+  third-party infrastructure provider (Cloudflare), **not shared** onward for
+  advertising, and **not used to track** users across apps/sites. It is cookieless,
+  stores no personal data (no id, no location, no free text), and does not identify
+  individuals.
 - **Location:** the app *uses* approximate/precise location (the "Show my
   location" feature) but does **not** collect, store, or transmit it — it's used
   only on-device to center the map. Declare it as **used, not collected/shared**.
