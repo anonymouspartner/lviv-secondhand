@@ -29,6 +29,15 @@ export default {
     if (request.method === 'GET') return new Response('ok', { status: 200, headers: cors() });
     if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: cors() });
 
+    // Per-IP rate limit so nobody can spam the collector to pollute D1 or burn
+    // the free-tier write quota. Guarded: if the binding is absent, skip rather
+    // than fail (the enum + size caps below still bound what any request can do).
+    if (env.RATE_LIMITER) {
+      const ip = request.headers.get('CF-Connecting-IP') || 'anon';
+      const { success } = await env.RATE_LIMITER.limit({ key: ip });
+      if (!success) return new Response('rate limited', { status: 429, headers: cors() });
+    }
+
     let body;
     try {
       const text = await request.text();
