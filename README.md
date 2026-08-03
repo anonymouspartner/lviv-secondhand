@@ -73,6 +73,38 @@ You can export every store on the map as a `.kml` file and import it straight in
 
 No accounts, no ads, no personal tracking. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking. Full details: **[Privacy Policy](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (also linked from the in-app **?** Help panel).
 
+## 📊 Analytics & metrics (for maintainers)
+
+Two independent, privacy-friendly analytics layers — both free-tier, both anonymous (no personal data, no cookies, no cross-site tracking):
+
+### 1. Traffic — Cloudflare Web Analytics
+- **What:** page views, visits, countries, referrers, device/browser breakdown.
+- **How:** a cookieless beacon in `index.html` (`CF_ANALYTICS_TOKEN`), loaded from `static.cloudflareinsights.com`.
+- **View:** Cloudflare dashboard → **Web Analytics → `anonymouspartner.github.io`**. Since the app is at a subpath on the shared host, filter by **Path `/lviv-secondhand/`** to isolate it.
+
+### 2. In-app behavior — custom Cloudflare Worker + D1
+Anonymous events (store opens, filter/tab/language switches, add/share/export/contribute) sent from the app to a first-party collector.
+
+| Piece | Where |
+| --- | --- |
+| Client `track()` | `index.html` (`METRICS_URL`, fire-and-forget via `sendBeacon`) |
+| Collector Worker | `worker/worker.js` → `https://lviv-metrics.lshanalytic.workers.dev` |
+| Worker config | `worker/wrangler.toml` (binds the D1 database) |
+| Database | Cloudflare **D1** `lviv-metrics` — one `events` table (`ts, day, type, key, lang`) |
+| Auto-deploy | `.github/workflows/deploy-worker.yml` — redeploys the Worker on any `worker/**` change |
+
+- **Event shape:** `{ type, key, lang }` where `type` ∈ `store_open · filter · tab · lang · action`. The Worker validates against that enum and stores **no** IP, id, coordinates, or free text.
+- **Deploy secrets** (repo → Settings → Secrets and variables → **Actions**): `CLOUDFLARE_API_TOKEN` (Edit Workers + D1 Edit), `CLOUDFLARE_ACCOUNT_ID`.
+- **View the data:** query the `lviv-metrics` D1 database — e.g. in the Cloudflare dashboard (**Workers & Pages → D1 → lviv-metrics → Console**) or the Cloudflare MCP connector. Example:
+  ```sql
+  SELECT key AS store, COUNT(*) AS opens
+  FROM events
+  WHERE type = 'store_open' AND day >= date('now','-7 day')
+  GROUP BY key ORDER BY opens DESC LIMIT 10;
+  ```
+
+Both layers are disclosed in [`privacy.html`](https://anonymouspartner.github.io/lviv-secondhand/privacy.html) (§2 and §5) and the Play Store Data Safety notes (`docs/PLAY_STORE.md`). To disable either, blank out `CF_ANALYTICS_TOKEN` / `METRICS_URL` in `index.html`.
+
 ---
 
 # 🇺🇦 Lviv Second Hand — Пошук секонд-хендів
