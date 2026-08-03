@@ -16,3 +16,13 @@ name = "RATE_LIMITER"
 type = "ratelimit"
 namespace_id = "1001"
 simple = { limit = 120, period = 60 }
+
+# Daily restock-notification cron: 07:00 UTC (~09:00–10:00 Kyiv). The handler
+# figures out which stores restock "today" (Europe/Kyiv) and pushes to followers.
+[triggers]
+crons = ["0 7 * * *"]
+
+# Public VAPID key (safe to publish; matches VAPID_PUBLIC_KEY in index.html).
+# The private key is set separately as the VAPID_PRIVATE secret — NEVER commit it.
+[vars]
+VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYMLARMgG9jVovK7W3uUDNp7kU"
