@@ -142,7 +142,11 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
     if (request.method === 'GET') {
-      if (url.pathname === '/status') return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE });
+      if (url.pathname === '/status') {
+        let subs = null;
+        try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
+        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs });
+      }
       return new Response('ok', { status: 200, headers: cors() });
     }
     if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: cors() });
@@ -152,6 +156,24 @@ export default {
       const ip = request.headers.get('CF-Connecting-IP') || 'anon';
       const { success } = await env.RATE_LIMITER.limit({ key: ip });
       if (!success) return new Response('rate limited', { status: 429, headers: cors() });
+    }
+
+    // ── Admin: broadcast a test push to every subscription (server-side verify) ──
+    if (url.pathname === '/admin/test') {
+      if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) return json({ ok: false, reason: 'unauthorized' }, 401);
+      if (!env.VAPID_PRIVATE) return json({ ok: false, reason: 'push_not_configured' }, 503);
+      await ensureSchema(env);
+      const res = await env.DB.prepare('SELECT endpoint, p256dh, auth FROM push_subs').all();
+      const subs = (res && res.results) || [];
+      const payload = JSON.stringify({
+        title: '✅ Server test — Lviv Second Hand',
+        body: 'This test push was sent from the server. Restock alerts are working!',
+        url: 'https://anonymouspartner.github.io/lviv-secondhand/',
+        tag: 'admin-test',
+      });
+      let sent = 0;
+      for (const s of subs) { try { await sendPush(s, payload, env); sent++; } catch {} }
+      return json({ ok: true, count: subs.length, sent }, 200);
     }
 
     let body;

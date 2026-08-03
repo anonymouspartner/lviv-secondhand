@@ -34,3 +34,12 @@ jobs:
         run: |
           if [ -z "$VAPID_PRIVATE" ]; then echo "VAPID_PRIVATE not set — skipping (restock push stays off until you add it)"; exit 0; fi
           printf '%s' "$VAPID_PRIVATE" | npx --yes wrangler@3 secret put VAPID_PRIVATE
+      - name: Set admin key secret
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          if [ -z "$ADMIN_KEY" ]; then echo "ADMIN_KEY not set — skipping (server-side broadcast test stays off until you add it)"; exit 0; fi
+          printf '%s' "$ADMIN_KEY" | npx --yes wrangler@3 secret put ADMIN_KEY
