@@ -1,0 +1,48 @@
+Copyright © 2026 the Lviv Second Hand project owner (github.com/anonymouspartner).
+All rights reserved.
+
+"Lviv Second Hand" — the software in this repository, including but not limited
+to its source code, HTML/CSS/JavaScript, design, user interface, and the curated
+store dataset it contains — is proprietary and protected by copyright and, where
+applicable, database rights. It is NOT open-source software.
+
+PERMITTED
+  - You may use the officially hosted application
+    (https://anonymouspartner.github.io/lviv-secondhand/) in a web browser for
+    your own personal, non-commercial purposes.
+
+NOT PERMITTED without the prior written permission of the copyright holder
+  - Copying, reproducing, republishing, mirroring, or redistributing the source
+    code or any substantial part of it, in any form or medium;
+  - Creating derivative works, clones, forks-for-reuse, ports, or adaptations;
+  - Copying, extracting, scraping, harvesting, or reusing the curated store
+    dataset (names, addresses, hours, coordinates, schedules), in whole or in
+    substantial part;
+  - Hosting, deploying, or distributing this application or a materially similar
+    application derived from it;
+  - Using the "Lviv Second Hand" name, logo, wordmark, or other branding, or any
+    confusingly similar mark.
+
+NO IMPLIED LICENSE
+  No license, express or implied, is granted except as expressly stated above.
+  The fact that this code is viewable in a web browser or hosted on a public
+  code-hosting platform does NOT grant any right to copy, reuse, or redistribute
+  it. Any platform-level fork/clone permissions (e.g. a code host's terms of
+  service) do not grant a copyright license to reuse the work.
+
+THIRD-PARTY COMPONENTS
+  This project bundles third-party open-source components under their own
+  licenses, which continue to apply to those components only:
+    - Leaflet — BSD-2-Clause
+    - qrcode-generator — MIT
+  Map tiles are © OpenStreetMap contributors (ODbL). Nothing in this license
+  restricts your rights under those third-party licenses.
+
+NO WARRANTY
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+PERMISSIONS & CONTACT
+  To request permission for any use not permitted above, open an issue at
+  https://github.com/anonymouspartner/lviv-secondhand/issues.

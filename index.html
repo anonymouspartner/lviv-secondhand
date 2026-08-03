@@ -1,8 +1,17 @@
 <!DOCTYPE html>
+<!--
+  Lviv Second Hand
+  © 2026 the Lviv Second Hand project owner (github.com/anonymouspartner).
+  All rights reserved. Proprietary — NOT open-source. This source is provided to
+  run in your browser only; copying, redistributing, cloning, or reusing the code
+  or the curated store dataset is prohibited without written permission. See LICENSE.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="copyright" content="© 2026 Lviv Second Hand. All rights reserved. Proprietary — see LICENSE.">
+<meta name="author" content="Lviv Second Hand">
 <meta name="theme-color" content="#1b5e38">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -594,6 +603,8 @@ function setLang(l, viaUser){
 // DATA
 // ─────────────────────────────────────────────
 const STORES = [
+  // Copyright canary — never rendered/exported/shared (filtered by `watermark`).
+  { id:'wm1', watermark:true, name:'Секонд-хенд Орієнтир-7', brand:'Independent', address:'', addressEn:'', phone:'', type:'other', pricing:'item', hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'}, cycle:7, lat:49.800017, lng:24.000073, note:'' },
   { id:'h1', name:'HUMANA — Knyahyni Olhy', brand:'HUMANA', address:'вул. Княгині Ольги, 5а', addressEn:'Knyahyni Olhy St, 5a', phone:'(032) 245-50-09', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:35, lat:49.822992, lng:24.008012, note:'Large store. 5-week inventory cycle. Prices drop every day after delivery. Lucky hours: 30% off all items.' },
   { id:'h2', name:'HUMANA — Lyubinska', brand:'HUMANA', address:'вул. Любинська, 100 (2 поверх)', addressEn:'Lyubinska St, 100 (2nd floor)', phone:'(032) 24-04-40', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:14, lat:49.822719, lng:23.973377, note:'2nd floor entrance. 2-week inventory cycle.' },
   { id:'h3', name:'HUMANA — Chornovola', brand:'HUMANA', address:'просп. В. Чорновола, 95', addressEn:'V. Chornovola Ave, 95', phone:'(032) 244-53-98', type:'humana', pricing:'item', hours:{mon:'10:00–20:00',tue:'10:00–20:00',wed:'10:00–20:00',thu:'10:00–20:00',fri:'10:00–20:00',sat:'10:00–20:00',sun:'10:00–20:00'}, cycle:35, lat:49.86345, lng:24.016631, note:'5-week inventory cycle. Prices decrease daily.' },
@@ -846,7 +857,10 @@ function isOpenNow(s) {
   return cur >= open && cur < close;
 }
 
-function allStores() { return [...STORES, ...getCustomStores()]; }
+// Watermark/canary entries live in STORES but are filtered out everywhere in
+// this app, so they never render, export, or share. If one ever appears on
+// another map, that map copied our dataset. Keep the filter centralized here.
+function allStores() { return [...STORES, ...getCustomStores()].filter(s => !s.watermark); }
 
 function filtered() {
   const hidden = new Set(getHiddenStores());
@@ -1266,7 +1280,7 @@ function exportKML() {
   track('action','export');
   function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   const hidden = new Set(getHiddenStores());
-  const stores = [...STORES, ...getCustomStores()].filter(s => !hidden.has(s.id));
+  const stores = [...STORES, ...getCustomStores()].filter(s => !hidden.has(s.id) && !s.watermark);
   const marks = stores.map(s => {
     const hrs = s.hours ? Object.entries(s.hours).map(([d,h])=>d+':'+h).join(', ') : '';
     const desc = [s.addressEn||s.address||'', s.phone||'', s.pricing==='kg'?'By KG':'Itemized', (s.cycle||7)+'-day cycle', hrs, s.note||''].filter(Boolean).join('\n');
@@ -1888,7 +1902,8 @@ function renderHelp(){
           + `<button class="sheet-btn" style="background:#ff5a5f;margin-top:8px;" onclick="openDonate()">${escHtml(t('donateBtn'))}</button>`
         : '')
     + `<p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);"><a href="privacy.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">🔒 Privacy Policy · Політика конфіденційності</a></p>`
-    + `<p style="text-align:center;margin-top:6px;font-size:11px;color:var(--muted);">v${escHtml(APP_VERSION)}</p>`;
+    + `<p style="text-align:center;margin-top:6px;font-size:11px;color:var(--muted);">v${escHtml(APP_VERSION)}</p>`
+    + `<p style="text-align:center;margin-top:2px;font-size:11px;color:var(--muted);">© 2026 Lviv Second Hand · All rights reserved</p>`;
 }
 
 // ─────────────────────────────────────────────
@@ -1941,7 +1956,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-03.2';
+const APP_VERSION = '2026-08-03.3';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys

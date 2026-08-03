@@ -4,6 +4,8 @@ A PWA (Progressive Web App) for finding and tracking second-hand clothing stores
 
 **🔗 Live app:** https://anonymouspartner.github.io/lviv-secondhand/
 
+> **© 2026 — All rights reserved. Proprietary, _not_ open-source.** You may use the hosted app in your browser for personal use. Copying, redistributing, or cloning the code, or reusing the curated store dataset, is prohibited without written permission — see [LICENSE](LICENSE).
+
 No app store, no install required to use it in a browser — but adding it to your home screen gives you a fullscreen, app-like experience with one tap.
 
 ---
