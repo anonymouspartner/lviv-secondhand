@@ -3,8 +3,9 @@
 // Two jobs, both anonymous and free-tier:
 //  1. Usage metrics  — POST / with {type,key,lang}; stored in D1 (no personal data).
 //  2. Restock push   — POST /subscribe · /unsubscribe manage Web Push subscriptions
-//     (device endpoint + which stores it follows); a daily cron sends a push to
-//     followers of any store whose weekly restock day is today.
+//     (device endpoint + followed stores, each with a predicted next-restock
+//     date = last delivery + cycle); a daily cron pushes when that date arrives
+//     and rolls it forward by the cycle.
 //
 // Web Push (VAPID + RFC 8291 aes128gcm) is implemented with Web Crypto — no deps.
 // Deployed by .github/workflows/deploy-worker.yml. Secrets: VAPID_PRIVATE.
@@ -15,10 +16,18 @@ const LANGS = new Set(['en', 'ua']);
 const MAX_BATCH = 20;
 const MAX_BODY = 8192;
 const VAPID_SUBJECT = 'mailto:lviv.secondhand@example.com';
-const DAYS = new Set(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']);
-// Each follow now carries its own restock day + name (supplied by the client —
-// from a store's known restockDay, or asked from the user when it's missing),
-// so notifications work for ANY store without a server-side schedule.
+// Each follow carries the store's predicted next restock date + cycle + name
+// (client computes next = last delivery date + inventory cycle). The cron fires
+// on/after that date, then rolls it forward by the cycle. No server-side schedule.
+function addDaysStr(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function kyivDateStr() {
+  // 'YYYY-MM-DD' for "today" in Europe/Kyiv (en-CA yields ISO order).
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(new Date());
+}
 
 function cors() {
   return {
@@ -128,11 +137,6 @@ async function sendPush(sub, payloadStr, env) {
   }
 }
 
-function kyivWeekday() {
-  const wd = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Kyiv', weekday: 'short' }).format(new Date());
-  return wd.toLowerCase().slice(0, 3); // mon,tue,wed,thu,fri,sat,sun
-}
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -163,19 +167,22 @@ export default {
     if (url.pathname === '/subscribe') {
       const sub = body && body.subscription;
       const storeId = body && body.storeId;
-      const day = body && body.day;
+      const next = body && body.next;                 // 'YYYY-MM-DD' predicted next restock
+      const cycle = parseInt(body && body.cycle, 10); // inventory cycle in days
       const name = clean(body && body.name, 80);
       if (!sub || !sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth
-          || typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId) || !DAYS.has(day)) {
+          || typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)
+          || typeof next !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(next)
+          || !(cycle >= 1 && cycle <= 90)) {
         return new Response('bad request', { status: 400, headers: cors() });
       }
       await ensureSchema(env);
       const existing = await env.DB.prepare('SELECT stores FROM push_subs WHERE endpoint = ?').bind(sub.endpoint).first();
       let stores = [];
       if (existing) { try { stores = JSON.parse(existing.stores) || []; } catch {} }
-      // stores = array of {id, day, name}; replace any existing entry for this id.
+      // stores = array of {id, name, cycle, next}; replace any existing entry for this id.
       stores = stores.filter((x) => x && typeof x === 'object' && x.id !== storeId);
-      stores.push({ id: storeId, day, name });
+      stores.push({ id: storeId, name, cycle, next });
       stores = stores.slice(-200);
       await env.DB.prepare(
         'INSERT INTO push_subs (endpoint, p256dh, auth, stores) VALUES (?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, stores = excluded.stores'
@@ -238,15 +245,30 @@ export default {
     return new Response(null, { status: 204, headers: cors() });
   },
 
-  // ── Daily cron: notify followers of stores restocking today ──
+  // ── Daily cron: notify followers whose next predicted restock date has arrived ──
   async scheduled(event, env, ctx) {
-    const day = kyivWeekday();
+    const today = kyivDateStr(); // 'YYYY-MM-DD' (Europe/Kyiv)
     await ensureSchema(env);
     const res = await env.DB.prepare('SELECT endpoint, p256dh, auth, stores FROM push_subs').all();
     const rows = (res && res.results) || [];
     for (const r of rows) {
       let follows = []; try { follows = JSON.parse(r.stores) || []; } catch {}
-      const hits = follows.filter((f) => f && f.id && f.day === day);
+      let changed = false;
+      const hits = [];
+      for (const f of follows) {
+        if (f && f.id && typeof f.next === 'string' && f.next <= today) {
+          hits.push(f);
+          // Roll the next restock date forward by the cycle until it's in the future.
+          const c = (f.cycle >= 1 && f.cycle <= 90) ? f.cycle : 7;
+          let n = f.next;
+          while (n <= today) n = addDaysStr(n, c);
+          f.next = n;
+          changed = true;
+        }
+      }
+      if (changed) {
+        await env.DB.prepare('UPDATE push_subs SET stores = ? WHERE endpoint = ?').bind(JSON.stringify(follows), r.endpoint).run();
+      }
       if (!hits.length) continue;
       const names = hits.map((f) => f.name || 'A store you follow');
       const bodyText = names.length === 1
@@ -256,7 +278,7 @@ export default {
         title: '🛍️ Fresh stock today!',
         body: bodyText,
         url: 'https://anonymouspartner.github.io/lviv-secondhand/',
-        tag: 'restock-' + day,
+        tag: 'restock-' + today,
       });
       ctx.waitUntil(sendPush(r, payload, env).catch(() => {}));
     }
