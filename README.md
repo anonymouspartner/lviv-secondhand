@@ -39,6 +39,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - ⚖️ Supports both **by-KG** and **itemized** stores
 - 🌐 **EN / UA** language toggle
 - ✅ Mark stores as **visited**
+- 🔔 **Restock alerts** — follow a store and get a push notification the morning it restocks (opt-in; installed PWA required on iOS 16.4+)
 - ➕ **Add**, ✏️ **edit**, and 🗑️ **remove/hide** stores
 - 🤝 **Share your map** & **contribute** additions/edits to everyone
 - 📤 **Export** all store locations to Maps.me (KML)
@@ -148,6 +149,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - ⚖️ Підтримка магазинів **на кіло** та **поштучно**
 - 🌐 Перемикач мови **EN / UA**
 - ✅ Позначення магазинів як **відвіданих**
+- 🔔 **Сповіщення про завезення** — відстежуйте магазин і отримуйте push-сповіщення того ранку, коли буде завезення (за згодою; на iOS 16.4+ потрібен встановлений застосунок)
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 📤 **Експорт** усіх магазинів у Maps.me (KML)

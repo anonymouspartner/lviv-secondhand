@@ -152,6 +152,12 @@ honestly:
 - **Location:** the app *uses* approximate/precise location (the "Show my
   location" feature) but does **not** collect, store, or transmit it — it's used
   only on-device to center the map. Declare it as **used, not collected/shared**.
+- **Restock notifications (opt-in):** if the user taps 🔔 to follow a store, the
+  browser's push subscription (a device push endpoint) plus the followed store
+  ids are stored on our Cloudflare service to deliver restock alerts. Declare a
+  **Device or other IDs** item: **collected**, used only for **App
+  functionality** (notifications), **not shared**, **not used for tracking**, and
+  the user can delete it by unfollowing or revoking notification permission.
 - **Data handling:** user content is processed on-device; analytics is aggregate
   and handled by Cloudflare. Nothing is sold. Data is **not** used for tracking.
 - Note in your own words that opening the app contacts GitHub Pages (hosting),

@@ -2,7 +2,7 @@
    - App shell + Leaflet are precached so the app opens offline.
    - HTML is network-first so an online visit always gets the latest build.
    - Map tiles are cached opportunistically for offline panning of visited areas. */
-const SHELL_CACHE = 'lviv-sh-shell-v2';
+const SHELL_CACHE = 'lviv-sh-shell-v3';
 const TILE_CACHE  = 'lviv-sh-tiles-v1';
 const MAX_TILES = 400;
 
@@ -39,6 +39,28 @@ async function trimTiles() {
     for (let i = 0; i < keys.length - MAX_TILES; i++) await cache.delete(keys[i]);
   }
 }
+
+// Restock push notifications (payload is JSON sent by the metrics/push Worker).
+self.addEventListener('push', (e) => {
+  let data = { title: 'Lviv Second Hand', body: '', url: './' };
+  try { if (e.data) data = Object.assign(data, e.data.json()); } catch (err) {}
+  e.waitUntil(self.registration.showNotification(data.title, {
+    body: data.body,
+    icon: 'icon-192.png',
+    badge: 'favicon-32.png',
+    tag: data.tag || 'restock',
+    data: { url: data.url || './' }
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
+    for (const c of cs) { if ('focus' in c) return c.focus(); }
+    return clients.openWindow(url);
+  }));
+});
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
