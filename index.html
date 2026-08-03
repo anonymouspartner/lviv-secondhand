@@ -1941,7 +1941,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-03.1';
+const APP_VERSION = '2026-08-03.2';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
@@ -1982,7 +1982,7 @@ function initAnalytics(){
 // filter name, tab, language, action). Fire-and-forget via sendBeacon; inert
 // until METRICS_URL is set. Disclosed in privacy.html before it was enabled.
 // ─────────────────────────────────────────────
-const METRICS_URL = '';
+const METRICS_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
 function track(type, key){
   if (!METRICS_URL) return;
   try {
