@@ -42,6 +42,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🔔 **Restock alerts** — follow a store and get a push notification the morning it restocks (opt-in; installed PWA required on iOS 16.4+)
 - ➕ **Add**, ✏️ **edit**, and 🗑️ **remove/hide** stores
 - 🤝 **Share your map** & **contribute** additions/edits to everyone
+- 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
 - 📶 **Works offline** — installable PWA with on-device caching, no CDN dependency
 
 ## 🤝 Sharing & Contributing
@@ -142,6 +143,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - 🔔 **Сповіщення про завезення** — відстежуйте магазин і отримуйте push-сповіщення того ранку, коли буде завезення (за згодою; на iOS 16.4+ потрібен встановлений застосунок)
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
+- 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
 - 📶 **Працює офлайн** — встановлюваний застосунок (PWA) із локальним кешуванням, без залежності від CDN
 
 ## 🤝 Обмін і внесок
