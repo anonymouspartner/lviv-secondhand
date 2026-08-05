@@ -330,8 +330,8 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
       <p style="margin-top:8px;">To help everyone, tap <strong>🌍 Contribute to the official map</strong> — it opens a pre-filled GitHub form with your additions and corrections so they can be merged into the map that ships with the app.</p>
     </div>
     <div class="help-section">
-      <h3>📤 Maps.me Integration</h3>
-      <p>Tap the <strong>📤</strong> button in the top-right to download a KML file with all store locations. In Maps.me: tap ☰ → Bookmarks → ⋮ → Import → select the file. All stores appear as bookmarks. Inside any store, tap <strong>📍 Maps.me</strong> to jump straight to that store on the Maps.me map. To add a new store you discover, long-press on the spot in Maps.me to drop a pin, then bookmark it.</p>
+      <h3>📍 Open in Maps.me / Google Maps</h3>
+      <p>Inside any store, tap <strong>📍 Maps.me</strong> or <strong>🗺️ Google Maps</strong> to jump straight to that store for turn-by-turn directions.</p>
     </div>
     <button class="sheet-btn" onclick="document.getElementById('help-overlay').classList.add('hidden')">Got it!</button>
     <p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);">
@@ -515,7 +515,6 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
       <span class="lp" id="lang-ua" role="button" tabindex="0" aria-pressed="false" onclick="setLang('ua',true)">УА</span>
     </div>
     <button class="help-btn" onclick="openShareModal()" title="Share your map & contribute stores" aria-label="Share your map and contribute stores" style="font-size:18px;">🤝</button>
-    <button class="help-btn" onclick="exportKML()" title="Export all stores to Maps.me KML" aria-label="Export all stores to Maps.me KML" style="font-size:18px;">📤</button>
     <button class="help-btn" id="donate-btn" onclick="openDonate()" title="Support this app · Підтримати застосунок" aria-label="Support this app" style="font-size:18px;display:none;">❤️</button>
     <button class="help-btn" onclick="document.getElementById('help-overlay').classList.remove('hidden')" title="Help" aria-label="Help">?</button>
   </div>
@@ -1304,29 +1303,6 @@ function renderPins() {
 }
 
 // ─────────────────────────────────────────────
-// MAPS.ME KML EXPORT
-// ─────────────────────────────────────────────
-function exportKML() {
-  track('action','export');
-  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  const hidden = new Set(getHiddenStores());
-  const stores = [...STORES, ...getCustomStores()].filter(s => !hidden.has(s.id) && !s.watermark);
-  const marks = stores.map(s => {
-    const hrs = s.hours ? Object.entries(s.hours).map(([d,h])=>d+':'+h).join(', ') : '';
-    const desc = [s.addressEn||s.address||'', s.phone||'', s.pricing==='kg'?'By KG':'Itemized', (s.cycle||7)+'-day cycle', hrs, s.note||''].filter(Boolean).join('\n');
-    return '  <Placemark><name>'+esc(s.name)+'</name><description>'+esc(desc)+'</description><Point><coordinates>'+s.lng+','+s.lat+',0</coordinates></Point></Placemark>';
-  }).join('\n');
-  const kml = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>\n<name>Lviv Second Hand Stores</name>\n'+marks+'\n</Document></kml>';
-  const blob = new Blob([kml],{type:'application/vnd.google-earth.kml+xml'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href=url; a.download='lviv-secondhand.kml';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-  alert(t('kmlDone'));
-}
-
-// ─────────────────────────────────────────────
 // CUSTOM STORES
 // ─────────────────────────────────────────────
 function getCustomStores(){
@@ -1912,7 +1888,7 @@ const HELP = {
     ['✏️ Edit or remove a store','Open any store and tap <strong>Edit Store</strong> to fix its details, or <strong>🗑️ Remove this store</strong> at the bottom. Stores <em>you</em> added are deleted; built-in stores are just hidden on your device — a <strong>"Restore all"</strong> link at the bottom of the list brings them back anytime.'],
     ['⚖️ KG vs Itemized','<strong>By KG</strong> stores charge by weight — you fill a bag and pay per kilogram, and prices drop every day. <strong>Itemized</strong> stores price each item individually.'],
     ['🤝 Share & Contribute','Tap <strong>🤝</strong> to share the stores you\'ve added or edited via a link, file, or code — anyone who opens it merges them onto their map (duplicates are skipped). Tap <strong>🌍 Contribute to the official map</strong> to open a pre-filled GitHub form so your changes can ship with the app.'],
-    ['📤 Maps.me Integration','Tap <strong>📤</strong> to download a KML file with all store locations. In Maps.me: ☰ → Bookmarks → ⋮ → Import → select the file. Inside any store, tap <strong>📍 Maps.me</strong> to jump straight there.'] ] },
+    ['📍 Directions','Inside any store, tap <strong>📍 Maps.me</strong> or <strong>🗺️ Google Maps</strong> to jump straight to it for directions.'] ] },
   ua: { title:'Як користуватися додатком', got:'Зрозуміло!', sections:[
     ['📋 Список','Показує всі магазини. Використовуйте <strong>кнопки фільтрів</strong> угорі, щоб показати лише HUMANA, лише на вагу, відвідані чи ще не відвідані. Проведіть фільтри вбік, якщо не всі видно.'],
     ['🗺️ Карта','Показує розташування магазинів як позначки. <strong>Червоні</strong> = HUMANA. <strong>Сині</strong> = інші. ✓ означає, що ви відвідали. Натисніть позначку для короткого опису, потім «Деталі».<br><br>Натисніть кнопку <strong>📍</strong> (внизу праворуч), щоб увімкнути <strong>ваше місцезнаходження</strong> — ви з\'явитесь синьою крапкою, що рухається за вами. Кнопка стає зеленою, коли ввімкнено; натисніть ще раз, щоб вимкнути. Уперше браузер запитає дозвіл.'],
@@ -1921,7 +1897,7 @@ const HELP = {
     ['✏️ Редагувати чи видалити','Відкрийте магазин і натисніть <strong>«Редагувати»</strong>, щоб змінити деталі, або <strong>🗑️ Видалити магазин</strong> внизу. Магазини, <em>додані вами</em>, видаляються; вбудовані просто ховаються на вашому пристрої — посилання <strong>«Відновити всі»</strong> внизу списку поверне їх будь-коли.'],
     ['⚖️ На вагу чи поштучно','Магазини <strong>на вагу</strong> рахують за кілограм — наповнюєте пакет і платите за кг, ціни падають щодня. <strong>Поштучні</strong> оцінюють кожну річ окремо.'],
     ['🤝 Обмін і внесок','Натисніть <strong>🤝</strong>, щоб поділитися доданими чи зміненими магазинами через посилання, файл або код — хто відкриє, додасть їх на свою карту (дублікати пропускаються). Натисніть <strong>🌍 Внести до офіційної карти</strong>, щоб відкрити заповнену форму GitHub і додати зміни до додатка.'],
-    ['📤 Інтеграція з Maps.me','Натисніть <strong>📤</strong>, щоб завантажити файл KML з усіма магазинами. У Maps.me: ☰ → Закладки → ⋮ → Імпорт → виберіть файл. У магазині натисніть <strong>📍 Maps.me</strong>, щоб одразу перейти туди.'] ] }
+    ['📍 Маршрут','У магазині натисніть <strong>📍 Maps.me</strong> або <strong>🗺️ Google Maps</strong>, щоб одразу прокласти маршрут.'] ] }
 };
 function renderHelp(){
   const hp = HELP[lang] || HELP.en;
@@ -2004,7 +1980,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-04.5';
+const APP_VERSION = '2026-08-04.6';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
