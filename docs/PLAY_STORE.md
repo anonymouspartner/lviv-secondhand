@@ -22,25 +22,15 @@ verify each other through a file served at the **origin root**:
 https://<your-origin>/.well-known/assetlinks.json
 ```
 
-The app currently lives at a **subpath**: `anonymouspartner.github.io/lviv-secondhand/`.
-On GitHub Pages you can only control `/.well-known/` at the origin root if you
-own the `anonymouspartner.github.io` **user repo** — a project page can't place
-a file at the domain root.
+**Resolved:** the app is now served from its own custom domain,
+`https://www.lvivsecondhand.com/` (the repo ships a `CNAME` file and GitHub
+Pages provisions HTTPS). Because the app is at the domain **root**, the repo's
+`.well-known/assetlinks.json` is reachable at
+`https://www.lvivsecondhand.com/.well-known/assetlinks.json` ✅ — so the TWA
+address bar can be hidden once you fill in the app fingerprint (section 3).
 
-**Recommended fix: use a custom domain** (e.g. `lvivsecondhand.com`):
-
-1. Buy a domain.
-2. In the repo: **Settings → Pages → Custom domain**, set your domain; GitHub
-   writes a `CNAME` file and provisions HTTPS.
-3. Point the domain's DNS at GitHub Pages (A/AAAA records for the apex, or a
-   CNAME to `anonymouspartner.github.io` for a subdomain).
-4. Because the app is served at the domain root, the repo's
-   `.well-known/assetlinks.json` is now reachable at
-   `https://your-domain/.well-known/assetlinks.json`. ✅
-
-If you skip the custom domain, the app can still be wrapped, but it will show a
-browser address bar and Google is more likely to reject it as a low-value
-webview wrapper.
+Use `www.lvivsecondhand.com` as the origin everywhere below (Package/verification,
+manifest URL, privacy-policy URL).
 
 ---
 
@@ -73,7 +63,7 @@ webview wrapper.
 
 ```bash
 npm install -g @bubblewrap/cli
-bubblewrap init --manifest https://your-domain/manifest.webmanifest
+bubblewrap init --manifest https://www.lvivsecondhand.com/manifest.webmanifest
 bubblewrap build
 ```
 
@@ -98,7 +88,7 @@ keytool -list -v -keystore android.keystore -alias android -storepass <pw>
    `REPLACE_WITH_...` placeholders.
 3. Commit and let GitHub Pages deploy.
 4. Verify it's live and correct:
-   - Visit `https://your-domain/.well-known/assetlinks.json` (must return the
+   - Visit `https://www.lvivsecondhand.com/.well-known/assetlinks.json` (must return the
      JSON, `Content-Type: application/json`).
    - Test with Google's tool:
      `https://developers.google.com/digital-asset-links/tools/generator`
@@ -132,7 +122,7 @@ In https://play.google.com/console → **Create app**:
 ## 5. Play Console — required declarations
 
 ### Privacy policy
-- [ ] Link `https://your-domain/privacy.html` in **Store settings → Privacy policy**.
+- [ ] Link `https://www.lvivsecondhand.com/privacy.html` in **Store settings → Privacy policy**.
 
 ### Data safety form (App content → Data safety)
 This app is privacy-friendly, but it **does** use cookieless analytics, so answer

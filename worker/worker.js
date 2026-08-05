@@ -10,7 +10,13 @@
 // Web Push (VAPID + RFC 8291 aes128gcm) is implemented with Web Crypto — no deps.
 // Deployed by .github/workflows/deploy-worker.yml. Secrets: VAPID_PRIVATE.
 
-const ALLOWED_ORIGIN = 'https://anonymouspartner.github.io';
+const PRIMARY_ORIGIN = 'https://www.lvivsecondhand.com';
+const ALLOWED_ORIGINS = new Set([
+  'https://www.lvivsecondhand.com',
+  'https://lvivsecondhand.com',
+  'https://anonymouspartner.github.io', // legacy GitHub Pages origin (transition)
+]);
+const APP_URL = 'https://www.lvivsecondhand.com/';
 const TYPES = new Set(['store_open', 'filter', 'tab', 'lang', 'action']);
 const LANGS = new Set(['en', 'ua']);
 const MAX_BATCH = 20;
@@ -29,15 +35,16 @@ function kyivDateStr() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(new Date());
 }
 
-function cors() {
+function cors(origin) {
   return {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': ALLOWED_ORIGINS.has(origin) ? origin : PRIMARY_ORIGIN,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   };
 }
-function json(obj, status) { return new Response(obj == null ? null : JSON.stringify(obj), { status: status || 200, headers: { ...cors(), 'Content-Type': 'application/json' } }); }
+function json(obj, status, origin) { return new Response(obj == null ? null : JSON.stringify(obj), { status: status || 200, headers: { ...cors(origin), 'Content-Type': 'application/json' } }); }
 function clean(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
 
 let _schemaReady = false;
@@ -140,49 +147,50 @@ async function sendPush(sub, payloadStr, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors() });
+    const origin = request.headers.get('Origin') || '';
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
     if (request.method === 'GET') {
       if (url.pathname === '/status') {
         let subs = null;
         try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
-        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs });
+        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs }, 200, origin);
       }
-      return new Response('ok', { status: 200, headers: cors() });
+      return new Response('ok', { status: 200, headers: cors(origin) });
     }
-    if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: cors() });
+    if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: cors(origin) });
 
     // Per-IP rate limit (guarded — skip if binding absent).
     if (env.RATE_LIMITER) {
       const ip = request.headers.get('CF-Connecting-IP') || 'anon';
       const { success } = await env.RATE_LIMITER.limit({ key: ip });
-      if (!success) return new Response('rate limited', { status: 429, headers: cors() });
+      if (!success) return new Response('rate limited', { status: 429, headers: cors(origin) });
     }
 
     // ── Admin: broadcast a test push to every subscription (server-side verify) ──
     if (url.pathname === '/admin/test') {
-      if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) return json({ ok: false, reason: 'unauthorized' }, 401);
-      if (!env.VAPID_PRIVATE) return json({ ok: false, reason: 'push_not_configured' }, 503);
+      if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      if (!env.VAPID_PRIVATE) return json({ ok: false, reason: 'push_not_configured' }, 503, origin);
       await ensureSchema(env);
       const res = await env.DB.prepare('SELECT endpoint, p256dh, auth FROM push_subs').all();
       const subs = (res && res.results) || [];
       const payload = JSON.stringify({
         title: '✅ Server test — Lviv Second Hand',
         body: 'This test push was sent from the server. Restock alerts are working!',
-        url: 'https://anonymouspartner.github.io/lviv-secondhand/',
+        url: APP_URL,
         tag: 'admin-test',
       });
       let sent = 0;
       for (const s of subs) { try { await sendPush(s, payload, env); sent++; } catch {} }
-      return json({ ok: true, count: subs.length, sent }, 200);
+      return json({ ok: true, count: subs.length, sent }, 200, origin);
     }
 
     let body;
     try {
       const text = await request.text();
-      if (text.length > MAX_BODY) return new Response('too large', { status: 413, headers: cors() });
+      if (text.length > MAX_BODY) return new Response('too large', { status: 413, headers: cors(origin) });
       body = JSON.parse(text);
     } catch {
-      return new Response('bad json', { status: 400, headers: cors() });
+      return new Response('bad json', { status: 400, headers: cors(origin) });
     }
 
     // ── Push subscription management ──
@@ -196,7 +204,7 @@ export default {
           || typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)
           || typeof next !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(next)
           || !(cycle >= 1 && cycle <= 90)) {
-        return new Response('bad request', { status: 400, headers: cors() });
+        return new Response('bad request', { status: 400, headers: cors(origin) });
       }
       await ensureSchema(env);
       const existing = await env.DB.prepare('SELECT stores FROM push_subs WHERE endpoint = ?').bind(sub.endpoint).first();
@@ -209,13 +217,13 @@ export default {
       await env.DB.prepare(
         'INSERT INTO push_subs (endpoint, p256dh, auth, stores) VALUES (?, ?, ?, ?) ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, stores = excluded.stores'
       ).bind(sub.endpoint, clean(sub.keys.p256dh, 200), clean(sub.keys.auth, 100), JSON.stringify(stores)).run();
-      return new Response(null, { status: 204, headers: cors() });
+      return new Response(null, { status: 204, headers: cors(origin) });
     }
 
     if (url.pathname === '/unsubscribe') {
       const endpoint = body && body.endpoint;
       const storeId = body && body.storeId;
-      if (!endpoint || typeof endpoint !== 'string') return new Response('bad request', { status: 400, headers: cors() });
+      if (!endpoint || typeof endpoint !== 'string') return new Response('bad request', { status: 400, headers: cors(origin) });
       await ensureSchema(env);
       if (storeId) {
         const ex = await env.DB.prepare('SELECT stores FROM push_subs WHERE endpoint = ?').bind(endpoint).first();
@@ -228,25 +236,25 @@ export default {
       } else {
         await env.DB.prepare('DELETE FROM push_subs WHERE endpoint = ?').bind(endpoint).run();
       }
-      return new Response(null, { status: 204, headers: cors() });
+      return new Response(null, { status: 204, headers: cors(origin) });
     }
 
     // ── Send a test push to an already-subscribed device (on-demand verify) ──
     if (url.pathname === '/test-push') {
       const endpoint = body && body.endpoint;
-      if (!endpoint || typeof endpoint !== 'string') return new Response('bad request', { status: 400, headers: cors() });
+      if (!endpoint || typeof endpoint !== 'string') return new Response('bad request', { status: 400, headers: cors(origin) });
       await ensureSchema(env);
       const sub = await env.DB.prepare('SELECT endpoint, p256dh, auth FROM push_subs WHERE endpoint = ?').bind(endpoint).first();
-      if (!sub) return json({ ok: false, reason: 'not_subscribed' }, 404);
-      if (!env.VAPID_PRIVATE) return json({ ok: false, reason: 'push_not_configured' }, 503);
+      if (!sub) return json({ ok: false, reason: 'not_subscribed' }, 404, origin);
+      if (!env.VAPID_PRIVATE) return json({ ok: false, reason: 'push_not_configured' }, 503, origin);
       const payload = JSON.stringify({
         title: '✅ Test — Lviv Second Hand',
         body: 'Notifications are working! You will get an alert when a store you follow restocks.',
-        url: 'https://anonymouspartner.github.io/lviv-secondhand/',
+        url: APP_URL,
         tag: 'test',
       });
-      try { await sendPush(sub, payload, env); } catch { return json({ ok: false, reason: 'send_failed' }, 500); }
-      return json({ ok: true }, 200);
+      try { await sendPush(sub, payload, env); } catch { return json({ ok: false, reason: 'send_failed' }, 500, origin); }
+      return json({ ok: true }, 200, origin);
     }
 
     // ── Usage metrics (root POST) ──
@@ -257,14 +265,14 @@ export default {
       if (!e || !TYPES.has(e.type)) continue;
       rows.push({ type: e.type, key: clean(e.key, 40), lang: LANGS.has(e.lang) ? e.lang : null });
     }
-    if (!rows.length) return new Response(null, { status: 204, headers: cors() });
+    if (!rows.length) return new Response(null, { status: 204, headers: cors(origin) });
     try {
       const stmt = env.DB.prepare('INSERT INTO events (day, type, key, lang) VALUES (?, ?, ?, ?)');
       await env.DB.batch(rows.map((r) => stmt.bind(day, r.type, r.key, r.lang)));
     } catch {
-      return new Response('db error', { status: 500, headers: cors() });
+      return new Response('db error', { status: 500, headers: cors(origin) });
     }
-    return new Response(null, { status: 204, headers: cors() });
+    return new Response(null, { status: 204, headers: cors(origin) });
   },
 
   // ── Daily cron: notify followers whose next predicted restock date has arrived ──
@@ -299,7 +307,7 @@ export default {
       const payload = JSON.stringify({
         title: '🛍️ Fresh stock today!',
         body: bodyText,
-        url: 'https://anonymouspartner.github.io/lviv-secondhand/',
+        url: APP_URL,
         tag: 'restock-' + today,
       });
       ctx.waitUntil(sendPush(r, payload, env).catch(() => {}));

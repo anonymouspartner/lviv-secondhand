@@ -2,7 +2,7 @@
 
 A PWA (Progressive Web App) for finding and tracking second-hand clothing stores in Lviv, Ukraine.
 
-**🔗 Live app:** https://anonymouspartner.github.io/lviv-secondhand/
+**🔗 Live app:** https://www.lvivsecondhand.com/
 
 > **© 2026 — All rights reserved. Proprietary, _not_ open-source.** You may use the hosted app in your browser for personal use. Copying, redistributing, or cloning the code, or reusing the curated store dataset, is prohibited without written permission — see [LICENSE](LICENSE).
 
@@ -13,7 +13,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 ## 📲 Install on Android
 
 1. Open **Chrome** on your phone
-2. Go to https://anonymouspartner.github.io/lviv-secondhand/
+2. Go to https://www.lvivsecondhand.com/
 3. Tap the **⋮** menu (top-right)
 4. Tap **"Add to Home Screen"**
 5. Tap **Add**
@@ -22,7 +22,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 ## 🍏 Install on iPhone
 
 1. Open **Safari** (must be Safari, not Chrome)
-2. Go to https://anonymouspartner.github.io/lviv-secondhand/
+2. Go to https://www.lvivsecondhand.com/
 3. Tap the **Share** button (box with arrow, bottom of screen)
 4. Tap **"Add to Home Screen"**
 5. Tap **Add**
@@ -74,7 +74,7 @@ You can export every store on the map as a `.kml` file and import it straight in
 
 ## 🔒 Privacy
 
-No accounts, no ads, no personal tracking. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking. Full details: **[Privacy Policy](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (also linked from the in-app **?** Help panel).
+No accounts, no ads, no personal tracking. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking. Full details: **[Privacy Policy](https://www.lvivsecondhand.com/privacy.html)** (also linked from the in-app **?** Help panel).
 
 ## 📊 Analytics & metrics (for maintainers)
 
@@ -83,7 +83,7 @@ Two independent, privacy-friendly analytics layers — both free-tier, both anon
 ### 1. Traffic — Cloudflare Web Analytics
 - **What:** page views, visits, countries, referrers, device/browser breakdown.
 - **How:** a cookieless beacon in `index.html` (`CF_ANALYTICS_TOKEN`), loaded from `static.cloudflareinsights.com`.
-- **View:** Cloudflare dashboard → **Web Analytics → `anonymouspartner.github.io`**. Since the app is at a subpath on the shared host, filter by **Path `/lviv-secondhand/`** to isolate it.
+- **View:** Cloudflare dashboard → **Web Analytics → `www.lvivsecondhand.com`** (add this hostname in Web Analytics once the domain is live). The app now sits at its own domain root, so no path filtering is needed.
 
 ### 2. In-app behavior — custom Cloudflare Worker + D1
 Anonymous events (store opens, filter/tab/language switches, add/share/export/contribute) sent from the app to a first-party collector.
@@ -106,7 +106,7 @@ Anonymous events (store opens, filter/tab/language switches, add/share/export/co
   GROUP BY key ORDER BY opens DESC LIMIT 10;
   ```
 
-Both layers are disclosed in [`privacy.html`](https://anonymouspartner.github.io/lviv-secondhand/privacy.html) (§2 and §5) and the Play Store Data Safety notes (`docs/PLAY_STORE.md`). To disable either, blank out `CF_ANALYTICS_TOKEN` / `METRICS_URL` in `index.html`.
+Both layers are disclosed in [`privacy.html`](https://www.lvivsecondhand.com/privacy.html) (§2 and §5) and the Play Store Data Safety notes (`docs/PLAY_STORE.md`). To disable either, blank out `CF_ANALYTICS_TOKEN` / `METRICS_URL` in `index.html`.
 
 ---
 
@@ -114,7 +114,7 @@ Both layers are disclosed in [`privacy.html`](https://anonymouspartner.github.io
 
 PWA (прогресивний веб-додаток) для пошуку та відстеження магазинів секонд-хенду у Львові.
 
-**🔗 Посилання на застосунок:** https://anonymouspartner.github.io/lviv-secondhand/
+**🔗 Посилання на застосунок:** https://www.lvivsecondhand.com/
 
 Встановлення не обов'язкове — додаток працює у браузері, але якщо додати його на головний екран, він відкриватиметься на весь екран, як звичайний застосунок.
 
@@ -123,7 +123,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 ## 📲 Встановлення на Android
 
 1. Відкрийте **Chrome** на телефоні
-2. Перейдіть на https://anonymouspartner.github.io/lviv-secondhand/
+2. Перейдіть на https://www.lvivsecondhand.com/
 3. Натисніть меню **⋮** (праворуч зверху)
 4. Натисніть **«Додати на головний екран»**
 5. Натисніть **Додати**
@@ -132,7 +132,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 ## 🍏 Встановлення на iPhone
 
 1. Відкрийте **Safari** (саме Safari, не Chrome)
-2. Перейдіть на https://anonymouspartner.github.io/lviv-secondhand/
+2. Перейдіть на https://www.lvivsecondhand.com/
 3. Натисніть кнопку **«Поділитися»** (квадрат зі стрілкою, знизу екрана)
 4. Натисніть **«На екран «Додому»»**
 5. Натисніть **Додати**
@@ -176,4 +176,4 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 ## 🔒 Конфіденційність
 
-Без облікових записів, реклами та персонального стеження. Усе, що ви робите, залишається у вашому браузері на вашому пристрої — воно ніколи не надсилається на сервер і не залишає ваш телефон, доки ви самі не вирішите поділитися. Єдине, що вимірюється, — це анонімний, узагальнений трафік (перегляди та відвідування) через **Cloudflare Web Analytics** та анонімне використання додатка (які магазини/фільтри застосовують) через невеликий власний сервіс на Cloudflare — обидва без файлів cookie, без персональних даних і без відстеження окремих відвідувачів чи міжсайтового стеження. Докладніше: **[Політика конфіденційності](https://anonymouspartner.github.io/lviv-secondhand/privacy.html)** (також доступна з панелі довідки **?** у застосунку).
+Без облікових записів, реклами та персонального стеження. Усе, що ви робите, залишається у вашому браузері на вашому пристрої — воно ніколи не надсилається на сервер і не залишає ваш телефон, доки ви самі не вирішите поділитися. Єдине, що вимірюється, — це анонімний, узагальнений трафік (перегляди та відвідування) через **Cloudflare Web Analytics** та анонімне використання додатка (які магазини/фільтри застосовують) через невеликий власний сервіс на Cloudflare — обидва без файлів cookie, без персональних даних і без відстеження окремих відвідувачів чи міжсайтового стеження. Докладніше: **[Політика конфіденційності](https://www.lvivsecondhand.com/privacy.html)** (також доступна з панелі довідки **?** у застосунку).
