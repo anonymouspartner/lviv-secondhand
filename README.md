@@ -42,7 +42,6 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🔔 **Restock alerts** — follow a store and get a push notification the morning it restocks (opt-in; installed PWA required on iOS 16.4+)
 - ➕ **Add**, ✏️ **edit**, and 🗑️ **remove/hide** stores
 - 🤝 **Share your map** & **contribute** additions/edits to everyone
-- 📤 **Export** all store locations to Maps.me (KML)
 - 📶 **Works offline** — installable PWA with on-device caching, no CDN dependency
 
 ## 🤝 Sharing & Contributing
@@ -62,15 +61,6 @@ Contributions arrive as GitHub issues labelled `map-contribution`. Each issue li
 - **`custom`** — copy each object into the `STORES` array in `index.html` (assign a stable `id`, fill in `hours`).
 - **`overrides`** — fold each into the matching store's fields.
 - **`removed`** — a list of built-in store `id`s the contributor reports as non-existent/wrong; delete those entries from the `STORES` array.
-
-## 🗺️ Maps.me Integration
-
-You can export every store on the map as a `.kml` file and import it straight into [Maps.me](https://maps.me):
-
-1. In the app, tap the export button to download the `.kml` file
-2. Open Maps.me → **Bookmarks** → **Import**
-3. Select the downloaded `.kml` file
-4. All stores now appear as bookmarks on your Maps.me map, even offline
 
 ## 🔒 Privacy
 
@@ -152,7 +142,6 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - 🔔 **Сповіщення про завезення** — відстежуйте магазин і отримуйте push-сповіщення того ранку, коли буде завезення (за згодою; на iOS 16.4+ потрібен встановлений застосунок)
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
-- 📤 **Експорт** усіх магазинів у Maps.me (KML)
 - 📶 **Працює офлайн** — встановлюваний застосунок (PWA) із локальним кешуванням, без залежності від CDN
 
 ## 🤝 Обмін і внесок
@@ -164,15 +153,6 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - **🌍 Внести до офіційної карти** — відкриває попередньо заповнене [звернення на GitHub](https://github.com/anonymouspartner/lviv-secondhand/issues) з вашими доповненнями та виправленнями. Після того як супровідник їх додасть, ваші зміни з’являться на карті, яку завантажують усі. (Для публікації потрібен безкоштовний акаунт GitHub.)
 
 > Оскільки застосунок — це статичний сайт без сервера, обмін між користувачами миттєвий і приватний, а внески до *офіційної* карти проходять через GitHub, щоб супровідник міг їх переглянути та додати.
-
-## 🗺️ Інтеграція з Maps.me
-
-Усі магазини на карті можна експортувати у файл `.kml` та імпортувати у [Maps.me](https://maps.me):
-
-1. У застосунку натисніть кнопку експорту, щоб завантажити файл `.kml`
-2. Відкрийте Maps.me → **Закладки** → **Імпорт**
-3. Виберіть завантажений файл `.kml`
-4. Усі магазини з'являться як закладки на вашій карті Maps.me, навіть офлайн
 
 ## 🔒 Конфіденційність
 
