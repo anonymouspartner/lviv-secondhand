@@ -25,6 +25,7 @@ its bundled browser.
 | `npm run og` | `og-image.png` (repo root, 1200×630) | Open Graph / Twitter share-preview image referenced by `index.html`'s `og:image`. Re-run and commit if the branding changes. |
 | `npm run poster` | `marketing/qr-poster.pdf` + `.png` (A4) | Printable bilingual QR poster for physical stores — the QR opens the app. Override the target with `POSTER_URL=…`. |
 | `npm run deals` | `marketing/deals-this-week.png` (1080×1080) | "Best by-weight deals right now" share image, ranked by the same `/cheap` logic as the bot, read straight from `index.html`. |
+| `npm run sellsheet` | `marketing/sell-sheet.pdf` + `.png` (A4) | Bilingual one-page pitch for selling store owners on paid promotions (prices mirror `docs/ADVERTISING.md`). Override the contact with `SELLSHEET_CONTACT=…`. |
 
 The deals image is also refreshed automatically every Monday by
 [`.github/workflows/deals-image.yml`](../../.github/workflows/deals-image.yml),
