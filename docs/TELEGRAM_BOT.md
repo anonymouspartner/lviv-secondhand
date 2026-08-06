@@ -68,8 +68,13 @@ npm run deploy
 ```
 
 ### 4. Register the webhook with Telegram
-One-time `curl` (needs the bot token and the same secret). This is the only step
-that uses the token:
+
+**Easiest — the workflow:** add your bot token as a repo secret
+**`TELEGRAM_BOT_TOKEN`**, then run **Actions → “Register Telegram webhook” → Run
+workflow** (the Worker URL is pre-filled). It calls `setWebhook` with the token
+from the secret — never printed — and verifies with `getWebhookInfo`.
+
+**Or by hand** — one-time `curl` (needs the bot token and the same secret):
 ```bash
 curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" \
   -d "url=https://lviv-tg-bot.<your-subdomain>.workers.dev" \
