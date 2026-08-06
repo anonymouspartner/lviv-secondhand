@@ -10,6 +10,7 @@ chat. It lives in [`telegram-bot/`](../telegram-bot).
 | `/start`, `/help` | Intro + command list (EN/UA) |
 | `/today` | By-weight stores getting **fresh stock today** (fixed weekly restock day) |
 | `/cheap` | **Best by-weight deals right now** — stores furthest into their weekly cycle |
+| `/submit` (`/owner`) | For store owners — links to the web **owner-submission form** (`?owner=1`), which opens a GitHub issue for review |
 
 Every result links back into the app with a `?store=<id>` deep link, so tapping
 it opens that store's page, map pin, and price tracker.
@@ -42,6 +43,7 @@ to maintain, and it is never served as a public JSON endpoint. Edit stores in
    ```
    today - Stores restocking today
    cheap - Best by-weight deals right now
+   submit - Add your store (for store owners)
    help - What this bot can do
    ```
 
