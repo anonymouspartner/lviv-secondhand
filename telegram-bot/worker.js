@@ -59,6 +59,7 @@ function helpText() {
     '<b>Commands</b>',
     '/today — stores restocking today · магазини із завезенням сьогодні',
     '/cheap — best by-weight deals right now · найкращі ціни на вагу',
+    '/submit — add your store (for owners) · додати свій магазин',
     '/help — this message · ця довідка',
     '',
     `🗺️ Full map, hours &amp; price tracker: ${APP_URL}`,
@@ -111,6 +112,18 @@ function cheapEmpty() {
   return `No by-weight stores are tracked yet. Open the full map: ${APP_URL}`;
 }
 
+// Owner-submission: point owners at the web form (compliant first-party source).
+// The form opens a GitHub issue a maintainer reviews — no scraping, no bot state.
+function submitText() {
+  return [
+    '🏪 <b>Own or manage a second-hand store?</b>',
+    "Submit your store and its restock schedule for the official map — a maintainer reviews it, then it ships to everyone.",
+    'Маєте або керуєте секонд-хендом? Надішліть його для офіційної карти — після перевірки він зʼявиться в застосунку.',
+    '',
+    `👉 <a href="${APP_URL}?owner=1">Open the submission form · Відкрити форму</a>`,
+  ].join('\n');
+}
+
 // Map a command to its reply text. Returns null for anything we don't handle.
 function replyFor(text) {
   // Strip a leading /command, tolerate "/today@BotName" and trailing args.
@@ -124,6 +137,9 @@ function replyFor(text) {
       return todayText();
     case 'cheap':
       return cheapText();
+    case 'submit':
+    case 'owner':
+      return submitText();
     default:
       return 'Unknown command. Send /help to see what I can do.';
   }
