@@ -54,6 +54,12 @@ uses the same numbers.
 результат (плакат розміщено або власник зареєструвався). Ціль: 8–12 магазинів/день.
 Виплати — щотижня.*
 
+**Phase 2 — when the agent also sells promotions.** On top of the visit base, a
+**one-time bonus per signed store** (proposed **₴300–₴500** Featured, **₴800**
+Spotlight — no recurring trailer). See [ADVERTISING.md](ADVERTISING.md) for the rate
+card and how a sale is fulfilled. *Not active yet — the owner closes the first few
+deals by hand to validate pricing, then hands selling to the agent.*
+
 ---
 
 ## 3. Standard operating procedure · Порядок роботи
@@ -77,6 +83,34 @@ uses the same numbers.
 **End of day / Наприкінці дня**
 - Agent: quick summary in **capybara-bot** (areas done, issues, stores to revisit).
 - Owner: `/report` to see the running total; `/export` weekly for the CSV.
+
+---
+
+## The sales pipeline (why Phase 1 matters) · Воронка продажів
+
+Every survey is quietly building a sales funnel. Track each store's stage in
+**capybara-bot** (`/remember`, `/pin`):
+
+`Prospected → Surveyed → Advertised (poster) → Interested (lead) → [owner closes] → Paying → Renewing/Churned`
+
+Phase 1 gets **every** store to *Surveyed + Advertised*, and the promising ones to
+*Interested* with a **captured owner contact** — that contact is exactly what an
+owner sign-up bonus rewards, and it's the raw material Phase 2 sells against. So the
+agent isn't "just surveying": they're generating qualified leads.
+
+**Phase 2 — selling promotions (later).** Once pricing is validated, the agent pitches
+the rate card ([ADVERTISING.md](ADVERTISING.md)) using a bilingual **sell-sheet**,
+handles objections (small budget → start with a free trial or the à-la-carte
+deal-of-week), and closes. Pay adds the one-time bonus per signed store. The owner
+approves any custom deal or price exception and fulfils the promo.
+
+**What the agent is measured on:** verified visits/day, data completeness, posters
+placed, app referrals, and **qualified leads** (owner contact + genuine interest) —
+and, in Phase 2, signed promotions and their retention.
+
+**Guardrails / ethics:** honest, low-pressure, respect the stores; photograph
+storefronts and merchandise, **not people** (ask first); keep owner contacts private
+and never resell them.
 
 ---
 

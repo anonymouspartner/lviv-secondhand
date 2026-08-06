@@ -8,7 +8,8 @@
   "scripts": {
     "og": "node og-image.mjs",
     "poster": "node qr-poster.mjs",
-    "deals": "node deals-image.mjs"
+    "deals": "node deals-image.mjs",
+    "sellsheet": "node sell-sheet.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",
