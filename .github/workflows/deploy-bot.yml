@@ -1,0 +1,44 @@
+name: Deploy Telegram bot Worker
+
+# Deploys the Telegram bot Worker (telegram-bot/) to Cloudflare. Also redeploys
+# when index.html changes, because the bot's store data is generated from it.
+# Requires two repository secrets:
+#   CLOUDFLARE_API_TOKEN   — a token with "Edit Cloudflare Workers"
+#   CLOUDFLARE_ACCOUNT_ID  — your Cloudflare account id
+# Optional (enables webhook auth): WEBHOOK_SECRET.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'telegram-bot/**'
+      - 'index.html'
+      - '.github/workflows/deploy-bot.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: telegram-bot
+          preCommands: node build-data.mjs
+      # Sets the webhook auth secret as a Worker secret. Skips cleanly if the
+      # WEBHOOK_SECRET repo secret isn't set yet (the bot returns 401 until then).
+      - name: Set webhook secret
+        working-directory: telegram-bot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$WEBHOOK_SECRET" ]; then echo "WEBHOOK_SECRET not set — skipping (bot stays locked until you add it and call setWebhook)"; exit 0; fi
+          printf '%s' "$WEBHOOK_SECRET" | npx --yes wrangler@3 secret put WEBHOOK_SECRET
