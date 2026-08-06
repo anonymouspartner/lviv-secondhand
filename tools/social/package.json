@@ -1,0 +1,15 @@
+{
+  "name": "lviv-secondhand-social",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generators for Lviv Second Hand social/marketing assets (OG image, etc.).",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "scripts": {
+    "og": "node og-image.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0",
+    "qrcode": "^1.5.4"
+  }
+}
