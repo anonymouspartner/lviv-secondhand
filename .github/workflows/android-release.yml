@@ -14,7 +14,8 @@ name: Build Android release (.aab)
 # Then base64-encode it and add these four repo secrets
 # (Settings → Secrets and variables → Actions):
 #
-#   base64 -w0 upload.jks        # macOS: base64 -i upload.jks | tr -d '\n'
+#   base64 -w0 upload.jks | tr '+/' '-_'   # URL-safe (paste-proof); one line, copy it all
+#   # (plain `base64 -w0 upload.jks` also works — the workflow decodes either alphabet)
 #
 #   ANDROID_KEYSTORE_BASE64   — the base64 string from the line above
 #   ANDROID_KEYSTORE_PASSWORD — the store password you chose
@@ -106,11 +107,15 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          # A pasted secret often carries newlines/whitespace that GNU `base64 -d`
-          # rejects with "invalid input" — strip all whitespace before decoding.
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$RUNNER_TEMP/upload.jks"
-          if [ ! -s "$RUNNER_TEMP/upload.jks" ]; then
-            echo "::error::Decoded keystore is empty — ANDROID_KEYSTORE_BASE64 is not valid base64. Re-run 'base64 -w0 upload.jks' and paste the whole single line."
+          # Robust decode of a pasted secret:
+          #  - strip whitespace/newlines (GNU base64 rejects them as "invalid input");
+          #  - translate URL-safe base64 (- _) back to standard (+ /). This is a no-op
+          #    for standard base64 and rescues values where a '+' was mangled into a
+          #    space in transit — so the secret can be pasted in either alphabet.
+          CLEAN=$(printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | tr '_-' '/+')
+          echo "cleaned base64 length: ${#CLEAN} (must be a multiple of 4)"
+          if ! printf '%s' "$CLEAN" | base64 -d > "$RUNNER_TEMP/upload.jks" 2>/dev/null || [ ! -s "$RUNNER_TEMP/upload.jks" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 did not decode to a keystore. Re-copy the ENTIRE contents of upload.jks.base64 into the secret (no characters missing)."
             exit 1
           fi
 
