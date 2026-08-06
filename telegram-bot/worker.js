@@ -257,6 +257,40 @@ function say(env, chatId, text, keyboard) {
   return tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup });
 }
 
+// Telegram command menus. Everyone gets PUBLIC_CMDS; the owner & agents get an
+// extended per-chat menu that also lists /visit — so only they see it in the menu
+// (it's already functionally gated regardless). Bump CMD_VER to force a re-sync
+// after editing the lists. Self-managing → no BotFather /setcommands needed.
+const CMD_VER = 'v1';
+const PUBLIC_CMDS = [
+  { command: 'today', description: 'Магазини із завезенням сьогодні' },
+  { command: 'cheap', description: 'Найкращі ціни на вагу зараз' },
+  { command: 'submit', description: 'Додати свій магазин (власникам)' },
+  { command: 'materials', description: 'Матеріали для друку: флаєри, наліпки' },
+  { command: 'help', description: 'Команди та інформація' },
+];
+async function syncBotCommands(env, userId, isOwner, isAgent) {
+  // Public default menu — set once globally.
+  if ((await env.VISITS.get('cmds:default')) !== CMD_VER) {
+    await tg(env, 'setMyCommands', { commands: PUBLIC_CMDS });
+    await env.VISITS.put('cmds:default', CMD_VER);
+  }
+  // Extended menu — only for owner/agents, scoped to their own chat, once each.
+  if (!(isOwner || isAgent)) return;
+  if ((await env.VISITS.get('cmds:' + userId)) === CMD_VER) return;
+  const cmds = PUBLIC_CMDS.concat([
+    { command: 'visit', description: '📝 Записати візит у магазин' },
+    { command: 'myvisits', description: 'Мої візити' },
+    { command: 'cancel', description: 'Скасувати поточний візит' },
+  ]);
+  if (isOwner) cmds.push(
+    { command: 'report', description: 'Звіт і оплата' },
+    { command: 'export', description: 'Експорт візитів (CSV)' },
+  );
+  await tg(env, 'setMyCommands', { commands: cmds, scope: { type: 'chat', chat_id: userId } });
+  await env.VISITS.put('cmds:' + userId, CMD_VER);
+}
+
 function norm(s) {
   return String(s || '').toLowerCase().trim();
 }
@@ -441,6 +475,10 @@ async function handleVisit(env, c, msg, ctx) {
   const isAgent = c.agentIds.includes(String(userId));
   const command = text ? (/^\/([a-z]+)(?:@\w+)?/i.exec(text.trim()) || [])[1]?.toLowerCase() : null;
 
+  // Keep each person's Telegram command menu in sync (public menu for everyone;
+  // the extended /visit menu only for the owner & agents).
+  if (command) await syncBotCommands(env, userId, isOwner, isAgent);
+
   if (command === 'whoami' || command === 'myid') {
     await say(env, chatId, `Your Telegram ID · Ваш ID: <code>${userId}</code>`);
     return true;
@@ -474,6 +512,10 @@ async function handleVisit(env, c, msg, ctx) {
 
   // No active session and not one of our commands → let the public handler reply.
   if (!session) return false;
+
+  // A public/other slash-command mid-session escapes to the normal handlers, so
+  // /help, /materials, etc. keep working; the session stays and can be resumed.
+  if (command) return false;
 
   // ── In-session step machine ──
   if (session.step === 'store') {
