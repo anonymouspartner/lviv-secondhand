@@ -44,7 +44,12 @@ manifest URL, privacy-policy URL).
 
 ---
 
-## 2. Generate the Android app (two options)
+## 2. Generate the Android app (three options)
+
+> **Capacitor route:** if you'd rather ship a native WebView shell with a plugin
+> bridge (room to add native push, share sheets, etc. later) instead of a TWA, use
+> the Capacitor wrapper in [`native/`](../native) — see [`CAPACITOR.md`](CAPACITOR.md).
+> It produces the same `.aab` for Play; sections 3–6 below still apply.
 
 ### Option A — PWABuilder (easiest, browser-based)
 
@@ -198,7 +203,8 @@ honestly:
 | Maskable icons (192 + 512) | ✅ done |
 | Manifest `id`, `categories`, `screenshots` | ✅ done |
 | Play screenshots generated | ✅ `screenshots/` |
-| `assetlinks.json` template | ✅ (fill in fingerprint) |
-| Custom domain for origin-root asset links | ⬜ your call |
+| `assetlinks.json` template | ✅ package name set (fill in fingerprint) |
+| Custom domain for origin-root asset links | ✅ `www.lvivsecondhand.com` live |
+| Capacitor wrapper (`native/`) | ✅ ready to build (see `CAPACITOR.md`) |
 | Feature graphic 1024×500 | ✅ `screenshots/feature-graphic-1024x500.png` |
 | Play Console account + listing + Data Safety | ⬜ your part |

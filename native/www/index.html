@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lviv Second Hand</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: #14472a;
+      color: #eafaf0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 24px;
+      -webkit-user-select: none; user-select: none;
+    }
+    .logo { font-size: 56px; margin-bottom: 12px; }
+    h1 { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
+    p { font-size: 15px; line-height: 1.5; color: #a9d6bb; max-width: 320px; margin: 6px 0; }
+    .spin {
+      width: 34px; height: 34px; margin: 22px 0 6px;
+      border: 3px solid rgba(255,255,255,.15);
+      border-top-color: #ffb347; border-radius: 50%;
+      animation: r .9s linear infinite;
+    }
+    @keyframes r { to { transform: rotate(360deg); } }
+    a.retry {
+      display: none; margin-top: 18px; padding: 12px 22px;
+      background: #1b5e38; color: #fff; text-decoration: none;
+      border-radius: 12px; font-weight: 700; font-size: 15px;
+    }
+    .offline .spin { display: none; }
+    .offline a.retry { display: inline-block; }
+    .offline .loading { display: none; }
+  </style>
+</head>
+<body>
+  <div class="logo">🧥</div>
+  <h1>Lviv Second Hand</h1>
+  <div class="spin" aria-hidden="true"></div>
+  <p class="loading">Loading the live map… / Завантаження карти…</p>
+  <p class="offline-msg" style="display:none;">You appear to be offline. Connect to the internet to load the latest map.<br><span style="color:#8fc7a6;">Немає з’єднання. Підключіться до інтернету, щоб завантажити карту.</span></p>
+  <a class="retry" href="https://www.lvivsecondhand.com/">Retry / Спробувати ще</a>
+
+  <script>
+    // This shell normally hands off immediately to the live site (configured via
+    // capacitor.config.json → server.url). This page is the offline/first-launch
+    // fallback: if the device has no network, show a friendly retry instead of a
+    // raw WebView error. No dataset is bundled here by design.
+    (function () {
+      var LIVE = 'https://www.lvivsecondhand.com/';
+      function showOffline() {
+        document.body.classList.add('offline');
+        document.querySelector('.loading').style.display = 'none';
+        document.querySelector('.offline-msg').style.display = 'block';
+      }
+      if (navigator.onLine === false) { showOffline(); return; }
+      // Give the native server.url handoff a moment; if we're still here, try the URL.
+      setTimeout(function () { location.replace(LIVE); }, 400);
+      window.addEventListener('offline', showOffline);
+    })();
+  </script>
+</body>
+</html>
