@@ -43,6 +43,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - ➕ **Add**, ✏️ **edit**, and 🗑️ **remove/hide** stores
 - 🤝 **Share your map** & **contribute** additions/edits to everyone
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
+- 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` for stores restocking today, `/cheap` for the best by-weight deals
 - 📶 **Works offline** — installable PWA with on-device caching, no CDN dependency
 
 ## 🤝 Sharing & Contributing
@@ -144,6 +145,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
+- 💬 **Телеграм-бот** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` — завезення сьогодні, `/cheap` — найкращі ціни на вагу
 - 📶 **Працює офлайн** — встановлюваний застосунок (PWA) із локальним кешуванням, без залежності від CDN
 
 ## 🤝 Обмін і внесок
