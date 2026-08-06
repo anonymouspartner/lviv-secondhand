@@ -21,6 +21,9 @@ for a hired rep to log store surveys — off by default, enabled per
 [Field Agent Handbook](FIELD_AGENT.md) for the process, payment scheme, and
 questionnaire.
 
+The `/materials` command returns download links to the print-ready flyers, QR
+stickers, in-store poster, and owner sell-sheet (served from `/marketing/`).
+
 ## Why only by-weight stores drive `/today` and `/cheap`
 
 The bot answers from **global** facts only. The by-weight (Світ-style) stores have
