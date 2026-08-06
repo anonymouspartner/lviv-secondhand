@@ -36,7 +36,7 @@ binding = "VISITS"
 id = "69158c00d55a4d3ab750cd916afca445"
 
 [vars]
-OWNER_ID   = ""    # TODO: your numeric Telegram id — get it by sending the deployed bot /whoami (or via @userinfobot)
-AGENT_IDS  = ""    # TODO: agent Telegram ids, comma-separated (each sends /whoami). Add your own id here too, to smoke-test /visit.
+OWNER_ID   = "1212541015"    # owner — gets /report, /export, and a live push of each visit
+AGENT_IDS  = "1212541015"    # agents allowed to run /visit (comma-separated). Owner listed to smoke-test; add the agent's id next.
 RATE_VISIT = "80"  # ₴ per verified visit
 RATE_BONUS = "200" # ₴ per bonus event (poster placed / owner contact + consent)
