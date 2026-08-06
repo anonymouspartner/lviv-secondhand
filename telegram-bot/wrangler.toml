@@ -1,0 +1,15 @@
+name = "lviv-tg-bot"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+# Serverless Telegram bot (see worker.js). Stateless — no D1/KV bindings.
+#
+# One secret is required (set out-of-band, never committed):
+#   WEBHOOK_SECRET — a random string; Telegram echoes it back in the
+#   `X-Telegram-Bot-Api-Secret-Token` header so the Worker can verify that
+#   inbound requests really come from Telegram. Set it with:
+#     printf '%s' "<random>" | npx wrangler@3 secret put WEBHOOK_SECRET
+#   and pass the SAME value as `secret_token` when calling setWebhook.
+#
+# The bot answers inside the webhook response, so the bot token is NOT needed at
+# runtime — only when registering the webhook (see docs/TELEGRAM_BOT.md).

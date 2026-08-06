@@ -1,0 +1,16 @@
+{
+  "name": "lviv-secondhand-tg-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Serverless Telegram bot (Cloudflare Worker) for Lviv Second Hand.",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "type": "module",
+  "scripts": {
+    "build": "node build-data.mjs",
+    "dev": "node build-data.mjs && wrangler dev",
+    "deploy": "node build-data.mjs && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

@@ -1,0 +1,5 @@
+# Generated from ../index.html at build/deploy time — never hand-edited or committed.
+stores.gen.js
+
+node_modules/
+.wrangler/
