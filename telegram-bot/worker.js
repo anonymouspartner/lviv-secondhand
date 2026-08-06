@@ -89,9 +89,28 @@ function helpText() {
     '/today — stores restocking today · магазини із завезенням сьогодні',
     '/cheap — best by-weight deals right now · найкращі ціни на вагу',
     '/submit — add your store (for owners) · додати свій магазин',
+    '/materials — print-ready flyers, stickers, poster · рекламні матеріали для друку',
     '/help — this message · ця довідка',
     '',
     `🗺️ Full map, hours &amp; price tracker: ${APP_URL}`,
+  ].join('\n');
+}
+
+// Print-ready marketing assets (served by GitHub Pages under /marketing/). Handed
+// back as tap-to-open links — no bot token needed. Keep in sync with tools/social/.
+function materialsText() {
+  const M = APP_URL + 'marketing/';
+  return [
+    '🖨️ <b>Рекламні матеріали · Print materials</b>',
+    'Готові до друку PDF — відкрий і надрукуй. · Print-ready PDFs — open and print.',
+    '',
+    `📄 <a href="${M}flyer.pdf">Флаєр · Flyer</a> — A4 → 4 листівки покупцям · shopper handouts`,
+    `🏷️ <a href="${M}qr-stickers.pdf">QR-наліпки · Stickers</a> — 24 шт. на аркуш · 24 per sheet`,
+    `🖼️ <a href="${M}qr-poster.pdf">Плакат · Poster</a> — A4 на вітрину/стіну · in-store`,
+    `💼 <a href="${M}sell-sheet.pdf">Прайс для власників · Sell-sheet</a> — пропозиція реклами · owner pitch`,
+    '',
+    'Друкуй наліпки на самоклейному папері A4. · Print stickers on A4 label paper.',
+    `🗺️ ${APP_URL}`,
   ].join('\n');
 }
 
@@ -169,6 +188,10 @@ function replyFor(text) {
     case 'submit':
     case 'owner':
       return submitText();
+    case 'materials':
+    case 'print':
+    case 'flyers':
+      return materialsText();
     default:
       return 'Unknown command. Send /help to see what I can do.';
   }
