@@ -14,7 +14,8 @@ name: Deploy Telegram bot
 #   CLOUDFLARE_ACCOUNT_ID  — Cloudflare dashboard → Workers & Pages → the
 #     "Account ID" shown in the right sidebar (also in the dashboard URL).
 #   BOT_TOKEN              — the @Secondhandlvivbot API token from BotFather
-#     (/mybots → the bot → API Token).
+#     (/mybots → the bot → API Token). A secret named TELEGRAM_BOT_TOKEN is
+#     also accepted (BOT_TOKEN wins if both are set).
 #
 # The KV binding, OWNER_ID/AGENT_IDS and pay rates already live in wrangler.toml.
 # This workflow regenerates stores.gen.js from index.html, deploys the worker, and
@@ -43,7 +44,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
         run: |
           missing=""
           [ -z "$CLOUDFLARE_API_TOKEN" ]  && missing="$missing CLOUDFLARE_API_TOKEN"
@@ -70,5 +71,5 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
         run: printf '%s' "$BOT_TOKEN" | npx wrangler secret put BOT_TOKEN
