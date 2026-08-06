@@ -1,0 +1,24 @@
+{
+  "appId": "com.anonymouspartner.lvivsecondhand",
+  "appName": "Lviv Second Hand",
+  "webDir": "www",
+  "backgroundColor": "#14472aff",
+  "server": {
+    "url": "https://www.lvivsecondhand.com",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#14472aff",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "backgroundColor": "#14472a",
+      "showSpinner": false,
+      "launchAutoHide": true,
+      "launchShowDuration": 800,
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}

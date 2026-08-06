@@ -1,0 +1,24 @@
+{
+  "name": "lviv-secondhand-native",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor Android wrapper for the Lviv Second Hand PWA. Loads the live site (https://www.lvivsecondhand.com) in a native shell so the store dataset is never shipped inside the APK.",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "scripts": {
+    "add:android": "cap add android",
+    "sync": "cap sync android",
+    "assets": "capacitor-assets generate --android",
+    "open:android": "cap open android",
+    "build:debug": "cap sync android && cd android && ./gradlew assembleDebug",
+    "build:release": "cap sync android && cd android && ./gradlew bundleRelease"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/splash-screen": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^7.0.0"
+  }
+}
