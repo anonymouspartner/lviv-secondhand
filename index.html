@@ -9,6 +9,10 @@
 <html lang="uk">
 <head>
 <meta charset="UTF-8">
+<!-- Force every subresource (tiles, images, beacons, imported data) onto HTTPS so
+     the page can never drop to "not secure" mixed content. Must sit before any
+     resource is referenced. -->
+<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="copyright" content="© 2026 Lviv Second Hand. All rights reserved. Proprietary — see LICENSE.">
 <meta name="author" content="Lviv Second Hand">
@@ -2189,7 +2193,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-06.7';
+const APP_VERSION = '2026-08-06.8';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
