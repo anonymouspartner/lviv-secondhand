@@ -23,6 +23,13 @@ its bundled browser.
 | Command | Output | What it is |
 | --- | --- | --- |
 | `npm run og` | `og-image.png` (repo root, 1200×630) | Open Graph / Twitter share-preview image referenced by `index.html`'s `og:image`. Re-run and commit if the branding changes. |
+| `npm run poster` | `marketing/qr-poster.pdf` + `.png` (A4) | Printable bilingual QR poster for physical stores — the QR opens the app. Override the target with `POSTER_URL=…`. |
+| `npm run deals` | `marketing/deals-this-week.png` (1080×1080) | "Best by-weight deals right now" share image, ranked by the same `/cheap` logic as the bot, read straight from `index.html`. |
+
+The deals image is also refreshed automatically every Monday by
+[`.github/workflows/deals-image.yml`](../../.github/workflows/deals-image.yml),
+which commits it so GitHub Pages serves an always-current copy at
+`https://www.lvivsecondhand.com/marketing/deals-this-week.png`.
 
 Output files are committed to the repo (they're served/referenced directly);
 `node_modules/` is not.

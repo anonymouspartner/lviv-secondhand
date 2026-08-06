@@ -1,0 +1,49 @@
+name: Refresh weekly deals image
+
+# Regenerates marketing/deals-this-week.png from the app's /cheap ranking (read
+# out of index.html) and commits it if it changed. Because it's committed to the
+# repo root, GitHub Pages serves it at a stable, always-current URL:
+#   https://www.lvivsecondhand.com/marketing/deals-this-week.png
+# — handy for a weekly Instagram/Telegram post. Also runnable on demand.
+on:
+  schedule:
+    - cron: "0 4 * * 1" # Mondays 04:00 UTC (~07:00 Europe/Kyiv)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deals:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/social
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps + Chromium
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Render deals image
+        run: node deals-image.mjs
+
+      - name: Commit if changed
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          if git diff --quiet -- marketing/deals-this-week.png; then
+            echo "Ranking unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add marketing/deals-this-week.png
+          git commit -m "Refresh weekly deals image [skip ci]"
+          git push
