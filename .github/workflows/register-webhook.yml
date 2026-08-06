@@ -37,9 +37,16 @@ jobs:
       - name: setWebhook
         run: |
           echo "Registering webhook → $WORKER_URL"
+          # Strip stray whitespace/newlines (a pasted secret often carries a
+          # trailing newline), then confirm only Telegram-allowed characters remain.
+          SECRET=$(printf '%s' "$WEBHOOK_SECRET" | tr -d '[:space:]')
+          case "$SECRET" in
+            *[!A-Za-z0-9_-]*)
+              echo "::error::WEBHOOK_SECRET contains characters Telegram disallows (only A-Z a-z 0-9 _ - are allowed). Set it to e.g. the output of 'openssl rand -hex 16', then re-run the deploy-bot and this workflow."; exit 1;;
+          esac
           resp=$(curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
             --data-urlencode "url=${WORKER_URL}" \
-            --data-urlencode "secret_token=${WEBHOOK_SECRET}" \
+            --data-urlencode "secret_token=${SECRET}" \
             --data-urlencode 'allowed_updates=["message"]' \
             -d "drop_pending_updates=true")
           echo "setWebhook response: $resp"

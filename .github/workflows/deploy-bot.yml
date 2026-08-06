@@ -41,4 +41,8 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
         run: |
           if [ -z "$WEBHOOK_SECRET" ]; then echo "WEBHOOK_SECRET not set — skipping (bot stays locked until you add it and call setWebhook)"; exit 0; fi
-          printf '%s' "$WEBHOOK_SECRET" | npx --yes wrangler@3 secret put WEBHOOK_SECRET
+          # Strip any stray whitespace/newlines so the Worker stores the exact same
+          # value the register-webhook workflow sends to Telegram (which rejects
+          # anything outside A-Z a-z 0-9 _ -).
+          CLEAN=$(printf '%s' "$WEBHOOK_SECRET" | tr -d '[:space:]')
+          printf '%s' "$CLEAN" | npx --yes wrangler@3 secret put WEBHOOK_SECRET
