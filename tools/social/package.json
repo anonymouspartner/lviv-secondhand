@@ -9,7 +9,9 @@
     "og": "node og-image.mjs",
     "poster": "node qr-poster.mjs",
     "deals": "node deals-image.mjs",
-    "sellsheet": "node sell-sheet.mjs"
+    "sellsheet": "node sell-sheet.mjs",
+    "flyer": "node flyer.mjs",
+    "stickers": "node qr-stickers.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",
