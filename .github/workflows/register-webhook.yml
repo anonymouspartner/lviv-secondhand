@@ -1,0 +1,54 @@
+name: Register Telegram webhook
+
+# One-click, secure `setWebhook` for the Telegram bot. The bot token is read from
+# the TELEGRAM_BOT_TOKEN repo secret (GitHub masks it in logs) — it is never
+# printed or committed. Run this once after the bot Worker is deployed and its
+# WEBHOOK_SECRET is set, and again any time you rotate the secret or change the
+# Worker URL.
+#
+# Requires repo secrets:
+#   TELEGRAM_BOT_TOKEN — from @BotFather
+#   WEBHOOK_SECRET     — the SAME value set on the Worker (must match exactly)
+on:
+  workflow_dispatch:
+    inputs:
+      worker_url:
+        description: "Bot Worker URL"
+        required: true
+        default: "https://lviv-tg-bot.lshanalytic.workers.dev"
+
+permissions:
+  contents: read
+
+jobs:
+  set-webhook:
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+      WORKER_URL: ${{ github.event.inputs.worker_url }}
+    steps:
+      - name: Check secrets
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "::error::TELEGRAM_BOT_TOKEN repo secret is not set. Add it (Settings → Secrets and variables → Actions) and re-run."; exit 1; fi
+          if [ -z "$WEBHOOK_SECRET" ]; then
+            echo "::error::WEBHOOK_SECRET repo secret is not set. Add it and re-run."; exit 1; fi
+      - name: setWebhook
+        run: |
+          echo "Registering webhook → $WORKER_URL"
+          resp=$(curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+            --data-urlencode "url=${WORKER_URL}" \
+            --data-urlencode "secret_token=${WEBHOOK_SECRET}" \
+            --data-urlencode 'allowed_updates=["message"]' \
+            -d "drop_pending_updates=true")
+          echo "setWebhook response: $resp"
+          echo "$resp" | grep -q '"ok":true' || { echo "::error::setWebhook did not return ok:true"; exit 1; }
+      - name: Verify (getWebhookInfo)
+        run: |
+          # getWebhookInfo returns the Worker URL + delivery status — no token in the body.
+          info=$(curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo")
+          echo "getWebhookInfo: $info"
+          if echo "$info" | grep -q '"last_error_message"'; then
+            echo "::warning::Telegram reported a recent delivery error above. If it says 401, WEBHOOK_SECRET here doesn't match the value on the Worker — re-run the deploy-bot workflow so they match, then re-run this."
+          fi
