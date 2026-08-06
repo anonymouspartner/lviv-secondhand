@@ -15,6 +15,12 @@ chat. It lives in [`telegram-bot/`](../telegram-bot).
 Every result links back into the app with a `?store=<id>` deep link, so tapping
 it opens that store's page, map pin, and price tracker.
 
+There is also an opt-in **field-agent subsystem** (`/visit`, `/report`, `/export`)
+for a hired rep to log store surveys — off by default, enabled per
+[`telegram-bot/wrangler.toml`](../telegram-bot/wrangler.toml). See the
+[Field Agent Handbook](FIELD_AGENT.md) for the process, payment scheme, and
+questionnaire.
+
 ## Why only by-weight stores drive `/today` and `/cheap`
 
 The bot answers from **global** facts only. The by-weight (Світ-style) stores have

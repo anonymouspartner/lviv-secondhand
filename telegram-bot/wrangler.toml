@@ -2,7 +2,10 @@ name = "lviv-tg-bot"
 main = "worker.js"
 compatibility_date = "2026-08-01"
 
-# Serverless Telegram bot (see worker.js). Stateless — no D1/KV bindings.
+# ── Public bot (always on) ──────────────────────────────────────────────────
+# The /today /cheap /submit commands are stateless: the bot answers inside the
+# webhook response, so the bot token is NOT needed at runtime — only when
+# registering the webhook (see docs/TELEGRAM_BOT.md).
 #
 # One secret is required (set out-of-band, never committed):
 #   WEBHOOK_SECRET — a random string; Telegram echoes it back in the
@@ -10,6 +13,30 @@ compatibility_date = "2026-08-01"
 #   inbound requests really come from Telegram. Set it with:
 #     printf '%s' "<random>" | npx wrangler@3 secret put WEBHOOK_SECRET
 #   and pass the SAME value as `secret_token` when calling setWebhook.
+
+# ── Field-agent /visit subsystem (opt-in) ───────────────────────────────────
+# Adds the stateful store-survey flow (/visit, /report, /export — see
+# docs/FIELD_AGENT.md). It stays OFF until BOT_TOKEN *and* the VISITS KV
+# namespace below are both configured, so the public bot is unaffected until
+# you deliberately enable it.
 #
-# The bot answers inside the webhook response, so the bot token is NOT needed at
-# runtime — only when registering the webhook (see docs/TELEGRAM_BOT.md).
+# To enable:
+#   1. Create the KV namespace and paste its id below, then uncomment the block:
+#        npx wrangler@3 kv namespace create VISITS
+#   2. Add the bot token as a secret (used to send the guided prompts, push
+#      each visit to the owner, and upload the CSV export):
+#        printf '%s' "<telegram-bot-token>" | npx wrangler@3 secret put BOT_TOKEN
+#   3. Set who is who + the pay rates as [vars] below (ids are numeric Telegram
+#      user ids — anyone can get theirs by sending the bot /whoami).
+#   4. Re-register the webhook allowing location & photo updates:
+#        allowed_updates=["message"]   (the default already includes these)
+#
+# [[kv_namespaces]]
+# binding = "VISITS"
+# id = "REPLACE_WITH_KV_NAMESPACE_ID"
+#
+# [vars]
+# OWNER_ID   = "000000000"              # your numeric Telegram id (gets /report, /export, live visit pushes)
+# AGENT_IDS  = "111111111,222222222"    # comma-separated agent Telegram ids allowed to run /visit
+# RATE_VISIT = "80"                     # ₴ per verified visit
+# RATE_BONUS = "200"                    # ₴ per bonus event (poster placed / owner contact + consent)
