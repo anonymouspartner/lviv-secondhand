@@ -44,7 +44,19 @@ const dateEN = new Intl.DateTimeFormat('en-GB',
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 // Heat: more days into the cycle → hotter (cheaper). 0 days = fresh (green).
 const heat = (d) => d === 0 ? '#1b7a45' : ['#c98a00', '#d97706', '#e0590a', '#dc4a1e', '#dc2626', '#c81e1e'][Math.min(d, 6) - 1] || '#dc2626';
-const rows = ranked.map(({ s, days }, i) => {
+// Paid sponsored slot (clearly labelled). Rotates daily if several are featured.
+const activeP = (s) => (s.promo && (!s.promo.until || new Date(s.promo.until + 'T23:59:59') >= new Date())) ? s.promo : null;
+const promoted = STORES.filter((s) => !s.watermark && activeP(s));
+const sponsored = promoted.length ? promoted[new Date().getDate() % promoted.length] : null;
+const sponsoredRow = sponsored ? `<div class="row sponsored">
+    <div class="rank">⭐</div>
+    <div class="info"><div class="name">${esc(sponsored.name)}</div>
+      <div class="sub">Реклама · Sponsored${activeP(sponsored).offer ? ' — ' + esc(activeP(sponsored).offer) : ''}</div></div>
+  </div>` : '';
+
+// Keep the card to 6 rows total so the footer never clips.
+const rankedShown = sponsored ? ranked.slice(0, 5) : ranked;
+const rows = sponsoredRow + rankedShown.map(({ s, days }, i) => {
   const label = days === 0 ? 'Restocked today · full selection'
     : `${days} day${days > 1 ? 's' : ''} into the cycle · cheaper`;
   return `<div class="row">
@@ -74,6 +86,9 @@ const page_html = `<!doctype html><html><head><meta charset="utf-8"><style>
   .info { flex:1; min-width:0; }
   .name { font-size:29px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .sub { font-size:22px; font-weight:700; margin-top:3px; }
+  .row.sponsored { background:rgba(230,168,23,.18); border-color:rgba(230,168,23,.55); }
+  .row.sponsored .rank { color:#ffd257; }
+  .row.sponsored .sub { color:#ffd257; }
   .foot { margin-top:22px; display:flex; align-items:center; justify-content:space-between;
           font-size:21px; color:#bfe6cf; }
   .foot b { color:#fff; }
