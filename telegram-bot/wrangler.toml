@@ -31,12 +31,12 @@ compatibility_date = "2026-08-01"
 #   4. Re-register the webhook allowing location & photo updates:
 #        allowed_updates=["message"]   (the default already includes these)
 #
-# [[kv_namespaces]]
-# binding = "VISITS"
-# id = "REPLACE_WITH_KV_NAMESPACE_ID"
-#
-# [vars]
-# OWNER_ID   = "000000000"              # your numeric Telegram id (gets /report, /export, live visit pushes)
-# AGENT_IDS  = "111111111,222222222"    # comma-separated agent Telegram ids allowed to run /visit
-# RATE_VISIT = "80"                     # ₴ per verified visit
-# RATE_BONUS = "200"                    # ₴ per bonus event (poster placed / owner contact + consent)
+[[kv_namespaces]]
+binding = "VISITS"
+id = "69158c00d55a4d3ab750cd916afca445"
+
+[vars]
+OWNER_ID   = ""    # TODO: your numeric Telegram id — get it by sending the deployed bot /whoami (or via @userinfobot)
+AGENT_IDS  = ""    # TODO: agent Telegram ids, comma-separated (each sends /whoami). Add your own id here too, to smoke-test /visit.
+RATE_VISIT = "80"  # ₴ per verified visit
+RATE_BONUS = "200" # ₴ per bonus event (poster placed / owner contact + consent)
