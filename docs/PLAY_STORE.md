@@ -46,10 +46,15 @@ manifest URL, privacy-policy URL).
 
 ## 2. Generate the Android app (three options)
 
-> **Capacitor route:** if you'd rather ship a native WebView shell with a plugin
-> bridge (room to add native push, share sheets, etc. later) instead of a TWA, use
-> the Capacitor wrapper in [`native/`](../native) — see [`CAPACITOR.md`](CAPACITOR.md).
-> It produces the same `.aab` for Play; sections 3–6 below still apply.
+> **Capacitor route (automated):** to ship the native WebView shell in
+> [`native/`](../native) (room to add native push, share sheets, etc. later)
+> instead of a TWA, use the **Build Android release (.aab)** GitHub Action
+> ([`android-release.yml`](../.github/workflows/android-release.yml)). One-time,
+> add an upload keystore as four repo secrets (the workflow's header comment has
+> the exact `keytool` + `base64` commands), then run it from the Actions tab with
+> a `versionName`/`versionCode` and download the signed `.aab` artifact. It
+> produces the same kind of `.aab` for Play; sections 3–6 below still apply.
+> See also [`CAPACITOR.md`](CAPACITOR.md).
 
 ### Option A — PWABuilder (easiest, browser-based)
 
@@ -206,5 +211,7 @@ honestly:
 | `assetlinks.json` template | ✅ package name set (fill in fingerprint) |
 | Custom domain for origin-root asset links | ✅ `www.lvivsecondhand.com` live |
 | Capacitor wrapper (`native/`) | ✅ ready to build (see `CAPACITOR.md`) |
+| Signed release `.aab` CI (`android-release.yml`) | ✅ ready (add keystore secrets, then run) |
+| Store-listing copy (EN/UA) | ✅ `PLAY_LISTING.md` |
 | Feature graphic 1024×500 | ✅ `screenshots/feature-graphic-1024x500.png` |
 | Play Console account + listing + Data Safety | ⬜ your part |
