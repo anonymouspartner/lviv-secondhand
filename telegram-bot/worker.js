@@ -56,6 +56,29 @@ function storeBlock(s, extra) {
   return lines.join('\n');
 }
 
+// A store's live paid promotion, or null (auto-expires past `until`). Mirrors the
+// app's activePromo(); the field is carried through by build-data.mjs.
+function activePromo(s) {
+  const p = s && s.promo;
+  if (!p) return null;
+  if (p.until) {
+    const u = new Date(p.until + 'T23:59:59');
+    if (isNaN(u) || u.getTime() < Date.now()) return null;
+  }
+  return p;
+}
+
+// Sponsored slot shown atop /today and /cheap — always clearly labelled as
+// advertising. Rotates daily when several stores are featured. Empty when none.
+function featuredBlock() {
+  const promoted = STORES.filter((s) => activePromo(s));
+  if (!promoted.length) return '';
+  const s = promoted[new Date().getDate() % promoted.length];
+  const p = activePromo(s);
+  const extra = p.offer ? `🎁 ${esc(p.offer)}` : '⭐ Featured store · Магазин у рекламі';
+  return ['⭐ <b>Реклама · Sponsored</b>', storeBlock(s, extra), '', '➖➖➖', ''].join('\n');
+}
+
 function helpText() {
   return [
     '👋 <b>Lviv Second Hand</b>',
@@ -76,7 +99,7 @@ function todayText() {
   const wd = kyivWeekday();
   const todays = STORES.filter((s) => s.restockDay === wd);
   if (!todays.length) {
-    return [
+    return featuredBlock() + [
       `📦 <b>No scheduled restocks today (${DAY_NAMES[wd]}).</b>`,
       'The tracked by-weight stores restock Mon–Fri.',
       '',
@@ -85,7 +108,7 @@ function todayText() {
     ].join('\n');
   }
   const blocks = todays.map((s) => storeBlock(s, '🆕 Fresh stock today')).join('\n\n');
-  return [
+  return featuredBlock() + [
     `📦 <b>Fresh stock today (${DAY_NAMES[wd]})</b> — ${todays.length} store${todays.length > 1 ? 's' : ''}:`,
     '',
     blocks,
@@ -106,7 +129,7 @@ function cheapText() {
       return storeBlock(s, label);
     })
     .join('\n\n');
-  return [
+  return featuredBlock() + [
     '💸 <b>Best by-weight deals right now</b>',
     'By-weight prices drop each day after a restock, so the stores furthest into their weekly cycle have the deepest discounts today:',
     '',
