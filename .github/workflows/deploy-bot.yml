@@ -1,48 +1,74 @@
-name: Deploy Telegram bot Worker
+name: Deploy Telegram bot
 
-# Deploys the Telegram bot Worker (telegram-bot/) to Cloudflare. Also redeploys
-# when index.html changes, because the bot's store data is generated from it.
-# Requires two repository secrets:
-#   CLOUDFLARE_API_TOKEN   — a token with "Edit Cloudflare Workers"
-#   CLOUDFLARE_ACCOUNT_ID  — your Cloudflare account id
-# Optional (enables webhook auth): WEBHOOK_SECRET.
+# Deploys the Cloudflare Worker in telegram-bot/ (the @Secondhandlvivbot bot,
+# including the /visit field-agent subsystem). Run it from the Actions tab
+# whenever you want to push the current `main` to Cloudflare — no terminal needed.
+#
+# ── One-time setup: three repo secrets ──
+# GitHub → repo Settings → Secrets and variables → Actions → New repository secret:
+#
+#   CLOUDFLARE_API_TOKEN   — a Cloudflare API token. Create it at
+#     dash.cloudflare.com → (top-right profile) → My Profile → API Tokens →
+#     Create Token → use the "Edit Cloudflare Workers" template (it grants
+#     Workers Scripts:Edit + Workers KV Storage:Edit). Create → copy the token.
+#   CLOUDFLARE_ACCOUNT_ID  — Cloudflare dashboard → Workers & Pages → the
+#     "Account ID" shown in the right sidebar (also in the dashboard URL).
+#   BOT_TOKEN              — the @Secondhandlvivbot API token from BotFather
+#     (/mybots → the bot → API Token).
+#
+# The KV binding, OWNER_ID/AGENT_IDS and pay rates already live in wrangler.toml.
+# This workflow regenerates stores.gen.js from index.html, deploys the worker, and
+# sets the BOT_TOKEN secret on it. WEBHOOK_SECRET (already set on the worker) and
+# any other existing secrets are preserved — `wrangler deploy` never deletes them.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'telegram-bot/**'
-      - 'index.html'
-      - '.github/workflows/deploy-bot.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: telegram-bot
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: telegram-bot
-          preCommands: node build-data.mjs
-      # Sets the webhook auth secret as a Worker secret. Skips cleanly if the
-      # WEBHOOK_SECRET repo secret isn't set yet (the bot returns 401 until then).
-      - name: Set webhook secret
-        working-directory: telegram-bot
+
+      - name: Fail early if secrets are missing
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          if [ -z "$WEBHOOK_SECRET" ]; then echo "WEBHOOK_SECRET not set — skipping (bot stays locked until you add it and call setWebhook)"; exit 0; fi
-          # Strip any stray whitespace/newlines so the Worker stores the exact same
-          # value the register-webhook workflow sends to Telegram (which rejects
-          # anything outside A-Z a-z 0-9 _ -).
-          CLEAN=$(printf '%s' "$WEBHOOK_SECRET" | tr -d '[:space:]')
-          printf '%s' "$CLEAN" | npx --yes wrangler@3 secret put WEBHOOK_SECRET
+          missing=""
+          [ -z "$CLOUDFLARE_API_TOKEN" ]  && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -z "$BOT_TOKEN" ]             && missing="$missing BOT_TOKEN"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repo secret(s):$missing — add them (see this workflow's header) and re-run."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate bot dataset from index.html
+        run: node build-data.mjs
+
+      - name: Deploy worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      - name: Set BOT_TOKEN secret on the worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: printf '%s' "$BOT_TOKEN" | npx wrangler secret put BOT_TOKEN
