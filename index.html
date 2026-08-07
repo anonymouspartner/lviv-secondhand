@@ -280,7 +280,35 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 .popup-open-btn { display: block; width: 100%; padding: 9px; background: var(--green); color: white; border: none; border-radius: 9px; font-size: 13px; font-weight: 700; cursor: pointer; }
 
 /* ===================== v2 UX REFRESH (brand-unified) ===================== */
-.hdr-left h1{ font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.012em; font-size:21px; }
+/* Brand lockup. The control cluster on the right is a fixed ~200px, so the title
+   never gets more than `width - cluster - padding` — about 165px on a 412px phone,
+   and the Ukrainian name needs 256px at this size. It cannot sit on one line at any
+   readable size, so it is set as a deliberate two-line lockup (the same stacked form
+   the print pieces use) with tight leading, instead of wrapping like an accident. */
+.hdr-left{ min-width:0; flex:1; }
+.hdr-left h1{ font-family:var(--font-display); font-weight:700; text-transform:uppercase;
+  letter-spacing:.012em; font-size:clamp(17px,5vw,21px); line-height:1.02; text-wrap:balance; }
+.hdr-left p{ margin-top:3px; }
+/* Reclaim a little width for the lockup without shrinking the tap targets below 34px. */
+header > div:last-child{ gap:6px !important; flex-shrink:0; }
+.help-btn{ width:34px; height:34px; font-size:17px; }
+.lp{ padding:5px 9px; font-size:11.5px; }
+/* On narrower phones the control cluster eats most of the row and pushes the stats
+   line onto a second line, so pull the controls in (30px stays a comfortable tap
+   target) and shrink the stats type until it fits again. */
+@media (max-width:389px){
+  .hdr-left p{ font-size:11px; }
+  header > div:last-child{ gap:4px !important; }
+  .help-btn{ width:30px; height:30px; font-size:15px; }
+  .lp{ padding:4px 7px; font-size:10.5px; }
+}
+/* Below ~340px the jacket costs a whole line of the lockup — drop it. */
+@media (max-width:339px){
+  .hdr-emoji{ display:none; }
+  .hdr-left h1{ font-size:15px; }
+  .hdr-left p{ font-size:10.5px; }
+  header{ padding-left:12px; padding-right:12px; }
+}
 header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
 /* List / Map — segmented control */
 .tabs{ background:var(--card); border-bottom:1px solid var(--border); padding:6px 8px; gap:6px; }
@@ -743,7 +771,7 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
 <!-- ══════════════════════════════════════════ -->
 <header>
   <div class="hdr-left">
-    <h1>🧥 <span data-i18n="brand">Секонд-хенди Львова</span></h1>
+    <h1><span class="hdr-emoji" aria-hidden="true">🧥</span> <span data-i18n="brand">Секонд-хенди Львова</span></h1>
     <p id="hdr-stats">Loading…</p>
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
@@ -2461,7 +2489,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-07.5';
+const APP_VERSION = '2026-08-07.6';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
