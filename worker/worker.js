@@ -53,7 +53,69 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS push_subs (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT UNIQUE NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, stores TEXT NOT NULL DEFAULT '[]', created TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
+  // Paid in-app promotions, self-fulfilled from Stripe (see stripe-webhook).
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS promos (store_id TEXT PRIMARY KEY, tier TEXT NOT NULL, offer TEXT, until TEXT NOT NULL, sub_id TEXT, cadence TEXT, status TEXT NOT NULL DEFAULT 'active', updated TEXT NOT NULL DEFAULT (datetime('now')))"
+  ).run();
   _schemaReady = true;
+}
+
+// ── Store promotions ↔ Stripe ────────────────────────────────────────────────
+// The rate card (docs/ADVERTISING.md) as Stripe Price ids, keyed by tier+cadence.
+// A store-bound Checkout Session (GET /promote) carries the store id in metadata;
+// the signed webhook (POST /stripe-webhook) writes/expires the promo in D1; the
+// app reads the live set from GET /promos and renders the gold pin/badge/offer.
+const PROMO_PRICES = {
+  verified_monthly:  'price_1U1dvd7ZlQqI3gQVAk6edEci',
+  verified_annual:   'price_1U1dvn7ZlQqI3gQVH2XJobOD',
+  featured_monthly:  'price_1U1dvq7ZlQqI3gQV51PMcCVM',
+  featured_annual:   'price_1U1dvt7ZlQqI3gQVd8utdXLA',
+  spotlight_monthly: 'price_1U1dvv7ZlQqI3gQVR5qnNNHk',
+  spotlight_annual:  'price_1U1dw17ZlQqI3gQVuizcyhYi',
+};
+const PROMO_TIERS = new Set(['verified', 'featured', 'spotlight']);
+const PROMO_CADENCES = new Set(['monthly', 'annual']);
+
+// Verify Stripe's `Stripe-Signature` header (HMAC-SHA256 over `${t}.${payload}`).
+async function verifyStripeSig(payload, header, secret) {
+  const parts = {};
+  for (const kv of String(header).split(',')) { const i = kv.indexOf('='); if (i > 0) parts[kv.slice(0, i)] = kv.slice(i + 1); }
+  const t = parts.t, v1 = parts.v1;
+  if (!t || !v1) return false;
+  if (Math.abs(Date.now() / 1000 - Number(t)) > 300) return false; // reject >5 min skew (replay)
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${payload}`));
+  const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  if (hex.length !== v1.length) return false;
+  let diff = 0; for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ v1.charCodeAt(i);
+  return diff === 0;
+}
+
+// Apply a verified Stripe event to the promos table (activate / extend / cancel).
+async function applyPromoEvent(env, ev) {
+  const o = (ev && ev.data && ev.data.object) || {};
+  const type = ev && ev.type;
+  const graceDays = (cad) => (cad === 'annual' ? 372 : 34); // period + a few days' grace
+  if (type === 'checkout.session.completed') {
+    const storeId = o.client_reference_id || (o.metadata && o.metadata.storeId);
+    const tier = o.metadata && o.metadata.tier;
+    const cadence = (o.metadata && o.metadata.cadence) === 'annual' ? 'annual' : 'monthly';
+    if (!storeId || !PROMO_TIERS.has(tier)) return;
+    const until = addDaysStr(kyivDateStr(), graceDays(cadence));
+    await env.DB.prepare(
+      "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, status, updated) VALUES (?, ?, NULL, ?, ?, ?, 'active', datetime('now')) " +
+      "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, status='active', updated=datetime('now')"
+    ).bind(storeId, tier, until, o.subscription || null, cadence).run();
+  } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
+    const subId = o.subscription;
+    if (!subId) return;
+    const row = await env.DB.prepare('SELECT cadence FROM promos WHERE sub_id = ?').bind(subId).first();
+    const until = addDaysStr(kyivDateStr(), graceDays(row && row.cadence));
+    await env.DB.prepare("UPDATE promos SET until = ?, status = 'active', updated = datetime('now') WHERE sub_id = ?").bind(until, subId).run();
+  } else if (type === 'customer.subscription.deleted' ||
+             (type === 'customer.subscription.updated' && ['canceled', 'unpaid', 'incomplete_expired'].includes(o.status))) {
+    await env.DB.prepare("UPDATE promos SET status = 'canceled', updated = datetime('now') WHERE sub_id = ?").bind(o.id).run();
+  }
 }
 
 // ── byte helpers ──
@@ -153,11 +215,74 @@ export default {
       if (url.pathname === '/status') {
         let subs = null;
         try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
-        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs }, 200, origin);
+        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: !!env.STRIPE_API_KEY }, 200, origin);
+      }
+      // Live paid promotions: { storeId: {tier, offer?, until} }. The app merges
+      // these onto STORES so the gold pin/badge/offer render automatically.
+      if (url.pathname === '/promos') {
+        try {
+          await ensureSchema(env);
+          const res = await env.DB.prepare("SELECT store_id, tier, offer, until FROM promos WHERE status = 'active' AND until >= ?").bind(kyivDateStr()).all();
+          const out = {};
+          for (const r of (res && res.results) || []) { out[r.store_id] = r.offer ? { tier: r.tier, offer: r.offer, until: r.until } : { tier: r.tier, until: r.until }; }
+          return json(out, 200, origin);
+        } catch { return json({}, 200, origin); }
+      }
+      // Store-bound Stripe Checkout: /promote?store=<id>&tier=<t>&cadence=<c>.
+      // Redirects to a hosted checkout carrying the store id so the webhook can
+      // fulfil it. Inert (503) until STRIPE_API_KEY is configured.
+      if (url.pathname === '/promote') {
+        const store = url.searchParams.get('store') || '';
+        const tier = url.searchParams.get('tier') || 'featured';
+        const cadence = url.searchParams.get('cadence') || 'monthly';
+        if (!/^[a-z0-9]{1,12}$/i.test(store) || !PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) {
+          return new Response('bad request', { status: 400, headers: cors(origin) });
+        }
+        const price = PROMO_PRICES[`${tier}_${cadence}`];
+        if (!price) return new Response('unknown tier', { status: 400, headers: cors(origin) });
+        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
+        const form = new URLSearchParams();
+        form.set('mode', 'subscription');
+        form.set('line_items[0][price]', price);
+        form.set('line_items[0][quantity]', '1');
+        form.set('allow_promotion_codes', 'true');
+        form.set('client_reference_id', store);
+        form.set('metadata[storeId]', store);
+        form.set('metadata[tier]', tier);
+        form.set('metadata[cadence]', cadence);
+        form.set('subscription_data[metadata][storeId]', store);
+        form.set('subscription_data[metadata][tier]', tier);
+        form.set('subscription_data[metadata][cadence]', cadence);
+        form.set('success_url', APP_URL + '?promoted=1');
+        form.set('cancel_url', APP_URL);
+        let data;
+        try {
+          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form,
+          });
+          data = await res.json();
+          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
+        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
+        return Response.redirect(data.url, 302);
       }
       return new Response('ok', { status: 200, headers: cors(origin) });
     }
     if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: cors(origin) });
+
+    // ── Stripe webhook: self-fulfil paid promotions ──
+    // Handled before rate-limiting/JSON-parse because the raw body is needed for
+    // signature verification. Inert (503) until STRIPE_WEBHOOK_SECRET is set.
+    if (url.pathname === '/stripe-webhook') {
+      if (!env.STRIPE_WEBHOOK_SECRET) return new Response('not configured', { status: 503 });
+      const payload = await request.text();
+      const sig = request.headers.get('Stripe-Signature') || '';
+      if (!(await verifyStripeSig(payload, sig, env.STRIPE_WEBHOOK_SECRET))) return new Response('bad signature', { status: 400 });
+      let ev; try { ev = JSON.parse(payload); } catch { return new Response('bad json', { status: 400 }); }
+      try { await ensureSchema(env); await applyPromoEvent(env, ev); } catch {}
+      return new Response('ok', { status: 200 }); // 2xx so Stripe stops retrying
+    }
 
     // Per-IP rate limit (guarded — skip if binding absent).
     if (env.RATE_LIMITER) {

@@ -26,3 +26,17 @@ crons = ["0 7 * * *"]
 # The private key is set separately as the VAPID_PRIVATE secret — NEVER commit it.
 [vars]
 VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYMLARMgG9jVovK7W3uUDNp7kU"
+
+# ── Paid promotions (Stripe self-fulfilment) — optional, off until configured ──
+# GET /promos serves the live promo set with no secret. Selling + auto-fulfil
+# need two secrets (set them as repo secrets so deploy-worker.yml pushes them,
+# or with `wrangler secret put`); the feature stays inert until both exist:
+#   STRIPE_API_KEY       — a *restricted* Stripe secret key with write access to
+#                          Checkout Sessions (create) — used by GET /promote to
+#                          open a store-bound checkout. NEVER commit it.
+#   STRIPE_WEBHOOK_SECRET — the signing secret of the Stripe webhook endpoint
+#                          pointed at https://lviv-metrics.lshanalytic.workers.dev/stripe-webhook
+#                          (events: checkout.session.completed, invoice.paid,
+#                          customer.subscription.deleted/updated). Verifies the
+#                          POST /stripe-webhook signature. NEVER commit it.
+# See docs/ADVERTISING.md §7 for the full activation steps.
