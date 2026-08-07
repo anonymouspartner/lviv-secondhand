@@ -296,6 +296,27 @@ tier, update card, cancel). This needs the restricted key to *also* carry **Bill
 Portal Sessions: Write** and a saved portal configuration in Stripe; without either
 the route fails and the app just hides the link, so it is safe to skip.
 
+`/billing` looks up the store's `cust_id` first and returns **404 before touching
+Stripe** when there is no subscription — so it cannot tell you whether the portal is
+set up correctly. Ask Stripe directly instead:
+
+```
+curl -H "X-Admin-Key: $ADMIN_KEY" https://lviv-metrics.lshanalytic.workers.dev/billing-selftest
+```
+
+It attempts a portal session for a customer id that cannot exist — nothing is created
+— and reads the error back:
+
+| `state` | Meaning |
+|---|---|
+| `ready` | Key and portal config are both good ("No such customer" means it got that far) |
+| `key_missing_permission` | Add **Billing Portal Sessions: Write** at `dashboard.stripe.com/apikeys` |
+| `portal_not_configured` | Save a configuration at `dashboard.stripe.com/settings/billing/portal` |
+| `no_stripe_key` | `STRIPE_API_KEY` isn't set on the Worker |
+
+The response includes Stripe's own `stripeStatus`/`stripeMessage` for anything the
+classifier doesn't recognise. Gated on `ADMIN_KEY` — it reveals configuration state.
+
 > **Known limitation — no ownership check.** Anyone can promote any store, and the
 > offer line is free text. Paying for a store you do not own is self-punishing, but
 > the offer text is the abuse surface: it is length-capped, stripped and escaped, and
