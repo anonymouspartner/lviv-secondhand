@@ -37,6 +37,13 @@ uses the same numbers.
 | **Visit base** · база за візит | **₴80** | A visit is submitted in `/visit` with **GPS + storefront photo + full questionnaire**. One store = one base per survey cycle. |
 | **Bonus** · бонус | **₴200 each** | A verifiable result: **QR poster placed** in the store (photo proof), or **owner signed up** (owner contact captured *and* they submit via the form / agree to be featured). Both can apply → two bonuses. |
 
+> **Bonus vs. commission.** A **bonus** (above) is paid for the *action* — placing a
+> poster or signing up a lead — **even if that store never buys**. A **sales
+> commission** (Phase 2, below) is paid **only when a store actually subscribes and
+> pays**. The bonus rewards effort and pipeline; the commission rewards revenue.
+> *Бонус — за дію (плакат / лід), навіть якщо магазин не купить. Комісія — лише коли
+> магазин підписується та платить.*
+
 **Targets & guardrails**
 
 - Suggested pace: **8–12 stores/day**. A realistic day ≈ ₴640–₴960 base, plus bonuses.
@@ -55,8 +62,9 @@ uses the same numbers.
 Виплати — щотижня.*
 
 **Phase 2 — when the agent also sells promotions.** On top of the visit base, a
-**one-time bonus per signed store** (proposed **₴300–₴500** Featured, **₴800**
-Spotlight — no recurring trailer). See [ADVERTISING.md](ADVERTISING.md) for the rate
+**one-time sales commission per signed store** — paid only once the store actually
+subscribes and pays (proposed **₴300–₴500** Featured, **₴800** Spotlight — no
+recurring trailer). See [ADVERTISING.md](ADVERTISING.md) for the rate
 card and how a sale is fulfilled. *Not active yet — the owner closes the first few
 deals by hand to validate pricing, then hands selling to the agent.*
 
@@ -144,7 +152,7 @@ agent isn't "just surveying": they're generating qualified leads.
 **Phase 2 — selling promotions (later).** Once pricing is validated, the agent pitches
 the rate card ([ADVERTISING.md](ADVERTISING.md)) using a bilingual **sell-sheet**,
 handles objections (small budget → start with a free trial or the à-la-carte
-deal-of-week), and closes. Pay adds the one-time bonus per signed store. The owner
+deal-of-week), and closes. Pay adds the one-time sales commission per signed store. The owner
 approves any custom deal or price exception and fulfils the promo.
 
 **What the agent is measured on:** verified visits/day, data completeness, posters

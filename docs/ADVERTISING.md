@@ -74,17 +74,19 @@ an `offer` (no gold pin unless `tier` is set — use `tier` only for Featured/Sp
   fee where a store prefers it.
 - **Fulfilment:** ~5 min owner time per sale (hand-edit `promo` + deploy).
 - **Agent cost now (Phase 1):** ₴80/verified visit + poster/sign-up bonuses.
-- **Agent cost when selling (Phase 2):** a **one-time bonus per signed store**
-  (proposed ₴300–₴500 Featured, ₴800 Spotlight). No recurring trailer.
+- **Agent cost when selling (Phase 2):** a **one-time sales commission per signed
+  store**, paid only once the store subscribes and pays (proposed ₴300–₴500 Featured,
+  ₴800 Spotlight). No recurring trailer. *(Distinct from the Phase-1 **bonus**, which
+  rewards a poster/lead regardless of a sale.)*
 - **Margin:** software — very high. The only real variable cost is agent commission.
 
 **CAC vs LTV (example, Featured):**
-- Acquire ≈ 2–3 visits (₴160–₴240) + ₴300–₴500 bonus ≈ **₴500–₴750 CAC**.
+- Acquire ≈ 2–3 visits (₴160–₴240) + ₴300–₴500 commission ≈ **₴500–₴750 CAC**.
 - LTV ≈ ₴600/mo × ~6 months retention ≈ **₴3,600**. Ratio ≈ 5–7× — healthy.
 
 **Break-even (example):** if the agent's weekly base ≈ ₴3,000 (~40 visits), about
 **5 Featured subscriptions** (₴600) cover the agent; every additional subscription is
-near-pure margin minus its one-time bonus.
+near-pure margin minus its one-time commission.
 
 **Rule of thumb:** a Featured store pays for its own acquisition in ~1 month and is
 profit thereafter; churn is the number to watch, not price.
