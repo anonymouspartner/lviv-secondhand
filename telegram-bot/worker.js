@@ -261,7 +261,7 @@ function say(env, chatId, text, keyboard) {
 // extended per-chat menu that also lists /visit — so only they see it in the menu
 // (it's already functionally gated regardless). Bump CMD_VER to force a re-sync
 // after editing the lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v2';
+const CMD_VER = 'v3';
 const PUBLIC_CMDS = [
   { command: 'today', description: 'Магазини із завезенням сьогодні' },
   { command: 'cheap', description: 'Найкращі ціни на вагу зараз' },
@@ -282,6 +282,7 @@ async function syncBotCommands(env, userId, isOwner, isAgent) {
     { command: 'visit', description: '📝 Записати візит у магазин' },
     { command: 'myvisits', description: 'Мої візити' },
     { command: 'pay', description: '💰 Схема оплати' },
+    { command: 'job', description: '📋 Опис вакансії' },
     { command: 'cancel', description: 'Скасувати поточний візит' },
   ]);
   if (isOwner) cmds.push(
@@ -469,6 +470,20 @@ function notAgentMsg(uid) {
     `Надішліть власнику цей ID, щоб отримати доступ · Send this ID to the owner to get access:\n<code>${uid}</code>`;
 }
 
+// Job brief for a prospective/onboarding agent to read and review.
+const JOB_BRIEF_URL = 'https://claude.ai/code/artifact/8707b32b-6c47-4df0-9176-7ddccfbe7264';
+function jobText() {
+  return [
+    '📋 <b>Опис вакансії · Job brief</b>',
+    'Повний опис ролі, як це працює та схема оплати (UA/EN):',
+    'Full role, workflow and pay scheme:',
+    '',
+    `👉 <a href="${JOB_BRIEF_URL}">Відкрити опис вакансії · Open the job brief</a>`,
+    '',
+    'Питання? Пишіть власнику у capybara-bot. · Questions? Message the owner in capybara-bot.',
+  ].join('\n');
+}
+
 // Agent-facing pay scheme, rendered live from the configured rates so it always
 // matches /report. Keep in sync with docs/FIELD_AGENT.md §2.
 function payText(c) {
@@ -527,6 +542,11 @@ async function handleVisit(env, c, msg, ctx) {
   if (command === 'pay') {
     if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
     await say(env, chatId, payText(c));
+    return true;
+  }
+  if (command === 'job' || command === 'brief') {
+    if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    await say(env, chatId, jobText());
     return true;
   }
   if (command === 'visit') {
