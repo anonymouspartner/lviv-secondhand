@@ -441,6 +441,48 @@ export default {
           return json({ ok: true, orders: (res && res.results) || [] }, 200, origin);
         } catch { return json({ ok: false, reason: 'db_error' }, 500, origin); }
       }
+      // Is the customer portal actually usable? /billing only reaches Stripe once a
+      // real subscription exists, so until the first sale there is no way to tell a
+      // working setup from a missing key permission or an unsaved portal config.
+      // This asks Stripe directly, using a customer id that cannot exist: the request
+      // never creates anything, and the error it comes back with names the problem.
+      //   403 / "permission"      → the restricted key lacks Billing Portal Sessions
+      //   "...configuration..."   → key is fine, no portal configuration saved yet
+      //   "No such customer"      → both are fine; it got all the way to the lookup
+      if (url.pathname === '/billing-selftest') {
+        if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) {
+          return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+        }
+        if (!env.STRIPE_API_KEY) return json({ ok: false, state: 'no_stripe_key' }, 200, origin);
+        const form = new URLSearchParams();
+        form.set('customer', 'cus_lvivSelfTestNoSuchCustomer');
+        form.set('return_url', APP_URL);
+        try {
+          const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form,
+          });
+          const data = await res.json().catch(() => ({}));
+          const msg = (data && data.error && data.error.message) || '';
+          let state = 'unknown';
+          if (res.ok) state = 'ready';                                  // shouldn't happen, but harmless
+          else if (res.status === 403 || /permission|not permitted/i.test(msg)) state = 'key_missing_permission';
+          else if (/configuration/i.test(msg)) state = 'portal_not_configured';
+          else if (/no such customer|resource_missing/i.test(msg)) state = 'ready';
+          return json({
+            ok: state === 'ready', state,
+            hint: state === 'key_missing_permission'
+              ? 'Add "Billing Portal Sessions: Write" to the restricted key at dashboard.stripe.com/apikeys'
+              : state === 'portal_not_configured'
+              ? 'Save a portal configuration at dashboard.stripe.com/settings/billing/portal'
+              : state === 'ready'
+              ? 'Manage billing will work as soon as a store has an active subscription'
+              : 'Unrecognised Stripe response — see stripeMessage',
+            stripeStatus: res.status, stripeMessage: msg,
+          }, 200, origin);
+        } catch (e) { return json({ ok: false, state: 'fetch_failed' }, 200, origin); }
+      }
       // Self-service billing: /billing?store=<id> sends the paying store to the
       // Stripe customer portal (change tier, update card, cancel) so none of that
       // has to come through the owner. Needs the restricted key to also carry
