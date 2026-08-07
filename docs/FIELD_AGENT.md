@@ -135,6 +135,32 @@ notes, and live-location sharing go through **capybara-bot**.
 йдуть через **GitHub issues** репозиторію. Фото, спілкування та жива геолокація — у
 Telegram.*
 
+### Found a store that isn't on the map yet? · Знайшли новий магазин?
+
+Add it in the app, then submit it — it goes on the map for everyone once the owner
+merges it.
+
+1. App → **Map** tab → **Add store (＋)**.
+2. Enter the **store name**.
+3. **Tap the store's exact spot on the map** (or paste GPS coordinates) — pin it right
+   on the storefront; do this **standing at the door** so the location is accurate.
+4. Fill in what you know: **address, pricing type** (by-weight / itemized), **opening
+   hours, restock day, notes**.
+5. **Save** → "Store added!" (saved on your device).
+6. Submit to the official map: **🤝 (top-right) → 🌍 Contribute to the official map →
+   🚀 Submit on GitHub**. The owner reviews the GitHub issue and merges it.
+
+- **Check first** that it's really not already on the map (search the name) so you
+  don't add a duplicate.
+- **Pin accuracy matters** — a pin far from the real storefront gets flagged for review.
+- You still **log the visit** in `/visit` as usual (that's what pays); adding the map
+  pin is a separate step so shoppers can find the store.
+
+*Новий магазин: застосунок → **Карта → Додати магазин (＋)** → назва → **торкніться
+точного місця на карті** (стоячи біля входу) → адреса, тип цін, години, день завезення,
+нотатки → **Зберегти** → **🤝 → 🌍 Submit on GitHub**. Спочатку перевірте, що його ще
+немає на карті. Візит усе одно фіксуйте через /visit.*
+
 ---
 
 ## The sales pipeline (why Phase 1 matters) · Воронка продажів
