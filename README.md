@@ -44,6 +44,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🤝 **Share your map** & **contribute** additions/edits to everyone
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
 - 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` for stores restocking today, `/cheap` for the best by-weight deals
+- 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
 - 📶 **Works offline** — installable PWA with on-device caching, no CDN dependency
 
 ## 🤝 Sharing & Contributing
@@ -64,9 +65,43 @@ Contributions arrive as GitHub issues labelled `map-contribution`. Each issue li
 - **`overrides`** — fold each into the matching store's fields.
 - **`removed`** — a list of built-in store `id`s the contributor reports as non-existent/wrong; delete those entries from the `STORES` array.
 
+## 📣 Store promotions (advertising)
+
+Shop owners can promote their own store without contacting anyone. Open the store in the app → **📣 Own this store? Promote it** → pick a plan and pay in ₴ (Stripe). Everything is priced and displayed in Ukrainian by default.
+
+| Tier | Monthly | Annual | One-off 7 / 30 days |
+| --- | --- | --- | --- |
+| **Verified+** | ₴250 | ₴2,500 | ₴100 / ₴250 |
+| **Featured** | ₴600 | ₴6,000 | ₴200 / ₴600 |
+| **Spotlight** | ₴1,200 | ₴12,000 | ₴400 / ₴1,200 |
+
+**What each tier changes on screen** — the app enforces this, so paying more visibly gets more:
+
+- **Verified+** — a ✓ badge and an offer line. **It never changes map position or ranking**; it buys trust, not placement.
+- **Featured** — gold ⭐ pin, top of the list in its area, labelled `Реклама`.
+- **Spotlight** — everything in Featured, with the largest pin above all others.
+
+Subscriptions renew until cancelled; **one-off runs** last exactly the days paid for and then stop, with nothing to cancel. Extras that we fulfil by hand (deal-of-the-week, poster placement, sponsored push) are sold separately and are clearly marked as *not* automatic.
+
+**Every paid placement is labelled**, sponsored density is deliberately limited, and placements are chosen by what a store bought — never by anything about the person looking. Full rate card, unit economics and operator setup: **[`docs/ADVERTISING.md`](docs/ADVERTISING.md)**.
+
+### For maintainers
+
+Purchases fulfil themselves: Stripe → signed webhook → D1 → the app's `/promos` fetch. Nothing needs hand-editing.
+
+| Piece | Where |
+| --- | --- |
+| Rate card + tier rendering | `index.html` (`PROMO_PLANS`, `promoRank()`, `isAd()`) |
+| Checkout, webhook, promos/orders | `worker/worker.js` (`/promote`, `/order`, `/stripe-webhook`, `/promos`) |
+| Self-service billing | `/billing` → Stripe customer portal; readiness shows as `portal` on `/status` |
+| Owner alerts | Telegram ping on every paid promotion and order |
+| Order queue (hand-fulfilled) | `GET /orders` with `X-Admin-Key` |
+
+It all stays inert until `STRIPE_API_KEY` and `STRIPE_WEBHOOK_SECRET` exist — without them the buy button never appears.
+
 ## 🔒 Privacy
 
-No accounts, no ads, no personal tracking. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking. Full details: **[Privacy Policy](https://www.lvivsecondhand.com/privacy.html)** (also linked from the in-app **?** Help panel).
+No accounts, no ad networks, no personal tracking. Local stores can pay for a clearly-labelled placement on the map, sold directly by us — there is no ad network involved and nothing about you is used to choose what you see. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking. Full details: **[Privacy Policy](https://www.lvivsecondhand.com/privacy.html)** (also linked from the in-app **?** Help panel).
 
 ## 📊 Analytics & metrics (for maintainers)
 
@@ -146,6 +181,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
 - 💬 **Телеграм-бот** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` — завезення сьогодні, `/cheap` — найкращі ціни на вагу
+- 📣 **Просування магазину** — власник може просувати свій магазин прямо із застосунку; кожне платне розміщення позначене
 - 📶 **Працює офлайн** — встановлюваний застосунок (PWA) із локальним кешуванням, без залежності від CDN
 
 ## 🤝 Обмін і внесок
@@ -158,6 +194,26 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 > Оскільки застосунок — це статичний сайт без сервера, обмін між користувачами миттєвий і приватний, а внески до *офіційної* карти проходять через GitHub, щоб супровідник міг їх переглянути та додати.
 
+## 📣 Просування магазинів (реклама)
+
+Власник магазину може просунути свій магазин самостійно, без звернення до когось. Відкрийте магазин у застосунку → **📣 Власник магазину? Просувати** → оберіть тариф і оплатіть у ₴ (Stripe). Усе — ціни, оплата та сторінка Stripe — за замовчуванням українською.
+
+| Тариф | Щомісяця | Щороку | Разово 7 / 30 днів |
+| --- | --- | --- | --- |
+| **Verified+** | ₴250 | ₴2 500 | ₴100 / ₴250 |
+| **Featured** | ₴600 | ₴6 000 | ₴200 / ₴600 |
+| **Spotlight** | ₴1 200 | ₴12 000 | ₴400 / ₴1 200 |
+
+**Що саме змінює кожен тариф** — застосунок дотримується цього, тож дорожчий тариф справді дає більше:
+
+- **Verified+** — значок ✓ і рядок з пропозицією. **Не змінює позицію на карті чи у списку** — це довіра, а не розміщення.
+- **Featured** — золота ⭐ позначка, перше місце у списку свого району, підпис `Реклама`.
+- **Spotlight** — усе з Featured, найбільша позначка вище за всі інші.
+
+Підписки діють до скасування; **разові розміщення** тривають рівно стільки днів, скільки оплачено, і завершуються — скасовувати нічого не треба. Додаткові послуги, які виконуємо вручну (знижка тижня, розміщення постера, push-розсилка), продаються окремо й чітко позначені як **не** автоматичні.
+
+**Кожне платне розміщення позначене**, кількість реклами свідомо обмежена, і розміщення визначається тим, що купив магазин, — ніколи не тим, хто дивиться. Повний прайс і налаштування: **[`docs/ADVERTISING.md`](docs/ADVERTISING.md)** (англійською).
+
 ## 🔒 Конфіденційність
 
-Без облікових записів, реклами та персонального стеження. Усе, що ви робите, залишається у вашому браузері на вашому пристрої — воно ніколи не надсилається на сервер і не залишає ваш телефон, доки ви самі не вирішите поділитися. Єдине, що вимірюється, — це анонімний, узагальнений трафік (перегляди та відвідування) через **Cloudflare Web Analytics** та анонімне використання додатка (які магазини/фільтри застосовують) через невеликий власний сервіс на Cloudflare — обидва без файлів cookie, без персональних даних і без відстеження окремих відвідувачів чи міжсайтового стеження. Докладніше: **[Політика конфіденційності](https://www.lvivsecondhand.com/privacy.html)** (також доступна з панелі довідки **?** у застосунку).
+Без облікових записів, рекламних мереж і персонального стеження. Місцеві магазини можуть оплатити чітко позначене розміщення на карті — його продаємо безпосередньо ми, без рекламних мереж, і для вибору того, що ви бачите, не використовується жодна інформація про вас. Усе, що ви робите, залишається у вашому браузері на вашому пристрої — воно ніколи не надсилається на сервер і не залишає ваш телефон, доки ви самі не вирішите поділитися. Єдине, що вимірюється, — це анонімний, узагальнений трафік (перегляди та відвідування) через **Cloudflare Web Analytics** та анонімне використання додатка (які магазини/фільтри застосовують) через невеликий власний сервіс на Cloudflare — обидва без файлів cookie, без персональних даних і без відстеження окремих відвідувачів чи міжсайтового стеження. Докладніше: **[Політика конфіденційності](https://www.lvivsecondhand.com/privacy.html)** (також доступна з панелі довідки **?** у застосунку).
