@@ -1220,7 +1220,7 @@ function openDetail(id) {
       <button onclick="copyStoreLink('${id}')" style="width:100%;padding:12px;background:white;border:2px solid var(--muted);color:var(--muted);border-radius:14px;font-size:14px;font-weight:700;cursor:pointer;margin-top:12px;">🔗 ${t('copyStoreLink')}</button>
 
       <!-- PROMOTE (owner-facing, opens a store-bound Stripe checkout) -->
-      ${METRICS_URL ? `<button onclick="promoteStore('${id}','featured','monthly')" style="width:100%;padding:11px;background:transparent;border:1px dashed var(--muted);color:var(--muted);border-radius:14px;font-size:13px;font-weight:600;cursor:pointer;margin-top:10px;">📣 ${lang==='ua'?'Власник магазину? Просувати':'Own this store? Promote it'}</button>` : ''}
+      ${promoCheckoutEnabled ? `<button onclick="promoteStore('${id}','featured','monthly')" style="width:100%;padding:11px;background:transparent;border:1px dashed var(--muted);color:var(--muted);border-radius:14px;font-size:13px;font-weight:600;cursor:pointer;margin-top:10px;">📣 ${lang==='ua'?'Власник магазину? Просувати':'Own this store? Promote it'}</button>` : ''}
 
     </div>`;
 
@@ -2294,20 +2294,30 @@ function track(type, key){
 // render exactly like a hand-added `promo`. Fails silently offline; static
 // `promo` fields in STORES still work without the network.
 // ─────────────────────────────────────────────
+// True once the Worker confirms paid checkout is configured — gates the in-app
+// "Promote it" CTA so it only appears when a click will actually reach Stripe.
+let promoCheckoutEnabled = false;
 async function loadRemotePromos(){
   if (!METRICS_URL) return;
   try {
     const r = await fetch(METRICS_URL + '/promos', { cache:'no-store' });
-    if (!r.ok) return;
-    const map = await r.json();
-    if (!map || typeof map !== 'object') return;
-    let touched = false;
-    for (const s of STORES){
-      const p = map[s.id];
-      if (p && (p.tier || p.offer) && p.until){ s.promo = { tier:p.tier, offer:p.offer, until:p.until }; touched = true; }
+    if (r.ok){
+      const map = await r.json();
+      if (map && typeof map === 'object'){
+        let touched = false;
+        for (const s of STORES){
+          const p = map[s.id];
+          if (p && (p.tier || p.offer) && p.until){ s.promo = { tier:p.tier, offer:p.offer, until:p.until }; touched = true; }
+        }
+        if (touched){ renderList(); if (mapInst) renderPins(); }
+      }
     }
-    if (touched){ renderList(); if (mapInst) renderPins(); }
   } catch(e){ /* promotions must never break the app */ }
+  // Only surface the promote CTA when checkout is live (else a click 503s).
+  try {
+    const st = await fetch(METRICS_URL + '/status').then(x => x.ok ? x.json() : null);
+    if (st && st.promoConfigured) promoCheckoutEnabled = true;
+  } catch(e){ /* leave the CTA hidden if we can't confirm */ }
 }
 // Open a store-bound Stripe checkout for a promotion (owner-facing). The Worker
 // binds the store id so the purchase self-fulfils.
