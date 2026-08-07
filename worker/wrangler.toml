@@ -26,6 +26,10 @@ crons = ["0 7 * * *"]
 # The private key is set separately as the VAPID_PRIVATE secret — NEVER commit it.
 [vars]
 VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYMLARMgG9jVovK7W3uUDNp7kU"
+# Telegram chat that gets a ping when a promotion or an à la carte order is paid.
+# Not a secret (it is just a chat id, same value as telegram-bot/wrangler.toml).
+# The notification stays off until the BOT_TOKEN secret is also set — see below.
+OWNER_ID = "1212541015"
 
 # ── Paid promotions (Stripe self-fulfilment) — optional, off until configured ──
 # GET /promos serves the live promo set with no secret. Selling + auto-fulfil
@@ -42,4 +46,9 @@ VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYM
 #                          (events: checkout.session.completed, invoice.paid,
 #                          customer.subscription.deleted/updated). Verifies the
 #                          POST /stripe-webhook signature. NEVER commit it.
+#   BOT_TOKEN            — the same Telegram bot token the bot Worker uses (repo
+#                          secret BOT_TOKEN, already set if the bot is deployed).
+#                          With it, a paid promotion or à la carte order pings
+#                          OWNER_ID above. Without it, sales are silent and the
+#                          order queue has to be read from GET /orders by hand.
 # See docs/ADVERTISING.md §7 for the full activation steps.

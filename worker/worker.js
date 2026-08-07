@@ -122,6 +122,26 @@ function cleanOffer(raw) {
   return s.slice(0, OFFER_MAX);
 }
 
+// ── Owner notification ───────────────────────────────────────────────────────
+// An à la carte extra is delivered by hand, so a silent sale is a missed one. Ping
+// the owner on Telegram the moment money lands. Inert without BOT_TOKEN + OWNER_ID,
+// and never allowed to affect the webhook: it is fired through waitUntil so Stripe's
+// response is not held up, and any failure is swallowed (Stripe would otherwise retry
+// a delivery whose order row was already written).
+function tgNotify(env, ctx, text) {
+  if (!env.BOT_TOKEN || !env.OWNER_ID) return;
+  const p = fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // No parse_mode: the body carries buyer-supplied text, and plain text cannot be
+    // made to render as markup.
+    body: JSON.stringify({ chat_id: env.OWNER_ID, text, disable_web_page_preview: true }),
+  }).catch(() => {});
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
+}
+const uah = (kop) => (kop == null ? '?' : '₴' + (kop / 100).toLocaleString('uk-UA'));
+const storeLink = (id) => `${APP_URL}?store=${encodeURIComponent(id)}`;
+
 // Verify Stripe's `Stripe-Signature` header (HMAC-SHA256 over `${t}.${payload}`).
 async function verifyStripeSig(payload, header, secret) {
   const parts = {};
@@ -138,7 +158,7 @@ async function verifyStripeSig(payload, header, secret) {
 }
 
 // Apply a verified Stripe event to the promos table (activate / extend / cancel).
-async function applyPromoEvent(env, ev) {
+async function applyPromoEvent(env, ev, ctx) {
   const o = (ev && ev.data && ev.data.object) || {};
   const type = ev && ev.type;
   const graceDays = (cad) => (cad === 'annual' ? 372 : 34); // period + a few days' grace
@@ -155,6 +175,16 @@ async function applyPromoEvent(env, ev) {
         o.id, storeId, md.item, o.amount_total || null, o.currency || null,
         (o.customer_details && o.customer_details.email) || null, cleanOffer(md.note) || null
       ).run();
+      const email = (o.customer_details && o.customer_details.email) || '—';
+      const note = cleanOffer(md.note);
+      tgNotify(env, ctx,
+        `🧾 NEW ORDER — you need to fulfil this\n\n` +
+        `Item:  ${ORDER_ITEMS[md.item].label}\n` +
+        `Store: ${storeId}\n` +
+        `Paid:  ${uah(o.amount_total)}\n` +
+        `Email: ${email}\n` +
+        (note ? `Note:  ${note}\n` : '') +
+        `\n${storeLink(storeId)}`);
       return;
     }
     const tier = md.tier;
@@ -172,6 +202,15 @@ async function applyPromoEvent(env, ev) {
       "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
       "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
     ).bind(storeId, tier, offer, until, o.subscription || null, cadence, run ? null : (o.customer || null)).run();
+    // A promotion fulfils itself, so this is information rather than a task.
+    tgNotify(env, ctx,
+      `💸 PROMOTION PAID — already live, nothing to do\n\n` +
+      `Store: ${storeId}\n` +
+      `Plan:  ${tier} · ${run ? run.days + '-day run' : cadence}\n` +
+      `Paid:  ${uah(o.amount_total)}\n` +
+      (offer ? `Offer: ${offer}\n` : '') +
+      `Until: ${until}\n` +
+      `\n${storeLink(storeId)}`);
   } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
     const subId = o.subscription;
     if (!subId) return;
@@ -273,7 +312,7 @@ async function sendPush(sub, payloadStr, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin') || '';
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
@@ -445,7 +484,7 @@ export default {
       const sig = request.headers.get('Stripe-Signature') || '';
       if (!(await verifyStripeSig(payload, sig, env.STRIPE_WEBHOOK_SECRET))) return new Response('bad signature', { status: 400 });
       let ev; try { ev = JSON.parse(payload); } catch { return new Response('bad json', { status: 400 }); }
-      try { await ensureSchema(env); await applyPromoEvent(env, ev); } catch {}
+      try { await ensureSchema(env); await applyPromoEvent(env, ev, ctx); } catch {}
       return new Response('ok', { status: 200 }); // 2xx so Stripe stops retrying
     }
 
