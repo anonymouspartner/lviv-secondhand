@@ -251,8 +251,28 @@ curl -H "X-Admin-Key: $ADMIN_KEY" https://lviv-metrics.lshanalytic.workers.dev/o
 
 Returns the last 200 orders (store, item, amount, buyer email, optional note, status).
 It is gated on `ADMIN_KEY` because it carries buyer emails — never expose it publicly.
-There is no automatic notification yet: nothing tells you an order arrived, so check
-this after any period where an extra might have sold.
+
+**You also get a Telegram ping the moment either kind of sale lands**, so the queue is
+a ledger rather than something you have to remember to poll:
+
+```
+🧾 NEW ORDER — you need to fulfil this     💸 PROMOTION PAID — already live, nothing to do
+Item:  Poster placement                    Store: s2
+Store: h1                                  Plan:  featured · 7-day run
+Paid:  ₴150                                Paid:  ₴200
+Email: shop@example.com                    Offer: -10% із застосунком
+Note:  -20% цей тиждень                    Until: 2026-08-14
+```
+
+Each message ends with a deep link to the store. The wording is deliberately different:
+an order is a task, a promotion is already fulfilled and just tells you money arrived.
+
+This needs the metrics Worker to have the **`BOT_TOKEN`** secret (the same repo secret
+the bot Worker already uses — `deploy-worker.yml` pushes it) and the `OWNER_ID` var in
+`worker/wrangler.toml`. Without the token it silently does nothing and `/orders` is the
+only record. The ping is sent through `ctx.waitUntil`, so a slow or failed Telegram call
+can never delay or fail the Stripe webhook, and messages carry **no `parse_mode`** —
+buyer-supplied text cannot be made to render as markup.
 
 ### Self-service purchase (in-app)
 
