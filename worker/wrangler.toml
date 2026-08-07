@@ -34,6 +34,9 @@ VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYM
 #   STRIPE_API_KEY       — a *restricted* Stripe secret key with write access to
 #                          Checkout Sessions (create) — used by GET /promote to
 #                          open a store-bound checkout. NEVER commit it.
+#                          Optionally also Billing Portal Sessions (create), which
+#                          turns on GET /billing (the in-app "Manage billing" link);
+#                          without it that route fails and the app hides the link.
 #   STRIPE_WEBHOOK_SECRET — the signing secret of the Stripe webhook endpoint
 #                          pointed at https://lviv-metrics.lshanalytic.workers.dev/stripe-webhook
 #                          (events: checkout.session.completed, invoice.paid,
