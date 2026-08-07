@@ -210,6 +210,50 @@ cust_id)` in D1 → the app's `/promos` fetch shows the pin/badge/offer within a
 load. Renewals extend `until` (`invoice.paid`); cancellation clears it
 (`customer.subscription.deleted`).
 
+### Ad-hoc (one-off) purchases
+
+The promote sheet has a third tab, **One-off**, for stores that want a burst around a
+sale week and no subscription. Two things live there, and they behave differently.
+
+**Short paid runs — self-fulfilling.** Pay once, the placement runs for exactly that
+many days and stops. Nothing recurs, nothing to cancel, no billing portal.
+
+| Tier | 7 days | 30 days |
+|---|---|---|
+| Verified+ | ₴100 | ₴250 |
+| Featured | ₴200 | ₴600 |
+| Spotlight | ₴400 | ₴1,200 |
+
+A 30-day run costs the same as one month of the subscription — the subscription's
+advantage is that it keeps running, not that it is cheaper. A 7-day run is a third of
+the month.
+
+These need **no new Stripe objects**: `/promote?…&cadence=run7|run30` builds a
+`mode=payment` session with an inline `price_data` against the tier's existing
+Product, so the rate card lives only in `PROMO_RUNS` (`worker/worker.js`). The webhook
+sets `until = today + days` and stores no `sub_id` or `cust_id`, so `invoice.paid`
+never extends a run and the "Manage billing" link correctly stays hidden.
+
+**À la carte extras — owner-fulfilled.** Deal of the week ₴300, poster placement ₴150,
+sponsored push ₴400, using the one-time Prices already live in Stripe.
+
+> These are **orders, not placements.** The app has nothing to render them into — the
+> poster is physical, deal-of-week has no in-app surface, sponsored push is not built —
+> so buying one changes nothing on the map. `/order?store=&item=` records the purchase
+> and the buyer's email in the `orders` table and the app says you will be in touch.
+> **You have to actually deliver them**, so check the queue.
+
+**Reading the order queue:**
+
+```
+curl -H "X-Admin-Key: $ADMIN_KEY" https://lviv-metrics.lshanalytic.workers.dev/orders
+```
+
+Returns the last 200 orders (store, item, amount, buyer email, optional note, status).
+It is gated on `ADMIN_KEY` because it carries buyer emails — never expose it publicly.
+There is no automatic notification yet: nothing tells you an order arrived, so check
+this after any period where an extra might have sold.
+
 ### Self-service purchase (in-app)
 
 A store owner does not need to be contacted first. In the app: open the store →

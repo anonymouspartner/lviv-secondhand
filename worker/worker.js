@@ -60,6 +60,10 @@ async function ensureSchema(env) {
   // cust_id was added after the table shipped; ignore the error on tables that
   // already have it (SQLite has no ADD COLUMN IF NOT EXISTS).
   try { await env.DB.prepare('ALTER TABLE promos ADD COLUMN cust_id TEXT').run(); } catch {}
+  // À la carte purchases the owner fulfils by hand (poster, deal-of-week, push).
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, item TEXT NOT NULL, amount INTEGER, currency TEXT, email TEXT, note TEXT, status TEXT NOT NULL DEFAULT 'paid', created TEXT NOT NULL DEFAULT (datetime('now')))"
+  ).run();
   _schemaReady = true;
 }
 
@@ -77,7 +81,36 @@ const PROMO_PRICES = {
   spotlight_annual:  'price_1U1dw17ZlQqI3gQVuizcyhYi',
 };
 const PROMO_TIERS = new Set(['verified', 'featured', 'spotlight']);
-const PROMO_CADENCES = new Set(['monthly', 'annual']);
+const PROMO_CADENCES = new Set(['monthly', 'annual', 'run7', 'run30']);
+
+// Ad-hoc runs: pay once for a fixed window, no subscription and nothing to cancel.
+// Priced inline against the existing tier Products (no new Price objects to create
+// or keep in sync) — a 30-day run costs the same as one month, a 7-day run a third.
+// `amount` is in kopiyky, as Stripe expects.
+const TIER_PRODUCTS = {
+  verified:  'prod_V1hJ671Gc5MJUt',
+  featured:  'prod_V1hKO1ma6cXUiE',
+  spotlight: 'prod_V1hKo6mVYDGRYn',
+};
+const PROMO_RUNS = {
+  verified_run7:   { amount:  10000, days: 7  },
+  verified_run30:  { amount:  25000, days: 30 },
+  featured_run7:   { amount:  20000, days: 7  },
+  featured_run30:  { amount:  60000, days: 30 },
+  spotlight_run7:  { amount:  40000, days: 7  },
+  spotlight_run30: { amount: 120000, days: 30 },
+};
+const isRun = (c) => c === 'run7' || c === 'run30';
+
+// À la carte one-offs. These are *orders*, not placements: the app has no surface to
+// render them into (the poster is physical, deal-of-week and sponsored push are not
+// built), so the purchase is recorded for the owner to fulfil by hand. Prices are the
+// ones already live in Stripe — see docs/ADVERTISING.md §7.
+const ORDER_ITEMS = {
+  deal:   { price: 'price_1U1dwY7ZlQqI3gQVMZEzRBQT', label: 'Deal of the week' },
+  poster: { price: 'price_1U1dwb7ZlQqI3gQVGSqqTa3x', label: 'Poster placement' },
+  push:   { price: 'price_1U1dwe7ZlQqI3gQV1yCPZoEc', label: 'Sponsored push' },
+};
 
 // The shopper-facing offer line ("-10% з застосунком"). Free text typed by whoever
 // pays, so it is clamped here before it ever reaches Stripe metadata or D1: angle
@@ -111,17 +144,34 @@ async function applyPromoEvent(env, ev) {
   const graceDays = (cad) => (cad === 'annual' ? 372 : 34); // period + a few days' grace
   if (type === 'checkout.session.completed') {
     const storeId = o.client_reference_id || (o.metadata && o.metadata.storeId);
-    const tier = o.metadata && o.metadata.tier;
-    const cadence = (o.metadata && o.metadata.cadence) === 'annual' ? 'annual' : 'monthly';
+    const md = o.metadata || {};
+    // À la carte purchases are orders for the owner to fulfil, not placements.
+    if (md.item && ORDER_ITEMS[md.item]) {
+      if (!storeId) return;
+      await env.DB.prepare(
+        "INSERT INTO orders (id, store_id, item, amount, currency, email, note, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', datetime('now')) " +
+        'ON CONFLICT(id) DO NOTHING'
+      ).bind(
+        o.id, storeId, md.item, o.amount_total || null, o.currency || null,
+        (o.customer_details && o.customer_details.email) || null, cleanOffer(md.note) || null
+      ).run();
+      return;
+    }
+    const tier = md.tier;
+    const rawCadence = md.cadence;
+    const cadence = PROMO_CADENCES.has(rawCadence) ? rawCadence : 'monthly';
     if (!storeId || !PROMO_TIERS.has(tier)) return;
     // Re-clean rather than trusting the round-trip: metadata could have been set
     // by any caller holding the key, not just our own /promote.
-    const offer = cleanOffer(o.metadata && o.metadata.offer) || null;
-    const until = addDaysStr(kyivDateStr(), graceDays(cadence));
+    const offer = cleanOffer(md.offer) || null;
+    // A run ends exactly when it was bought to end; a subscription runs to the next
+    // invoice plus a few days' grace. A run has no subscription, so no portal either.
+    const run = PROMO_RUNS[`${tier}_${cadence}`];
+    const until = addDaysStr(kyivDateStr(), run ? run.days : graceDays(cadence));
     await env.DB.prepare(
       "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
       "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
-    ).bind(storeId, tier, offer, until, o.subscription || null, cadence, o.customer || null).run();
+    ).bind(storeId, tier, offer, until, o.subscription || null, cadence, run ? null : (o.customer || null)).run();
   } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
     const subId = o.subscription;
     if (!subId) return;
@@ -260,24 +310,34 @@ export default {
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
-        const price = PROMO_PRICES[`${tier}_${cadence}`];
-        if (!price) return new Response('unknown tier', { status: 400, headers: cors(origin) });
+        const run = isRun(cadence) ? PROMO_RUNS[`${tier}_${cadence}`] : null;
+        const price = run ? null : PROMO_PRICES[`${tier}_${cadence}`];
+        if (!run && !price) return new Response('unknown tier', { status: 400, headers: cors(origin) });
         if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
         const form = new URLSearchParams();
-        form.set('mode', 'subscription');
-        form.set('line_items[0][price]', price);
+        form.set('mode', run ? 'payment' : 'subscription');
+        if (run) {
+          // Inline price against the tier's existing Product — one-off, nothing recurring.
+          form.set('line_items[0][price_data][currency]', 'uah');
+          form.set('line_items[0][price_data][product]', TIER_PRODUCTS[tier]);
+          form.set('line_items[0][price_data][unit_amount]', String(run.amount));
+        } else {
+          form.set('line_items[0][price]', price);
+        }
         form.set('line_items[0][quantity]', '1');
         form.set('allow_promotion_codes', 'true');
         form.set('client_reference_id', store);
         form.set('metadata[storeId]', store);
         form.set('metadata[tier]', tier);
         form.set('metadata[cadence]', cadence);
-        form.set('subscription_data[metadata][storeId]', store);
-        form.set('subscription_data[metadata][tier]', tier);
-        form.set('subscription_data[metadata][cadence]', cadence);
+        if (!run) {
+          form.set('subscription_data[metadata][storeId]', store);
+          form.set('subscription_data[metadata][tier]', tier);
+          form.set('subscription_data[metadata][cadence]', cadence);
+        }
         if (offer) {
           form.set('metadata[offer]', offer);
-          form.set('subscription_data[metadata][offer]', offer);
+          if (!run) form.set('subscription_data[metadata][offer]', offer);
         }
         form.set('success_url', APP_URL + '?promoted=' + encodeURIComponent(tier));
         form.set('cancel_url', APP_URL + '?promoted=cancel');
@@ -292,6 +352,55 @@ export default {
           if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
         } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
         return Response.redirect(data.url, 302);
+      }
+      // À la carte one-off: /order?store=<id>&item=deal|poster|push. Unlike /promote
+      // this buys a service the owner delivers by hand, so the webhook records an order
+      // rather than a placement. Nothing in the app changes when one is bought.
+      if (url.pathname === '/order') {
+        const store = url.searchParams.get('store') || '';
+        const item = url.searchParams.get('item') || '';
+        const note = cleanOffer(url.searchParams.get('note'));
+        if (!/^[a-z0-9]{1,12}$/i.test(store) || !ORDER_ITEMS[item]) {
+          return new Response('bad request', { status: 400, headers: cors(origin) });
+        }
+        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
+        const form = new URLSearchParams();
+        form.set('mode', 'payment');
+        form.set('line_items[0][price]', ORDER_ITEMS[item].price);
+        form.set('line_items[0][quantity]', '1');
+        form.set('allow_promotion_codes', 'true');
+        form.set('client_reference_id', store);
+        form.set('metadata[storeId]', store);
+        form.set('metadata[item]', item);
+        if (note) form.set('metadata[note]', note);
+        form.set('success_url', APP_URL + '?ordered=' + encodeURIComponent(item));
+        form.set('cancel_url', APP_URL + '?ordered=cancel');
+        try {
+          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form,
+          });
+          const data = await res.json();
+          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
+          return Response.redirect(data.url, 302);
+        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
+      }
+      // Owner's queue of à la carte orders to fulfil. Private: these carry buyer
+      // emails, so it is gated on the same ADMIN_KEY as the broadcast test.
+      if (url.pathname === '/orders') {
+        if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) {
+          return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+        }
+        try {
+          await ensureSchema(env);
+          const only = url.searchParams.get('status');
+          const q = only
+            ? env.DB.prepare('SELECT * FROM orders WHERE status = ? ORDER BY created DESC LIMIT 200').bind(only)
+            : env.DB.prepare('SELECT * FROM orders ORDER BY created DESC LIMIT 200');
+          const res = await q.all();
+          return json({ ok: true, orders: (res && res.results) || [] }, 200, origin);
+        } catch { return json({ ok: false, reason: 'db_error' }, 500, origin); }
       }
       // Self-service billing: /billing?store=<id> sends the paying store to the
       // Stripe customer portal (change tier, update card, cancel) so none of that
