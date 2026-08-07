@@ -261,7 +261,7 @@ function say(env, chatId, text, keyboard) {
 // extended per-chat menu that also lists /visit — so only they see it in the menu
 // (it's already functionally gated regardless). Bump CMD_VER to force a re-sync
 // after editing the lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v1';
+const CMD_VER = 'v2';
 const PUBLIC_CMDS = [
   { command: 'today', description: 'Магазини із завезенням сьогодні' },
   { command: 'cheap', description: 'Найкращі ціни на вагу зараз' },
@@ -281,6 +281,7 @@ async function syncBotCommands(env, userId, isOwner, isAgent) {
   const cmds = PUBLIC_CMDS.concat([
     { command: 'visit', description: '📝 Записати візит у магазин' },
     { command: 'myvisits', description: 'Мої візити' },
+    { command: 'pay', description: '💰 Схема оплати' },
     { command: 'cancel', description: 'Скасувати поточний візит' },
   ]);
   if (isOwner) cmds.push(
@@ -468,6 +469,31 @@ function notAgentMsg(uid) {
     `Надішліть власнику цей ID, щоб отримати доступ · Send this ID to the owner to get access:\n<code>${uid}</code>`;
 }
 
+// Agent-facing pay scheme, rendered live from the configured rates so it always
+// matches /report. Keep in sync with docs/FIELD_AGENT.md §2.
+function payText(c) {
+  return [
+    '💰 <b>Схема оплати · Payment scheme</b>',
+    '',
+    `📍 <b>База за візит · Visit base: ₴${c.rateVisit}</b>`,
+    'За кожен перевірений візит: GPS + фото вітрини + повна анкета у /visit.',
+    'Per verified visit: GPS + storefront photo + full questionnaire in /visit.',
+    'Один магазин = одна база за цикл. · One store = one base per survey cycle.',
+    '',
+    `🎁 <b>Бонус · Bonus: ₴${c.rateBonus}</b> (кожен · each)`,
+    '• QR-плакат розміщено (фото-доказ) · QR poster placed (photo proof)',
+    '• Власник зареєструвався (контакт + згода) · Owner signed up (contact + consent)',
+    'Обидва можуть діяти разом → два бонуси. · Both can apply → two bonuses.',
+    '',
+    '🎯 Ціль · Target: 8–12 магазинів/день · stores/day.',
+    '🗓️ Виплати щотижня — власник звіряє /report і фото. · Weekly pay; owner reconciles /report + photos.',
+    '',
+    '📈 <b>Фаза 2 (згодом) · Phase 2 (later)</b> — коли ви продаєте промо:',
+    'разова премія за підписаний магазин · one-time bonus per signed store',
+    '(₴300–₴500 Featured, ₴800 Spotlight). Ще не активно. · Not active yet.',
+  ].join('\n');
+}
+
 // Handle an update for the visit subsystem. Returns true if it consumed the update.
 async function handleVisit(env, c, msg, ctx) {
   const { userId, chatId, text, from } = ctx;
@@ -496,6 +522,11 @@ async function handleVisit(env, c, msg, ctx) {
     if (!isAgent) return false;
     const n = Number((await env.VISITS.get('count:agent:' + userId)) || 0);
     await say(env, chatId, `📊 Ваших візитів усього · Your total visits: <b>${n}</b>`);
+    return true;
+  }
+  if (command === 'pay') {
+    if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    await say(env, chatId, payText(c));
     return true;
   }
   if (command === 'visit') {

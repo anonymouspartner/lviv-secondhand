@@ -60,6 +60,9 @@ Spotlight — no recurring trailer). See [ADVERTISING.md](ADVERTISING.md) for th
 card and how a sale is fulfilled. *Not active yet — the owner closes the first few
 deals by hand to validate pricing, then hands selling to the agent.*
 
+The agent can pull up this scheme anytime in @Secondhandlvivbot with **/pay** (it
+shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
+
 ---
 
 ## 3. Standard operating procedure · Порядок роботи
@@ -83,6 +86,46 @@ deals by hand to validate pricing, then hands selling to the agent.*
 **End of day / Наприкінці дня**
 - Agent: quick summary in **capybara-bot** (areas done, issues, stores to revisit).
 - Owner: `/report` to see the running total; `/export` weekly for the CSV.
+
+---
+
+## Updating the map: app vs Telegram · Оновлення карти
+
+Two channels, split by what each does best.
+
+**Structured store data → edit in the app → submit via GitHub.** Restock days,
+opening hours, name changes, address, GPS, and notes are edited directly in **Lviv
+Second Hand** (open a store → **Edit**; or add a store that isn't on the map from the
+Map tab). To send the additions & corrections to the official map: **🤝 (top-right)
+→ 🌍 Contribute to the official map → 🚀 Submit on GitHub**. That opens a **pre-filled
+GitHub issue** on the repo; the owner reviews it and merges it into the map everyone
+downloads.
+
+> **The agent needs a free GitHub account** to post that issue (one-time signup at
+> github.com — no coding, just a login). Map updates flow through **GitHub issues on
+> the repo**, not by editing files. If a contribution is too large to fit in the
+> issue, the app tells you to also **💾 Download file** and attach the
+> `lviv-secondhand-stores.json` to the same issue.
+
+**Which submission path?** Two buttons in the app both open a GitHub issue:
+- **🌍 Contribute to the official map → 🚀 Submit on GitHub** — the agent's normal
+  path. It carries the whole bundle of stores she **added or corrected** while
+  surveying. Use this for survey data.
+- **🏪 Own a store? → Submit your store** — a single-store form that asks for the
+  submitter's **role + a contact to verify**. Use this only when signing up a real
+  store **owner** (the ₴200 bonus): fill it *with* the owner so their role and contact
+  are captured — that contact is the sign-up evidence. The owner can post it from
+  their own phone (their GitHub account), or the agent posts it from hers.
+
+**Photos, communication & live location → Telegram.** The app can't take photos,
+chat, or share live position — Telegram does. Storefront photos and the GPS check-in
+go through **/visit** in @Secondhandlvivbot; day-to-day questions, translation, voice
+notes, and live-location sharing go through **capybara-bot**.
+
+*Дані магазину (завезення, години, назва, адреса, GPS, нотатки) редагуються у
+застосунку → **🚀 Submit on GitHub** (потрібен безкоштовний акаунт GitHub) → оновлення
+йдуть через **GitHub issues** репозиторію. Фото, спілкування та жива геолокація — у
+Telegram.*
 
 ---
 
@@ -160,6 +203,7 @@ One-time enablement of the `/visit` subsystem is documented in
 | `/whoami` | anyone | replies with your numeric Telegram id (to be allow-listed) |
 | `/visit` | agent | start a survey |
 | `/myvisits` | agent | their running visit count |
+| `/pay` | agent · owner | show the pay scheme (live rates from `RATE_VISIT`/`RATE_BONUS`) |
 | `/cancel` | agent | abort the current survey |
 | `/report` | owner | totals, per-agent counts, **estimated pay** |
 | `/export` | owner | CSV of every logged visit |

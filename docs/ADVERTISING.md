@@ -68,7 +68,10 @@ an `offer` (no gold pin unless `tier` is set — use `tier` only for Featured/Sp
 ## 4. Unit economics (internal)
 
 - **Infra:** ~₴0 — Cloudflare + GitHub Pages free tiers.
-- **Payments:** bank transfer / cash ≈ ₴0 fee; card ≈ 2–3% if used.
+- **Payments:** card via **Stripe** ≈ **2.9% + a small fixed fee** per successful
+  charge (confirm your country's exact rate). On a ₴600 Featured that's ≈ ₴17 +
+  fixed — immaterial against the margin. Bank transfer / cash stays available at ₴0
+  fee where a store prefers it.
 - **Fulfilment:** ~5 min owner time per sale (hand-edit `promo` + deploy).
 - **Agent cost now (Phase 1):** ₴80/verified visit + poster/sign-up bonuses.
 - **Agent cost when selling (Phase 2):** a **one-time bonus per signed store**
@@ -101,14 +104,53 @@ Small stores buy foot traffic, not "impressions." Give them tangible proof:
 ## 6. Billing, cadence & compliance
 
 - **Cadence:** monthly or annual prepay; set a reminder to renew/extend `until`
-  before it lapses.
-- **Collection:** cash or bank transfer (₴0 fee) is simplest at this scale.
-- **Tax/FOP:** ad revenue in Ukraine may need FOP registration / tax handling —
-  the owner's call (this is not legal advice).
+  before it lapses. Stripe handles recurring billing and renewal reminders for you.
+- **Collection:** **Stripe** is the primary processor (see §7); cash or bank transfer
+  (₴0 fee) stays available as a fallback for stores that prefer it.
+- **Tax/FOP:** ad revenue in Ukraine may need FOP registration / tax handling, and
+  Stripe onboarding depends on an eligible business entity/country — the owner's call
+  (this is not legal advice).
 - **Ad labelling:** every paid placement is marked `Реклама / Sponsored`; keep
   featured density low (≈1 sponsored per screen/area) so the map stays trusted.
 
-## 7. Rollout sequence
+## 7. Stripe: payments & product scheme
+
+Payments into the app are processed through **Stripe**. The rate card in §2 maps
+one-to-one onto Stripe **Products** (the tier) and **Prices** (the amount + billing
+interval):
+
+| Tier | Stripe Product | Price(s) |
+|---|---|---|
+| **Verified+** | `Verified+` | ₴250 / month · ₴2,500 / year (10× — 2 months free) |
+| **Featured** | `Featured` | ₴600 / month · ₴6,000 / year |
+| **Spotlight** | `Spotlight` | ₴1,200 / month · ₴12,000 / year |
+| **À la carte** | `Deal of the week` / `Poster placement` / `Sponsored push` | one-time ₴300 / ₴150 / ₴400 |
+
+- **Intro offer** (first month Featured at ₴300): a Stripe **coupon** (50% off the
+  first invoice) on the monthly price — keeps one clean product instead of a separate
+  discounted one.
+- **Currency:** prices are in **UAH (₴)**; confirm your Stripe account supports UAH
+  settlement (otherwise charge in a supported currency and show ₴ as guidance).
+
+**Checkout flow — two options:**
+
+1. **Payment Links (recommended first — no backend).** Create one Stripe **Payment
+   Link** per Price in the Stripe Dashboard. The owner (or agent) sends the store the
+   link for their tier; the store pays by card; Stripe emails the receipt and manages
+   the subscription, retries, and renewal reminders. Nothing to deploy — fits the
+   static PWA. The owner still fulfils the placement by hand (§3) once payment lands.
+2. **Worker + Checkout Sessions (later, automated).** The existing Cloudflare Worker
+   (`telegram-bot/`) gains a small endpoint that creates a Checkout Session, and a
+   Stripe **webhook** flips the store's `promo` / Verified state on `checkout.session
+   .completed` and clears it on cancellation/expiry — closing the loop so a sale
+   self-fulfils. Build this once volume justifies removing the manual step.
+
+> **Setup status.** Wiring live products/prices/links needs the **Stripe connector
+> authorized** in this workspace (it currently is not) plus the account's keys.
+> Once that's done, the tiers above can be created as Stripe Products/Prices and the
+> Payment Links generated. Until then this section is the plan of record.
+
+## 8. Rollout sequence
 
 1. **Now:** system built; owner sells 3–5 Featured/Verified+ by hand at the intro
    price; fulfil via §3; gather testimonials + real redemption data.
