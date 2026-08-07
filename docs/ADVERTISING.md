@@ -317,6 +317,18 @@ It attempts a portal session for a customer id that cannot exist — nothing is 
 The response includes Stripe's own `stripeStatus`/`stripeMessage` for anything the
 classifier doesn't recognise. Gated on `ADMIN_KEY` — it reveals configuration state.
 
+The same verdict (without Stripe's raw message) also rides on `GET /status` as
+`portal`, so it can be checked from a phone with no key:
+
+```
+curl https://lviv-metrics.lshanalytic.workers.dev/status
+{"ok":true,...,"promoConfigured":true,"portal":"ready"}
+```
+
+`/status` never waits on Stripe — it serves the last known verdict and refreshes it in
+the background at most every 10 minutes. `"portal": null` just means this isolate has
+not probed yet; call it again in a moment.
+
 > **Known limitation — no ownership check.** Anyone can promote any store, and the
 > offer line is free text. Paying for a store you do not own is self-punishing, but
 > the offer text is the abuse surface: it is length-capped, stripped and escaped, and

@@ -142,6 +142,53 @@ function tgNotify(env, ctx, text) {
 const uah = (kop) => (kop == null ? '?' : '₴' + (kop / 100).toLocaleString('uk-UA'));
 const storeLink = (id) => `${APP_URL}?store=${encodeURIComponent(id)}`;
 
+// ── Customer-portal readiness ────────────────────────────────────────────────
+// /billing only reaches Stripe once a real subscription exists, so before the first
+// sale there is no way to tell a working setup from a key missing Billing Portal
+// Sessions or a portal configuration that was never saved. Ask Stripe with a customer
+// id that cannot exist: nothing is created, and the error names the problem.
+const PORTAL_HINTS = {
+  key_missing_permission: 'Add "Billing Portal Sessions: Write" to the restricted key at dashboard.stripe.com/apikeys',
+  portal_not_configured:  'Save a portal configuration at dashboard.stripe.com/settings/billing/portal',
+  ready:                  'Manage billing will work as soon as a store has an active subscription',
+  no_stripe_key:          'STRIPE_API_KEY is not set on this Worker',
+};
+async function probePortal(env) {
+  if (!env.STRIPE_API_KEY) return { state: 'no_stripe_key', status: 0, msg: '' };
+  const form = new URLSearchParams();
+  form.set('customer', 'cus_lvivSelfTestNoSuchCustomer');
+  form.set('return_url', APP_URL);
+  try {
+    const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    const msg = (data && data.error && data.error.message) || '';
+    let state = 'unknown';
+    if (res.ok) state = 'ready';                                   // shouldn't happen, but harmless
+    else if (res.status === 403 || /permission|not permitted/i.test(msg)) state = 'key_missing_permission';
+    else if (/configuration/i.test(msg)) state = 'portal_not_configured';
+    else if (/no such customer|resource_missing/i.test(msg)) state = 'ready';
+    return { state, status: res.status, msg };
+  } catch { return { state: 'fetch_failed', status: 0, msg: '' }; }
+}
+// /status is hit on every app load, so it must never wait on Stripe: it serves the
+// last known verdict and refreshes it in the background at most every 10 minutes.
+// null simply means "not probed yet on this isolate" — ask again in a moment.
+let _portal = { at: 0, state: null };
+const PORTAL_TTL = 10 * 60 * 1000;
+function portalReadyCached(env, ctx) {
+  const now = Date.now();
+  if (env.STRIPE_API_KEY && now - _portal.at > PORTAL_TTL) {
+    _portal.at = now; // claim the slot first so concurrent requests don't all probe
+    const p = probePortal(env).then(r => { _portal.state = r.state; }).catch(() => {});
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
+  }
+  return _portal.state;
+}
+
 // Verify Stripe's `Stripe-Signature` header (HMAC-SHA256 over `${t}.${payload}`).
 async function verifyStripeSig(payload, header, secret) {
   const parts = {};
@@ -320,7 +367,7 @@ export default {
       if (url.pathname === '/status') {
         let subs = null;
         try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
-        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: !!env.STRIPE_API_KEY }, 200, origin);
+        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: !!env.STRIPE_API_KEY, portal: portalReadyCached(env, ctx) }, 200, origin);
       }
       // Live paid promotions: { storeId: {tier, offer?, until} }. The app merges
       // these onto STORES so the gold pin/badge/offer render automatically.
@@ -453,35 +500,12 @@ export default {
         if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) {
           return json({ ok: false, reason: 'unauthorized' }, 401, origin);
         }
-        if (!env.STRIPE_API_KEY) return json({ ok: false, state: 'no_stripe_key' }, 200, origin);
-        const form = new URLSearchParams();
-        form.set('customer', 'cus_lvivSelfTestNoSuchCustomer');
-        form.set('return_url', APP_URL);
-        try {
-          const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form,
-          });
-          const data = await res.json().catch(() => ({}));
-          const msg = (data && data.error && data.error.message) || '';
-          let state = 'unknown';
-          if (res.ok) state = 'ready';                                  // shouldn't happen, but harmless
-          else if (res.status === 403 || /permission|not permitted/i.test(msg)) state = 'key_missing_permission';
-          else if (/configuration/i.test(msg)) state = 'portal_not_configured';
-          else if (/no such customer|resource_missing/i.test(msg)) state = 'ready';
-          return json({
-            ok: state === 'ready', state,
-            hint: state === 'key_missing_permission'
-              ? 'Add "Billing Portal Sessions: Write" to the restricted key at dashboard.stripe.com/apikeys'
-              : state === 'portal_not_configured'
-              ? 'Save a portal configuration at dashboard.stripe.com/settings/billing/portal'
-              : state === 'ready'
-              ? 'Manage billing will work as soon as a store has an active subscription'
-              : 'Unrecognised Stripe response — see stripeMessage',
-            stripeStatus: res.status, stripeMessage: msg,
-          }, 200, origin);
-        } catch (e) { return json({ ok: false, state: 'fetch_failed' }, 200, origin); }
+        const r = await probePortal(env);
+        return json({
+          ok: r.state === 'ready', state: r.state,
+          hint: PORTAL_HINTS[r.state] || 'Unrecognised Stripe response — see stripeMessage',
+          stripeStatus: r.status, stripeMessage: r.msg,
+        }, 200, origin);
       }
       // Self-service billing: /billing?store=<id> sends the paying store to the
       // Stripe customer portal (change tier, update card, cancel) so none of that
