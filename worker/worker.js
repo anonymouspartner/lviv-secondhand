@@ -55,8 +55,11 @@ async function ensureSchema(env) {
   ).run();
   // Paid in-app promotions, self-fulfilled from Stripe (see stripe-webhook).
   await env.DB.prepare(
-    "CREATE TABLE IF NOT EXISTS promos (store_id TEXT PRIMARY KEY, tier TEXT NOT NULL, offer TEXT, until TEXT NOT NULL, sub_id TEXT, cadence TEXT, status TEXT NOT NULL DEFAULT 'active', updated TEXT NOT NULL DEFAULT (datetime('now')))"
+    "CREATE TABLE IF NOT EXISTS promos (store_id TEXT PRIMARY KEY, tier TEXT NOT NULL, offer TEXT, until TEXT NOT NULL, sub_id TEXT, cadence TEXT, cust_id TEXT, status TEXT NOT NULL DEFAULT 'active', updated TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
+  // cust_id was added after the table shipped; ignore the error on tables that
+  // already have it (SQLite has no ADD COLUMN IF NOT EXISTS).
+  try { await env.DB.prepare('ALTER TABLE promos ADD COLUMN cust_id TEXT').run(); } catch {}
   _schemaReady = true;
 }
 
@@ -75,6 +78,16 @@ const PROMO_PRICES = {
 };
 const PROMO_TIERS = new Set(['verified', 'featured', 'spotlight']);
 const PROMO_CADENCES = new Set(['monthly', 'annual']);
+
+// The shopper-facing offer line ("-10% з застосунком"). Free text typed by whoever
+// pays, so it is clamped here before it ever reaches Stripe metadata or D1: angle
+// brackets stripped, whitespace collapsed, length capped. The app also escapes it
+// on render — this is the second of the two gates, not the only one.
+const OFFER_MAX = 48;
+function cleanOffer(raw) {
+  const s = String(raw || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+  return s.slice(0, OFFER_MAX);
+}
 
 // Verify Stripe's `Stripe-Signature` header (HMAC-SHA256 over `${t}.${payload}`).
 async function verifyStripeSig(payload, header, secret) {
@@ -101,11 +114,14 @@ async function applyPromoEvent(env, ev) {
     const tier = o.metadata && o.metadata.tier;
     const cadence = (o.metadata && o.metadata.cadence) === 'annual' ? 'annual' : 'monthly';
     if (!storeId || !PROMO_TIERS.has(tier)) return;
+    // Re-clean rather than trusting the round-trip: metadata could have been set
+    // by any caller holding the key, not just our own /promote.
+    const offer = cleanOffer(o.metadata && o.metadata.offer) || null;
     const until = addDaysStr(kyivDateStr(), graceDays(cadence));
     await env.DB.prepare(
-      "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, status, updated) VALUES (?, ?, NULL, ?, ?, ?, 'active', datetime('now')) " +
-      "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, status='active', updated=datetime('now')"
-    ).bind(storeId, tier, until, o.subscription || null, cadence).run();
+      "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
+      "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
+    ).bind(storeId, tier, offer, until, o.subscription || null, cadence, o.customer || null).run();
   } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
     const subId = o.subscription;
     if (!subId) return;
@@ -222,9 +238,14 @@ export default {
       if (url.pathname === '/promos') {
         try {
           await ensureSchema(env);
-          const res = await env.DB.prepare("SELECT store_id, tier, offer, until FROM promos WHERE status = 'active' AND until >= ?").bind(kyivDateStr()).all();
+          const res = await env.DB.prepare("SELECT store_id, tier, offer, until, cust_id FROM promos WHERE status = 'active' AND until >= ?").bind(kyivDateStr()).all();
           const out = {};
-          for (const r of (res && res.results) || []) { out[r.store_id] = r.offer ? { tier: r.tier, offer: r.offer, until: r.until } : { tier: r.tier, until: r.until }; }
+          for (const r of (res && res.results) || []) {
+            const p = { tier: r.tier, until: r.until };
+            if (r.offer) p.offer = r.offer;
+            if (r.cust_id) p.manage = true; // app shows "Manage billing" only when a portal is reachable
+            out[r.store_id] = p;
+          }
           return json(out, 200, origin);
         } catch { return json({}, 200, origin); }
       }
@@ -235,6 +256,7 @@ export default {
         const store = url.searchParams.get('store') || '';
         const tier = url.searchParams.get('tier') || 'featured';
         const cadence = url.searchParams.get('cadence') || 'monthly';
+        const offer = cleanOffer(url.searchParams.get('offer'));
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
@@ -253,8 +275,12 @@ export default {
         form.set('subscription_data[metadata][storeId]', store);
         form.set('subscription_data[metadata][tier]', tier);
         form.set('subscription_data[metadata][cadence]', cadence);
-        form.set('success_url', APP_URL + '?promoted=1');
-        form.set('cancel_url', APP_URL);
+        if (offer) {
+          form.set('metadata[offer]', offer);
+          form.set('subscription_data[metadata][offer]', offer);
+        }
+        form.set('success_url', APP_URL + '?promoted=' + encodeURIComponent(tier));
+        form.set('cancel_url', APP_URL + '?promoted=cancel');
         let data;
         try {
           const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
@@ -266,6 +292,36 @@ export default {
           if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
         } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
         return Response.redirect(data.url, 302);
+      }
+      // Self-service billing: /billing?store=<id> sends the paying store to the
+      // Stripe customer portal (change tier, update card, cancel) so none of that
+      // has to come through the owner. Needs the restricted key to also carry
+      // "Billing Portal Sessions: Write" plus a saved portal configuration —
+      // without either, this 404s/502s and the app simply hides the link.
+      if (url.pathname === '/billing') {
+        const store = url.searchParams.get('store') || '';
+        if (!/^[a-z0-9]{1,12}$/i.test(store)) return new Response('bad request', { status: 400, headers: cors(origin) });
+        if (!env.STRIPE_API_KEY) return new Response('billing not configured', { status: 503, headers: cors(origin) });
+        let cust = null;
+        try {
+          await ensureSchema(env);
+          const row = await env.DB.prepare('SELECT cust_id FROM promos WHERE store_id = ?').bind(store).first();
+          cust = row && row.cust_id;
+        } catch {}
+        if (!cust) return new Response('no subscription', { status: 404, headers: cors(origin) });
+        const form = new URLSearchParams();
+        form.set('customer', cust);
+        form.set('return_url', APP_URL);
+        try {
+          const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form,
+          });
+          const data = await res.json();
+          if (!res.ok || !data.url) return new Response('billing error', { status: 502, headers: cors(origin) });
+          return Response.redirect(data.url, 302);
+        } catch { return new Response('billing error', { status: 502, headers: cors(origin) }); }
       }
       return new Response('ok', { status: 200, headers: cors(origin) });
     }

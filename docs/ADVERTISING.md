@@ -191,7 +191,8 @@ empty set and `/promote` + `/stripe-webhook` reply `503`, so nothing changes.
 
 1. **Restricted Stripe key.** Stripe Dashboard → Developers → API keys → **Create
    restricted key** with **Checkout Sessions: Write** (everything else None). Add it as
-   the repo secret **`STRIPE_API_KEY`**.
+   the repo secret **`STRIPE_API_KEY`**. Add **Billing Portal Sessions: Write** too if
+   you want the in-app "Manage billing" link (optional — see below).
 2. **Webhook endpoint.** Stripe Dashboard → Developers → Webhooks → **Add endpoint** →
    URL `https://lviv-metrics.lshanalytic.workers.dev/stripe-webhook`, events:
    `checkout.session.completed`, `invoice.paid`,
@@ -204,9 +205,54 @@ empty set and `/promote` + `/stripe-webhook` reply `503`, so nothing changes.
 **How a sale then flows:** the owner/agent sends a store-bound link
 `…/promote?store=<storeId>&tier=featured&cadence=monthly` (the app's in-store
 **"Own this store? Promote it"** button builds one) → the store pays (₴, `FEATURED50`
-still applies) → the webhook writes `promos(store_id, tier, until, sub_id)` in D1 →
-the app's `/promos` fetch shows the pin/badge/offer within a page load. Renewals extend
-`until` (`invoice.paid`); cancellation clears it (`customer.subscription.deleted`).
+still applies) → the webhook writes `promos(store_id, tier, offer, until, sub_id,
+cust_id)` in D1 → the app's `/promos` fetch shows the pin/badge/offer within a page
+load. Renewals extend `until` (`invoice.paid`); cancellation clears it
+(`customer.subscription.deleted`).
+
+### Self-service purchase (in-app)
+
+A store owner does not need to be contacted first. In the app: open the store →
+bottom of the store page → **📣 Own this store? Promote it** → a sheet showing the
+full rate card. They pick monthly/annual, pick a tier, optionally type the offer
+line shoppers will see, and pay. The CTA only appears when `/status` reports
+`promoConfigured: true`, so it can never lead to a dead checkout.
+
+The sheet's prices are **display-only** — what is actually charged comes from the
+Stripe Price ids in `worker/worker.js`. A stale number in `PROMO_PLANS` (index.html)
+cannot charge the wrong amount, but it will misinform, so **change both together**.
+
+**Offer line.** Typed by whoever pays, capped at 48 chars, angle brackets stripped
+and whitespace collapsed in the Worker (`cleanOffer`) on the way in *and* again in
+the webhook, then escaped on render. Leave it blank and the card simply omits it.
+
+**Self-service billing.** Once a subscription exists, the store page shows
+**⚙️ Manage billing** → `/billing?store=<id>` → the Stripe customer portal (change
+tier, update card, cancel). This needs the restricted key to *also* carry **Billing
+Portal Sessions: Write** and a saved portal configuration in Stripe; without either
+the route fails and the app just hides the link, so it is safe to skip.
+
+> **Known limitation — no ownership check.** Anyone can promote any store, and the
+> offer line is free text. Paying for a store you do not own is self-punishing, but
+> the offer text is the abuse surface: it is length-capped, stripped and escaped, and
+> the promo is one `UPDATE promos SET status='canceled'` away from removal. Revisit
+> if it is ever actually abused; do not add friction before then.
+
+### What each tier actually renders
+
+The app enforces the rate card, so the tiers are visibly different — a store that
+pays more gets more, and Verified+ never quietly buys a placement.
+
+| | Verified+ | Featured | Spotlight |
+|---|---|---|---|
+| Badge on card | ✓ Verified (green) | ⭐ Sponsored (gold) | 🌟 Spotlight · Sponsored |
+| Offer line | ✓ | ✓ | ✓ |
+| List position | **unchanged** | boosted | boosted, above Featured |
+| Map pin | **unchanged** | gold ⭐, 44px | gold 🌟, 50px, above all |
+
+Verified+ is a trust badge, not an ad placement: it changes no ranking and no pin,
+which is what keeps the map honest and keeps the two ad tiers worth their price. A
+legacy promo with no `tier` is treated as Featured.
 
 ## 8. Rollout sequence
 
