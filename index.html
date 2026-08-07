@@ -1219,6 +1219,9 @@ function openDetail(id) {
       <!-- SHARE THIS STORE -->
       <button onclick="copyStoreLink('${id}')" style="width:100%;padding:12px;background:white;border:2px solid var(--muted);color:var(--muted);border-radius:14px;font-size:14px;font-weight:700;cursor:pointer;margin-top:12px;">🔗 ${t('copyStoreLink')}</button>
 
+      <!-- PROMOTE (owner-facing, opens a store-bound Stripe checkout) -->
+      ${promoCheckoutEnabled ? `<button onclick="promoteStore('${id}','featured','monthly')" style="width:100%;padding:11px;background:transparent;border:1px dashed var(--muted);color:var(--muted);border-radius:14px;font-size:13px;font-weight:600;cursor:pointer;margin-top:10px;">📣 ${lang==='ua'?'Власник магазину? Просувати':'Own this store? Promote it'}</button>` : ''}
+
     </div>`;
 
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
@@ -2189,6 +2192,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   setLang(lang); // apply saved-or-detected language to the UI (Ukrainian by default)
   renderList();
   updateStats();
+  loadRemotePromos(); // merge any live paid promotions, then re-render if present
   // Deep link (?store=<id>): a direct link to one store — from a shared link or
   // the Telegram bot — opens that store straight away and skips the interstitials.
   const deepLinkStore = getStoreFromURL();
@@ -2232,7 +2236,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-06.9';
+const APP_VERSION = '2026-08-07.1';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
@@ -2281,6 +2285,49 @@ function track(type, key){
     if (navigator.sendBeacon) navigator.sendBeacon(METRICS_URL, body);
     else fetch(METRICS_URL, { method:'POST', body, keepalive:true }).catch(()=>{});
   } catch(e){ /* metrics must never break the app */ }
+}
+
+// ─────────────────────────────────────────────
+// PAID PROMOTIONS — live feed. A store that buys a promotion (Stripe checkout,
+// self-fulfilled by the Worker) appears in GET /promos as {storeId:{tier,offer,
+// until}}. We merge it onto STORES on load so the gold pin / list badge / offer
+// render exactly like a hand-added `promo`. Fails silently offline; static
+// `promo` fields in STORES still work without the network.
+// ─────────────────────────────────────────────
+// True once the Worker confirms paid checkout is configured — gates the in-app
+// "Promote it" CTA so it only appears when a click will actually reach Stripe.
+let promoCheckoutEnabled = false;
+async function loadRemotePromos(){
+  if (!METRICS_URL) return;
+  try {
+    const r = await fetch(METRICS_URL + '/promos', { cache:'no-store' });
+    if (r.ok){
+      const map = await r.json();
+      if (map && typeof map === 'object'){
+        let touched = false;
+        for (const s of STORES){
+          const p = map[s.id];
+          if (p && (p.tier || p.offer) && p.until){ s.promo = { tier:p.tier, offer:p.offer, until:p.until }; touched = true; }
+        }
+        if (touched){ renderList(); if (mapInst) renderPins(); }
+      }
+    }
+  } catch(e){ /* promotions must never break the app */ }
+  // Only surface the promote CTA when checkout is live (else a click 503s).
+  try {
+    const st = await fetch(METRICS_URL + '/status').then(x => x.ok ? x.json() : null);
+    if (st && st.promoConfigured) promoCheckoutEnabled = true;
+  } catch(e){ /* leave the CTA hidden if we can't confirm */ }
+}
+// Open a store-bound Stripe checkout for a promotion (owner-facing). The Worker
+// binds the store id so the purchase self-fulfils.
+function promoteStore(id, tier, cadence){
+  if (!METRICS_URL) return;
+  const url = METRICS_URL + '/promote?store=' + encodeURIComponent(id)
+    + '&tier=' + encodeURIComponent(tier || 'featured')
+    + '&cadence=' + encodeURIComponent(cadence || 'monthly');
+  track('action', 'promote_' + (tier || 'featured'));
+  window.open(url, '_blank', 'noopener');
 }
 
 // ─────────────────────────────────────────────

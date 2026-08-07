@@ -139,11 +139,13 @@ interval):
    emails the receipt and manages the subscription, retries, and renewal reminders.
    Nothing to deploy — fits the static PWA. The owner still fulfils the placement by
    hand (§3) once payment lands.
-2. **Worker + Checkout Sessions (later, automated).** The existing Cloudflare Worker
-   (`telegram-bot/`) gains a small endpoint that creates a Checkout Session, and a
-   Stripe **webhook** flips the store's `promo` / Verified state on `checkout.session
-   .completed` and clears it on cancellation/expiry — closing the loop so a sale
-   self-fulfils. Build this once volume justifies removing the manual step.
+2. **Worker + webhook self-fulfilment (built — activate with two secrets).** The
+   metrics Worker (`worker/`) now exposes three routes: `GET /promote?store=<id>&tier=
+   <t>&cadence=<c>` opens a **store-bound** Checkout Session, `POST /stripe-webhook`
+   verifies Stripe's signature and writes/expires the promo in D1, and `GET /promos`
+   serves the live set. The app fetches `/promos` on load and renders the gold pin/
+   badge/offer automatically — **no `index.html` edit per sale**. See "Self-fulfil
+   activation" below.
 
 ### Live Stripe objects (account "Lviv Second Hand", live mode)
 
@@ -175,9 +177,34 @@ cadence:
 **`FEATURED50`** (coupon `6QsSUgXf`, 50% off the first invoice) to get the first month
 of Featured at ₴300 (or the same discount on any tier's first charge).
 
-> The products/prices/links above are **live** — real charges. Fulfilment is still
-> manual (§3): when a payment lands, add the store's `promo` and deploy. The Worker +
-> webhook automation (option 2) can later flip that state on its own.
+> The products/prices/links above are **live** — real charges. With self-fulfilment
+> activated (below), a paid checkout writes the promo to D1 and the app shows it on
+> its own; the generic Payment Links above still work but need the manual `promo` edit
+> (§3), so prefer the store-bound `/promote` links once activated.
+
+### Self-fulfil activation (owner, one-time)
+
+The code ships **inert** until two secrets are set — until then `/promos` returns an
+empty set and `/promote` + `/stripe-webhook` reply `503`, so nothing changes.
+
+1. **Restricted Stripe key.** Stripe Dashboard → Developers → API keys → **Create
+   restricted key** with **Checkout Sessions: Write** (everything else None). Add it as
+   the repo secret **`STRIPE_API_KEY`**.
+2. **Webhook endpoint.** Stripe Dashboard → Developers → Webhooks → **Add endpoint** →
+   URL `https://lviv-metrics.lshanalytic.workers.dev/stripe-webhook`, events:
+   `checkout.session.completed`, `invoice.paid`,
+   `customer.subscription.deleted`, `customer.subscription.updated`. Copy its **signing
+   secret** (`whsec_…`) into the repo secret **`STRIPE_WEBHOOK_SECRET`**.
+3. **Deploy.** Push to `main` (or run the *Deploy metrics Worker* action) —
+   `deploy-worker.yml` sets both secrets on the Worker. Confirm at
+   `…workers.dev/status` (`promoConfigured: true`).
+
+**How a sale then flows:** the owner/agent sends a store-bound link
+`…/promote?store=<storeId>&tier=featured&cadence=monthly` (the app's in-store
+**"Own this store? Promote it"** button builds one) → the store pays (₴, `FEATURED50`
+still applies) → the webhook writes `promos(store_id, tier, until, sub_id)` in D1 →
+the app's `/promos` fetch shows the pin/badge/offer within a page load. Renewals extend
+`until` (`invoice.paid`); cancellation clears it (`customer.subscription.deleted`).
 
 ## 8. Rollout sequence
 

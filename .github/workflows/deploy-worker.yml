@@ -43,3 +43,24 @@ jobs:
         run: |
           if [ -z "$ADMIN_KEY" ]; then echo "ADMIN_KEY not set — skipping (server-side broadcast test stays off until you add it)"; exit 0; fi
           printf '%s' "$ADMIN_KEY" | npx --yes wrangler@3 secret put ADMIN_KEY
+      # Paid promotions: restricted Stripe key (create Checkout Sessions) +
+      # webhook signing secret. Both optional — the promo checkout/webhook stay
+      # off until set. See docs/ADVERTISING.md §7.
+      - name: Set Stripe API key secret
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+        run: |
+          if [ -z "$STRIPE_API_KEY" ]; then echo "STRIPE_API_KEY not set — skipping (promo checkout stays off until you add it)"; exit 0; fi
+          printf '%s' "$STRIPE_API_KEY" | npx --yes wrangler@3 secret put STRIPE_API_KEY
+      - name: Set Stripe webhook secret
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$STRIPE_WEBHOOK_SECRET" ]; then echo "STRIPE_WEBHOOK_SECRET not set — skipping (promo self-fulfil stays off until you add it)"; exit 0; fi
+          printf '%s' "$STRIPE_WEBHOOK_SECRET" | npx --yes wrangler@3 secret put STRIPE_WEBHOOK_SECRET
