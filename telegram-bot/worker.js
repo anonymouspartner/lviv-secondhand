@@ -11,7 +11,6 @@
 //   /visit        — guided store-survey flow (store → GPS → photo → questionnaire)
 //   /myvisits     — an agent's own running visit count
 //   /cancel       — abort an in-progress /visit
-//   /whoami       — reply with your numeric Telegram ID (to get allow-listed)
 //   /report       — OWNER only: totals, per-agent counts, estimated pay
 //   /export       — OWNER only: CSV of all logged visits
 //
@@ -520,10 +519,6 @@ async function handleVisit(env, c, msg, ctx) {
   // the extended /visit menu only for the owner & agents).
   if (command) await syncBotCommands(env, userId, isOwner, isAgent);
 
-  if (command === 'whoami' || command === 'myid') {
-    await say(env, chatId, `Your Telegram ID · Ваш ID: <code>${userId}</code>`);
-    return true;
-  }
   if (isOwner && (command === 'report' || command === 'visits')) { await ownerReport(env, c, chatId); return true; }
   if (isOwner && command === 'export') { await ownerExport(env, chatId); return true; }
 
