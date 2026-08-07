@@ -322,6 +322,38 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
 .visit-btn.no{ background:var(--green); }
 .promo-card{ background:linear-gradient(135deg,#fff3cf,#ffe6a1); border-color:var(--acid2); }
 .section-tip{ background:#fff6d6; border-color:var(--acid); color:#6f5600; }
+
+/* ============ Detail bottom-sheet (grip + slide-up; gesture in JS) ============ */
+.det-header{ position:relative; border-radius:20px 20px 0 0; padding-top:22px; }
+.det-header::before{ content:''; position:absolute; top:9px; left:50%; transform:translateX(-50%);
+  width:40px; height:5px; border-radius:3px; background:rgba(255,255,255,.55); }
+@keyframes sheetIn{ from{ transform:translateY(34px); opacity:.4 } to{ transform:translateY(0); opacity:1 } }
+#detail-view:not(.hidden){ animation:sheetIn .28s cubic-bezier(.22,.61,.36,1); will-change:transform; }
+@media (prefers-reduced-motion: reduce){ #detail-view:not(.hidden){ animation:none; } }
+
+/* ===================== v2 DARK THEME — follows the device setting ===================== */
+@media (prefers-color-scheme: dark){
+  :root{
+    --green:#3aa869; --green2:#2f8f57; --green-light:#3aa869; --green-pale:#173a27;
+    --red:#e07a6c; --red-pale:#3a201c; --blue:#6cb6e0; --blue-pale:#15303f; --orange:#ff8a52;
+    --bg:#0b1f14; --card:#12301f; --text:#eaf1e7; --muted:#93a89b; --border:#22402f;
+    --ink:#0d2c1a; --chip:#173a27;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 30px rgba(0,0,0,.45);
+  }
+  .tabs, .filter-bar, .info-card, .tracker-card, .welcome-box, .sheet, .restore-banner, .store-card{ background:var(--card); }
+  .fbtn, .share-action, .field{ background:var(--card); color:var(--text); }
+  .field::placeholder{ color:var(--muted); }
+  .fbtn.active{ background:var(--acid); color:#0a1c12; border-color:var(--acid); }  /* invert: pops on dark */
+  .section-tip{ background:#2a2410; border-color:#5a4a1e; color:#f0d98a; }
+  .tracker-tip{ background:#12301f; border-color:#2a4d38; color:#a7d8bb; }
+  .kg-table tr.today-kg{ background:#173a27; }
+  .tag-gray{ background:#1e2a22; color:var(--muted); }
+  .tag-gold{ background:#2a2410; color:#e7c766; }
+  .card-offer{ background:#2a2410; color:#e7c766; }
+  .promo-card{ background:linear-gradient(135deg,#241f10,#33290f); border-color:var(--acid2); }
+  .promo-badge, .promo-offer, .promo-until{ color:#e7c766; }
+  .deal-meter .dm-track b{ background:#0b1f14; }   /* thumb reads on dark track */
+}
 </style>
 </head>
 <body>
@@ -1283,13 +1315,47 @@ function openDetail(id) {
     </div>`;
 
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
-  document.getElementById('detail-view').classList.remove('hidden');
+  const dv = document.getElementById('detail-view');
+  dv.style.transform = ''; dv.style.transition = '';
+  dv.classList.remove('hidden');
+  dv.scrollTop = 0;
+  initDetailSheet();
   document.getElementById('filter-bar').style.display = 'none';
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
 }
 
+// Bottom-sheet feel for the store detail: drag down from the header/grip to
+// dismiss (touch only; the Back button and desktop are unaffected). Attaches
+// once to the persistent #detail-view container.
+function initDetailSheet() {
+  const dv = document.getElementById('detail-view');
+  if (!dv || dv._sheetBound) return;
+  dv._sheetBound = true;
+  let startY = null, dragging = false, dy = 0;
+  dv.addEventListener('touchstart', (e) => {
+    if (dv.scrollTop > 4) return;                       // only when scrolled to top
+    const t = e.touches[0];
+    if (t.clientY - dv.getBoundingClientRect().top > 130) return; // header/grip zone only
+    startY = t.clientY; dragging = true; dy = 0; dv.style.transition = 'none';
+  }, { passive: true });
+  dv.addEventListener('touchmove', (e) => {
+    if (!dragging || startY == null) return;
+    dy = e.touches[0].clientY - startY;
+    if (dy > 0) dv.style.transform = 'translateY(' + dy + 'px)';
+  }, { passive: true });
+  dv.addEventListener('touchend', () => {
+    if (!dragging) return;
+    dragging = false; startY = null;
+    dv.style.transition = 'transform .22s ease';
+    if (dy > 90) { dv.style.transform = 'translateY(100%)'; setTimeout(closeDetail, 190); }
+    else { dv.style.transform = ''; }
+  });
+}
+
 function closeDetail() {
-  document.getElementById('detail-view').classList.add('hidden');
+  const dv0 = document.getElementById('detail-view');
+  dv0.style.transform = ''; dv0.style.transition = '';
+  dv0.classList.add('hidden');
   document.getElementById('filter-bar').style.display = 'flex';
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
   if (currentTab === 'list') {
@@ -2295,7 +2361,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-07.2';
+const APP_VERSION = '2026-08-07.3';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
