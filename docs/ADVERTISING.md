@@ -134,21 +134,50 @@ interval):
 
 **Checkout flow — two options:**
 
-1. **Payment Links (recommended first — no backend).** Create one Stripe **Payment
-   Link** per Price in the Stripe Dashboard. The owner (or agent) sends the store the
-   link for their tier; the store pays by card; Stripe emails the receipt and manages
-   the subscription, retries, and renewal reminders. Nothing to deploy — fits the
-   static PWA. The owner still fulfils the placement by hand (§3) once payment lands.
+1. **Payment Links (recommended first — no backend).** One Stripe **Payment Link**
+   per Price — send the store the link for their tier; the store pays by card; Stripe
+   emails the receipt and manages the subscription, retries, and renewal reminders.
+   Nothing to deploy — fits the static PWA. The owner still fulfils the placement by
+   hand (§3) once payment lands.
 2. **Worker + Checkout Sessions (later, automated).** The existing Cloudflare Worker
    (`telegram-bot/`) gains a small endpoint that creates a Checkout Session, and a
    Stripe **webhook** flips the store's `promo` / Verified state on `checkout.session
    .completed` and clears it on cancellation/expiry — closing the loop so a sale
    self-fulfils. Build this once volume justifies removing the manual step.
 
-> **Setup status.** Wiring live products/prices/links needs the **Stripe connector
-> authorized** in this workspace (it currently is not) plus the account's keys.
-> Once that's done, the tiers above can be created as Stripe Products/Prices and the
-> Payment Links generated. Until then this section is the plan of record.
+### Live Stripe objects (account "Lviv Second Hand", live mode)
+
+Prices are **charged in UAH (₴)** and settle to the account's USD balance with Stripe's
+currency conversion (~1% on top of card fees). Send a store the link for its tier and
+cadence:
+
+| Tier | Monthly link (₴/mo) | Annual link (₴/yr — 2 months free) |
+|---|---|---|
+| **Verified+** | ₴250 · https://buy.stripe.com/14A3cp09O3NieWh1kmgA803 | ₴2,500 · https://buy.stripe.com/fZu28l7Cg1Fa7tP6EGgA809 |
+| **Featured** | ₴600 · https://buy.stripe.com/bJe28l1dS3Ni9BXe78gA804 | ₴6,000 · https://buy.stripe.com/eVq7sFbSw3NieWhfbcgA80a |
+| **Spotlight** | ₴1,200 · https://buy.stripe.com/dRm00d2hWfw05lH2oqgA805 | ₴12,000 · https://buy.stripe.com/dRm14hg8M2JecO9d34gA80b |
+
+**À la carte (one-time):**
+
+| Item | Payment Link |
+|---|---|
+| Deal of the week — ₴300 | https://buy.stripe.com/4gM7sF1dS6Zu01n4wygA806 |
+| Poster placement — ₴150 | https://buy.stripe.com/28E9AN6yc3Ni8xTgfggA807 |
+| Sponsored push — ₴400 | https://buy.stripe.com/14A4gt8GkerW5lH6EGgA808 |
+
+**Products & price IDs** (`prod` = product, monthly · annual price):
+- Verified+ `prod_V1hJ671Gc5MJUt` — `price_1U1dvd7ZlQqI3gQVAk6edEci` · `price_1U1dvn7ZlQqI3gQVH2XJobOD`
+- Featured `prod_V1hKO1ma6cXUiE` — `price_1U1dvq7ZlQqI3gQV51PMcCVM` · `price_1U1dvt7ZlQqI3gQVd8utdXLA`
+- Spotlight `prod_V1hKo6mVYDGRYn` — `price_1U1dvv7ZlQqI3gQVR5qnNNHk` · `price_1U1dw17ZlQqI3gQVuizcyhYi`
+- À la carte one-time — `price_1U1dwY7ZlQqI3gQVMZEzRBQT` (deal) · `price_1U1dwb7ZlQqI3gQVGSqqTa3x` (poster) · `price_1U1dwe7ZlQqI3gQV1yCPZoEc` (push)
+
+**Intro offer:** all six subscription links accept promo codes — a store enters
+**`FEATURED50`** (coupon `6QsSUgXf`, 50% off the first invoice) to get the first month
+of Featured at ₴300 (or the same discount on any tier's first charge).
+
+> The products/prices/links above are **live** — real charges. Fulfilment is still
+> manual (§3): when a payment lands, add the store's `promo` and deploy. The Worker +
+> webhook automation (option 2) can later flip that state on its own.
 
 ## 8. Rollout sequence
 
