@@ -122,6 +122,12 @@ function cleanOffer(raw) {
   return s.slice(0, OFFER_MAX);
 }
 
+// Stripe renders its hosted checkout in the buyer's browser locale unless told
+// otherwise, so a Ukrainian shop owner on an English phone would be asked to pay in
+// English. The app passes its own language through instead; Ukrainian is the default
+// because the app's is.
+const stripeLocale = (v) => (v === 'en' ? 'en' : 'uk');
+
 // ── Owner notification ───────────────────────────────────────────────────────
 // An à la carte extra is delivered by hand, so a silent sale is a missed one. Ping
 // the owner on Telegram the moment money lands. Inert without BOT_TOKEN + OWNER_ID,
@@ -412,6 +418,7 @@ export default {
         }
         form.set('line_items[0][quantity]', '1');
         form.set('allow_promotion_codes', 'true');
+        form.set('locale', stripeLocale(url.searchParams.get('lang')));
         form.set('client_reference_id', store);
         form.set('metadata[storeId]', store);
         form.set('metadata[tier]', tier);
@@ -455,6 +462,7 @@ export default {
         form.set('line_items[0][price]', ORDER_ITEMS[item].price);
         form.set('line_items[0][quantity]', '1');
         form.set('allow_promotion_codes', 'true');
+        form.set('locale', stripeLocale(url.searchParams.get('lang')));
         form.set('client_reference_id', store);
         form.set('metadata[storeId]', store);
         form.set('metadata[item]', item);
@@ -526,6 +534,7 @@ export default {
         const form = new URLSearchParams();
         form.set('customer', cust);
         form.set('return_url', APP_URL);
+        form.set('locale', stripeLocale(url.searchParams.get('lang')));
         try {
           const res = await fetch('https://api.stripe.com/v1/billing_portal/sessions', {
             method: 'POST',

@@ -37,7 +37,7 @@ WHAT YOU GET
 • Follow a store to get an optional restock reminder
 • Add, edit, and hide stores — and share your map with friends
 • Full English / Ukrainian toggle
-• Works offline once opened — no account, no ads, no personal tracking
+• Works offline once opened — no account, no ad networks, no personal tracking
 
 WHY
 Second-hand shopping in Lviv is a treasure hunt: prices drop day by day after
@@ -46,9 +46,11 @@ into something you can actually plan around — so you show up when the racks ar
 fresh, or when they're cheapest.
 
 PRIVACY
-No accounts and no ads. What you add or track stays in your browser on your
-device. Only anonymous, aggregate usage is measured (cookieless), and your
-location is used on-device only to center the map — it's never collected.
+No accounts and no ad networks. What you add or track stays in your browser on
+your device. Local shops can pay for a clearly-labelled placement on the map; it
+is sold directly by us and nothing about you is used to choose what you see.
+Only anonymous, aggregate usage is measured (cookieless), and your location is
+used on-device only to center the map — it's never collected.
 Full policy: https://www.lvivsecondhand.com/privacy.html
 ```
 
@@ -70,7 +72,7 @@ Full policy: https://www.lvivsecondhand.com/privacy.html
 • Стежте за магазином і отримуйте нагадування про завезення (за бажанням)
 • Додавайте, редагуйте та приховуйте магазини; діліться картою з друзями
 • Повний перемикач мов English / Українська
-• Працює офлайн після відкриття — без акаунтів, без реклами, без стеження
+• Працює офлайн після відкриття — без акаунтів, без рекламних мереж, без стеження
 
 НАВІЩО
 Секонд у Львові — це полювання за скарбами: ціни щодня падають після завозу, і
@@ -78,9 +80,12 @@ Full policy: https://www.lvivsecondhand.com/privacy.html
 коли завіз свіжий або коли найдешевше.
 
 ПРИВАТНІСТЬ
-Без акаунтів і реклами. Усе, що ви додаєте, лишається у вашому браузері на
-пристрої. Вимірюється лише анонімна статистика (без cookie), а місцезнаходження
-використовується лише на пристрої для центрування карти й ніколи не збирається.
+Без акаунтів і рекламних мереж. Усе, що ви додаєте, лишається у вашому браузері
+на пристрої. Місцеві магазини можуть оплатити чітко позначене розміщення на
+карті — його продаємо безпосередньо ми, і для вибору того, що ви бачите, не
+використовується жодна інформація про вас. Вимірюється лише анонімна статистика
+(без cookie), а місцезнаходження використовується лише на пристрої для
+центрування карти й ніколи не збирається.
 Політика: https://www.lvivsecondhand.com/privacy.html
 ```
 
