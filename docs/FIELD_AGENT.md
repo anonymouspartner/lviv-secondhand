@@ -234,7 +234,6 @@ One-time enablement of the `/visit` subsystem is documented in
 
 | Command | Who | Does |
 |---|---|---|
-| `/whoami` | anyone | replies with your numeric Telegram id (to be allow-listed) |
 | `/visit` | agent | start a survey |
 | `/myvisits` | agent | their running visit count |
 | `/pay` | agent · owner | show the pay scheme (live rates from `RATE_VISIT`/`RATE_BONUS`) |
