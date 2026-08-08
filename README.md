@@ -49,17 +49,19 @@ No app store, no install required to use it in a browser — but adding it to yo
 
 ## 🗺️ Map legend
 
-Pins carry two independent signals: **colour says what the store is**, **the label says how it relates to you**. They are separate on purpose — marking a store visited never hides what kind of store it is.
+Pin **colour answers the question the app exists for: when is this store cheapest?** Second-hand prices fall as stock is picked over, so the colour tracks how far a store is through its delivery cycle. The **label** says how the store relates to you.
 
-**Colour — what the store is**
+**Colour — where the store is in its cycle**
 
 | Pin | Hex | Meaning |
 | --- | --- | --- |
-| 🟢 Green | `#17693a` | Ordinary store, itemized pricing (the default) |
-| 🔵 Blue | `#2471a3` | Sells **by weight** (₴/kg) — prices fall through the delivery cycle |
-| 🔴 Red | `#b23a2e` | **HUMANA** — the large chain, its own restock rhythm |
-| 🟠 Orange | `#e8622a` | **You added this one** — lives only on your device until you contribute it |
-| 🟡 Gold | `#ffb800` | **Paid placement** (Featured or Spotlight), always labelled as advertising |
+| 🟢 Green | `#17693a` | **Just restocked** — best choice, highest prices |
+| 🟡 Amber | `#e0a11b` | **Mid cycle** — choice and price in balance |
+| 🔴 Red | `#c0392b` | **End of cycle** — picked over, but the **best deals** |
+| 🔵 Blue | `#2471a3` | **No restock data yet** for this store |
+| 🟨 Gold | `#ffd23f` | **Paid placement**, always labelled as advertising |
+
+Green → amber → red is one scale, not three categories: it is the same journey the deal meter and the store page show, from the same values (`--phase-*` in `:root`, mirrored in `PIN_COLORS`). Change it in one place.
 
 **Label — how it relates to you**
 
@@ -72,24 +74,15 @@ Pins carry two independent signals: **colour says what the store is**, **the lab
 | ⭐ | Featured — a paid placement |
 | 🌟 | Spotlight — the top paid tier |
 
-**Size and stacking** — ordinary pins are 36px; Featured is 44px and floats above them; Spotlight is 50px and floats above everything. Size is bought, never earned, so a bigger pin always means someone paid.
+**Size, ring and stacking** — ordinary pins are 36px with a white ring. Paid pins are 44px (Featured) and 50px (Spotlight), float above everything, and take a **dark ring instead of a white one** so gold never has to be told apart from amber on colour alone. Size is bought, never earned.
 
-**Two consequences worth knowing:**
+**Three consequences worth knowing:**
 
-- **Visited replaces the letter, not the colour.** A visited HUMANA is still red but reads `✓` instead of `H` — you keep the store type from the colour and gain the visited state from the label.
-- **A promoted pin never shows `✓`.** ⭐ and 🌟 take priority over the visited mark, so on a paid pin the map can't tell you whether you've been. The store's own page still can.
+- **Blue is the honest default.** Cycle position needs a last-delivery date, and those are stored per device — so a store is blue until someone records one. On a fresh install every pin is blue. That is not a bug: it shows exactly where the map still lacks the data the field agent is paid to collect, and the map visibly fills with colour as it arrives.
+- **Visited replaces the letter, not the colour.** A visited store keeps its cycle colour and reads `✓` — you never lose the timing signal by having been there.
+- **A promoted pin never shows `✓`, and never shows its cycle colour.** Gold and the star outrank both, so on a paid pin the map tells you neither. The store's own page still does.
 
-**Verified+ deliberately changes nothing here.** It buys a badge on the card, not a pin — that's what keeps the map honest and the two ad tiers worth their price.
-
-### The other colour language: the delivery cycle
-
-The same three-step scale runs through the list, the deal meter and the store page — it tracks how far a by-weight store is through its restock cycle, because prices fall as the cycle ages:
-
-| Phase | Colour | When | What it means for you |
-| --- | --- | --- | --- |
-| Fresh | 🟢 `#17693a` | first third | New stock, best choice, highest prices |
-| Mid | 🟡 `#ffb800` | middle third | Good balance of choice and price |
-| Late | 🟠 `#e8622a` | final third | Picked over, but the **best deals** |
+**Verified+ deliberately changes nothing here.** It buys a badge on the card, not a pin — which is what keeps the map honest and the two ad tiers worth their price.
 
 ## 🤝 Sharing & Contributing
 
@@ -297,17 +290,19 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 ## 🗺️ Позначки на карті
 
-Позначка несе два незалежні сигнали: **колір каже, що це за магазин**, а **напис — як він стосується вас**. Це навмисно розділено: позначивши магазин відвіданим, ви не втрачаєте інформацію про його тип.
+**Колір позначки відповідає на головне питання застосунку: коли в цьому магазині найдешевше?** Ціни в секонд-хендах знижуються, поки товар розбирають, тож колір показує, як далеко магазин просунувся у своєму циклі завезення. **Напис** каже, як магазин стосується вас.
 
-**Колір — що це за магазин**
+**Колір — де магазин у своєму циклі**
 
 | Позначка | Код | Значення |
 | --- | --- | --- |
-| 🟢 Зелена | `#17693a` | Звичайний магазин, ціна за штуку (за замовчуванням) |
-| 🔵 Синя | `#2471a3` | Продає **на вагу** (₴/кг) — ціни знижуються протягом циклу |
-| 🔴 Червона | `#b23a2e` | **HUMANA** — велика мережа зі своїм ритмом завезення |
-| 🟠 Помаранчева | `#e8622a` | **Ви додали його самі** — зберігається лише на вашому пристрої, доки не внесете до карти |
-| 🟡 Золота | `#ffb800` | **Платне розміщення** (Featured або Spotlight), завжди позначене як реклама |
+| 🟢 Зелена | `#17693a` | **Щойно завезли** — найкращий вибір, найвищі ціни |
+| 🟡 Бурштинова | `#e0a11b` | **Середина циклу** — баланс вибору й ціни |
+| 🔴 Червона | `#c0392b` | **Кінець циклу** — вибір менший, але **найкращі ціни** |
+| 🔵 Синя | `#2471a3` | **Немає даних** про завезення для цього магазину |
+| 🟨 Золота | `#ffd23f` | **Платне розміщення**, завжди позначене як реклама |
+
+Зелений → бурштиновий → червоний — це одна шкала, а не три категорії: той самий шлях показують шкала знижок і сторінка магазину, з тих самих значень (`--phase-*` у `:root`, віддзеркалені в `PIN_COLORS`). Змінюється в одному місці.
 
 **Напис — як магазин стосується вас**
 
@@ -320,24 +315,15 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | ⭐ | Featured — платне розміщення |
 | 🌟 | Spotlight — найвищий платний тариф |
 
-**Розмір і порядок** — звичайні позначки 36px; Featured — 44px і вище за них; Spotlight — 50px і вище за всіх. Розмір купують, а не заслуговують: більша позначка завжди означає, що хтось заплатив.
+**Розмір, обідок і порядок** — звичайні позначки 36px з білим обідком. Платні — 44px (Featured) і 50px (Spotlight), вони вище за всіх і мають **темний обідок замість білого**, щоб золотий ніколи не доводилося відрізняти від бурштинового лише за кольором. Розмір купують, а не заслуговують.
 
-**Два наслідки, які варто знати:**
+**Три наслідки, які варто знати:**
 
-- **Відвідано замінює літеру, а не колір.** Відвідана HUMANA лишається червоною, але показує `✓` замість `H` — тип магазину ви бачите за кольором, а стан відвідання — за написом.
-- **Просунута позначка ніколи не показує `✓`.** ⭐ і 🌟 мають пріоритет над відміткою відвідання, тож на платній позначці карта не скаже, чи ви там були. Сторінка самого магазину — скаже.
+- **Синій — чесний стан за замовчуванням.** Щоб визначити місце в циклі, потрібна дата останнього завезення, а вона зберігається на пристрої — тож магазин лишається синім, доки хтось її не запише. На новому пристрої всі позначки сині. Це не помилка: так видно, де карті ще бракує саме тих даних, які збирає польовий агент, і карта наповнюється кольором у міру їх надходження.
+- **Відвідано замінює літеру, а не колір.** Відвіданий магазин зберігає колір циклу й показує `✓` — ви не втрачаєте сигнал про час.
+- **Просунута позначка ніколи не показує ані `✓`, ані колір циклу.** Золотий і зірка мають пріоритет над обома, тож на платній позначці карта не скаже ні того, ні іншого. Сторінка самого магазину — скаже.
 
 **Verified+ навмисно нічого тут не змінює.** Він купує значок на картці, а не позначку на карті — саме це тримає карту чесною, а два рекламні тарифи — вартими своєї ціни.
-
-### Інша кольорова мова: цикл завезення
-
-Та сама тришкальна логіка проходить через список, шкалу знижок і сторінку магазину — вона показує, як далеко магазин на вагу просунувся у своєму циклі, бо ціни знижуються з часом:
-
-| Фаза | Колір | Коли | Що це означає для вас |
-| --- | --- | --- | --- |
-| Свіжа | 🟢 `#17693a` | перша третина | Новий товар, найкращий вибір, найвищі ціни |
-| Середина | 🟡 `#ffb800` | середня третина | Баланс вибору й ціни |
-| Кінець | 🟠 `#e8622a` | остання третина | Вибір менший, але **найкращі ціни** |
 
 ## 🤝 Обмін і внесок
 

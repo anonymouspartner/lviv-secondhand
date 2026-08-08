@@ -73,6 +73,13 @@
   --hot: #e8622a;
   --chip: #f0ead6;
   --font-display: 'Oswald','Arial Narrow',sans-serif;
+  /* Delivery-cycle palette — the app's primary signal, used identically by the
+     map pins, the list deal meter and the store page. Change it here only. */
+  --phase-fresh: #17693a;   /* just restocked — best choice, highest prices */
+  --phase-mid:   #e0a11b;   /* mid cycle — choice and price in balance      */
+  --phase-late:  #c0392b;   /* end of cycle — picked over, best deals       */
+  --phase-none:  #2471a3;   /* no restock data for this store yet           */
+  --phase-paid:  #ffd23f;   /* paid placement — deliberately outside the scale */
   --shadow: 0 1px 2px rgba(13,44,26,.05), 0 8px 22px rgba(13,44,26,.07);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -116,8 +123,9 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 .store-card.visited { border-color: var(--green-light); }
 .card-top { padding: 13px 14px 10px; display: flex; gap: 11px; align-items: flex-start; }
 .store-dot { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
-.dot-humana { background: var(--red-pale); }
-.dot-other { background: var(--blue-pale); }
+/* Neutral on purpose: red and blue now mean end-of-cycle and no-data on the map,
+   so the list badge must not reuse them for store type. The emoji carries type. */
+.dot-humana, .dot-other { background: var(--chip); }
 .card-body { flex: 1; min-width: 0; }
 .card-name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
 .card-addr { font-size: 12px; color: var(--muted); margin-bottom: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -332,21 +340,21 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
 .deal-meter .dm-l{ font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; line-height:1.2; }
 .deal-meter .dm-r{ font-family:var(--font-display); font-weight:700; font-size:15px; color:var(--muted); white-space:nowrap; }
 .deal-meter .dm-track{ height:9px; border-radius:6px; background:var(--chip); position:relative; overflow:visible; }
-.deal-meter .dm-track i{ position:absolute; top:0; bottom:0; left:0; border-radius:6px; background:linear-gradient(90deg,var(--green),var(--acid2) 55%,var(--hot)); }
+.deal-meter .dm-track i{ position:absolute; top:0; bottom:0; left:0; border-radius:6px; background:linear-gradient(90deg,var(--phase-fresh),var(--phase-mid) 55%,var(--phase-late)); }
 .deal-meter .dm-track b{ position:absolute; top:50%; width:15px; height:15px; border-radius:50%; background:#fff; border:3px solid var(--green); box-shadow:0 1px 3px rgba(0,0,0,.28); transform:translate(-50%,-50%); }
-.deal-meter.fresh .dm-l{ color:var(--green); } .deal-meter.fresh .dm-track b{ border-color:var(--green); }
-.deal-meter.mid .dm-l{ color:var(--acid2); } .deal-meter.mid .dm-track b{ border-color:var(--acid2); }
-.deal-meter.old .dm-l{ color:var(--hot); } .deal-meter.old .dm-track b{ border-color:var(--hot); } .deal-meter.old .dm-r{ color:var(--hot); }
+.deal-meter.fresh .dm-l{ color:var(--phase-fresh); } .deal-meter.fresh .dm-track b{ border-color:var(--phase-fresh); }
+.deal-meter.mid .dm-l{ color:var(--phase-mid); } .deal-meter.mid .dm-track b{ border-color:var(--phase-mid); }
+.deal-meter.old .dm-l{ color:var(--phase-late); } .deal-meter.old .dm-track b{ border-color:var(--phase-late); } .deal-meter.old .dm-r{ color:var(--phase-late); }
 /* Detail */
 .det-header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
 .det-name{ font-family:var(--font-display); font-weight:700; text-transform:uppercase; letter-spacing:.012em; }
 .tracker-title{ background:var(--green); font-family:var(--font-display); text-transform:uppercase; letter-spacing:.02em; font-size:16px; }
 .big-day-num{ font-family:var(--font-display); font-weight:700; }
-.big-day-num.fresh{ color:var(--green); } .big-day-num.mid{ color:var(--acid2); } .big-day-num.old{ color:var(--hot); }
-.bar-fill.fresh{ background:linear-gradient(90deg,#2d8653,var(--green)); }
-.bar-fill.mid{ background:linear-gradient(90deg,var(--acid),var(--acid2)); }
-.bar-fill.old{ background:linear-gradient(90deg,var(--acid2),var(--hot)); }
-.cycle-val.fresh{ color:var(--green); } .cycle-val.mid{ color:var(--acid2); } .cycle-val.old{ color:var(--hot); }
+.big-day-num.fresh{ color:var(--phase-fresh); } .big-day-num.mid{ color:var(--phase-mid); } .big-day-num.old{ color:var(--phase-late); }
+.bar-fill.fresh{ background:linear-gradient(90deg,#2d8653,var(--phase-fresh)); }
+.bar-fill.mid{ background:linear-gradient(90deg,#f3c969,var(--phase-mid)); }
+.bar-fill.old{ background:linear-gradient(90deg,#e0713f,var(--phase-late)); }
+.cycle-val.fresh{ color:var(--phase-fresh); } .cycle-val.mid{ color:var(--phase-mid); } .cycle-val.old{ color:var(--phase-late); }
 .visit-btn.no{ background:var(--green); }
 .promo-card{ background:linear-gradient(135deg,#fff3cf,#ffe6a1); border-color:var(--acid2); }
 .section-tip{ background:#fff6d6; border-color:var(--acid); color:#6f5600; }
@@ -1682,6 +1690,16 @@ function startAddPin() {
   document.getElementById('map-tap-hint').style.display = 'block';
 }
 
+// Map pin palette — mirrors the --phase-* CSS tokens (single source of truth for
+// the colour meaning lives in :root; these are the same values for canvas/Leaflet,
+// which cannot read CSS variables).
+const PIN_COLORS = {
+  fresh: '#17693a',  // just restocked
+  mid:   '#e0a11b',  // mid cycle
+  old:   '#c0392b',  // end of cycle — best deals
+  none:  '#2471a3',  // no restock data yet
+  paid:  '#ffd23f',  // paid placement
+};
 function renderPins() {
   mapMarkers.forEach(m => m.remove());
   mapMarkers = [];
@@ -1689,16 +1707,25 @@ function renderPins() {
     const s = getStoreData(raw);
     const sd = getSD(s.id);
     const promo = activePromo(s);
+    // Pin colour answers the question the app exists for: when is this store
+    // cheapest? Green just restocked, amber mid-cycle, red end of cycle (best
+    // deals), blue when we have no restock data for it yet. Store *type* moved to
+    // the label, since a shopper picks by timing far more often than by chain.
     // Verified+ buys no map treatment, so only featured/spotlight repaint the pin.
     const ad = isAd(promo);
     const spot = promoRank(promo) >= 2;
-    const color = ad ? '#ffb800' : (s.custom ? '#e8622a' : (s.type === 'humana' ? '#b23a2e' : (s.pricing === 'kg' ? '#2471a3' : '#17693a')));
+    const di = getDayInfo(s.id, s.cycle, kgCycle(s));
+    const phase = di ? getPhase(di.day, di.cycle) : null;
+    const color = ad ? PIN_COLORS.paid : (phase ? PIN_COLORS[phase] : PIN_COLORS.none);
     const label = ad ? (spot ? '🌟' : '⭐') : (sd.visited ? '✓' : (s.custom ? '+' : (s.type==='humana' ? 'H' : 'S')));
-    const labelColor = ad ? '#3a2c00' : 'white'; // dark label reads on the acid featured pin
+    const labelColor = ad ? '#3a2c00' : 'white'; // dark label reads on the gold paid pin
+    // Paid pins take a dark ring instead of the usual white one, so gold never has
+    // to be told apart from mid-cycle amber on colour alone.
+    const ring = ad ? '#0d2c1a' : 'white';
     const sz = spot ? 50 : (ad ? 44 : 36); // paid pins are larger and float above the rest
     const icon = L.divIcon({
       className:'',
-      html:`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:${spot?22:(ad?19:15)}px;color:${labelColor};font-weight:900;">${label}</div>`,
+      html:`<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};border:3px solid ${ring};box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;font-size:${spot?22:(ad?19:15)}px;color:${labelColor};font-weight:900;">${label}</div>`,
       iconSize:[sz,sz], iconAnchor:[sz/2,sz/2]
     });
     const m = L.marker([s.lat, s.lng], {icon, zIndexOffset: spot?2000:(ad?1000:0)}).addTo(mapInst);
@@ -2511,7 +2538,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-07.8';
+const APP_VERSION = '2026-08-07.9';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
