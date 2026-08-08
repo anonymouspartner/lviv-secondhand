@@ -78,7 +78,7 @@ Green → amber → red is one scale, not three categories: it is the same journ
 
 **Three consequences worth knowing:**
 
-- **Blue is the honest default.** Cycle position needs a last-delivery date, and those are stored per device — so a store is blue until someone records one. On a fresh install every pin is blue. That is not a bug: it shows exactly where the map still lacks the data the field agent is paid to collect, and the map visibly fills with colour as it arrives.
+- **Blue means we genuinely don't know yet.** Cycle position comes from one of two sources. If the store publishes a **restock weekday** (`restockDay` in the dataset), the phase is computed for everyone with nothing stored — it rolls over on its own and resets to green each restock day. Otherwise it needs a **last-delivery date**, and those are per device. Stores with neither are blue. Blue is therefore a live map of where the field agent's next visit is worth most, and it turns to colour permanently as soon as a restock day is recorded.
 - **Visited replaces the letter, not the colour.** A visited store keeps its cycle colour and reads `✓` — you never lose the timing signal by having been there.
 - **A promoted pin never shows `✓`, and never shows its cycle colour.** Gold and the star outrank both, so on a paid pin the map tells you neither. The store's own page still does.
 
@@ -319,7 +319,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **Три наслідки, які варто знати:**
 
-- **Синій — чесний стан за замовчуванням.** Щоб визначити місце в циклі, потрібна дата останнього завезення, а вона зберігається на пристрої — тож магазин лишається синім, доки хтось її не запише. На новому пристрої всі позначки сині. Це не помилка: так видно, де карті ще бракує саме тих даних, які збирає польовий агент, і карта наповнюється кольором у міру їх надходження.
+- **Синій означає, що ми справді ще не знаємо.** Місце в циклі береться з одного з двох джерел. Якщо магазин має **день завезення** (`restockDay` у даних), фаза обчислюється для всіх без нічого збереженого — вона змінюється сама й скидається на зелений щотижня в день завезення. Інакше потрібна **дата останнього завезення**, а вона зберігається лише на пристрої. Магазини без жодного з цих даних — сині. Тож синій показує, де візит польового агента вартий найбільше, і стає кольором назавжди, щойно записано день завезення.
 - **Відвідано замінює літеру, а не колір.** Відвіданий магазин зберігає колір циклу й показує `✓` — ви не втрачаєте сигнал про час.
 - **Просунута позначка ніколи не показує ані `✓`, ані колір циклу.** Золотий і зірка мають пріоритет над обома, тож на платній позначці карта не скаже ні того, ні іншого. Сторінка самого магазину — скаже.
 
