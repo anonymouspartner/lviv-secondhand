@@ -123,10 +123,15 @@ function cleanOffer(raw) {
 }
 
 // Stripe renders its hosted checkout in the buyer's browser locale unless told
-// otherwise, so a Ukrainian shop owner on an English phone would be asked to pay in
-// English. The app passes its own language through instead; Ukrainian is the default
-// because the app's is.
-const stripeLocale = (v) => (v === 'en' ? 'en' : 'uk');
+// otherwise, so the app passes its own language through. Stripe has NO Ukrainian
+// locale -- sending 'uk' is rejected outright and the session fails to create, which
+// broke checkout for the app's default language. Ukrainian therefore maps to 'auto'
+// (Stripe's own detection -- the best available), and only locales Stripe actually
+// supports are ever sent verbatim.
+const STRIPE_LOCALES = new Set(['auto', 'bg', 'cs', 'da', 'de', 'el', 'en', 'en-GB', 'es', 'es-419',
+  'et', 'fi', 'fil', 'fr', 'fr-CA', 'hr', 'hu', 'id', 'it', 'ja', 'ko', 'lt', 'lv', 'ms', 'mt',
+  'nb', 'nl', 'pl', 'pt', 'pt-BR', 'ro', 'ru', 'sk', 'sl', 'sv', 'th', 'tr', 'vi', 'zh', 'zh-HK', 'zh-TW']);
+const stripeLocale = (v) => (STRIPE_LOCALES.has(v) ? v : 'auto');
 
 // ── Owner notification ───────────────────────────────────────────────────────
 // An à la carte extra is delivered by hand, so a silent sale is a missed one. Ping
