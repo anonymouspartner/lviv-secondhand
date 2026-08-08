@@ -67,7 +67,7 @@ Contributions arrive as GitHub issues labelled `map-contribution`. Each issue li
 
 ## 📣 Store promotions (advertising)
 
-Shop owners can promote their own store without contacting anyone. Open the store in the app → **📣 Own this store? Promote it** → pick a plan and pay in ₴ (Stripe). Everything is priced and displayed in Ukrainian by default.
+Shop owners can promote their own store without contacting anyone. Open the store in the app → **📣 Own this store? Promote it** → pick a plan and pay in ₴ (Stripe). The app, the rate card and the prices are Ukrainian by default; Stripe's own payment page is not, because Stripe offers no Ukrainian locale — it falls back to Stripe's language detection.
 
 | Tier | Monthly | Annual | One-off 7 / 30 days |
 | --- | --- | --- | --- |
@@ -263,7 +263,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 ## 📣 Просування магазинів (реклама)
 
-Власник магазину може просунути свій магазин самостійно, без звернення до когось. Відкрийте магазин у застосунку → **📣 Власник магазину? Просувати** → оберіть тариф і оплатіть у ₴ (Stripe). Усе — ціни, оплата та сторінка Stripe — за замовчуванням українською.
+Власник магазину може просунути свій магазин самостійно, без звернення до когось. Відкрийте магазин у застосунку → **📣 Власник магазину? Просувати** → оберіть тариф і оплатіть у ₴ (Stripe). Застосунок, прайс і ціни — українською за замовчуванням; сама сторінка оплати Stripe — ні, бо Stripe не має української локалі, тож мова визначається автоматично.
 
 | Тариф | Щомісяця | Щороку | Разово 7 / 30 днів |
 | --- | --- | --- | --- |

@@ -27,7 +27,8 @@ compatibility_date = "2026-08-01"
 #      each visit to the owner, and upload the CSV export):
 #        printf '%s' "<telegram-bot-token>" | npx wrangler@3 secret put BOT_TOKEN
 #   3. Set who is who + the pay rates as [vars] below (ids are numeric Telegram
-#      user ids — anyone can get theirs by sending the bot /whoami).
+#      user ids — ask the person to forward a message to @userinfobot, or read
+#      the id from the bot's own logs after they message it).
 #   4. Re-register the webhook allowing location & photo updates:
 #        allowed_updates=["message"]   (the default already includes these)
 #
