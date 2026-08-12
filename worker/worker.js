@@ -17,6 +17,7 @@ const ALLOWED_ORIGINS = new Set([
   'https://anonymouspartner.github.io', // legacy GitHub Pages origin (transition)
 ]);
 const APP_URL = 'https://www.lvivsecondhand.com/';
+const WORKER_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
 const TYPES = new Set(['store_open', 'filter', 'tab', 'lang', 'action']);
 const LANGS = new Set(['en', 'ua']);
 const MAX_BATCH = 20;
@@ -63,6 +64,18 @@ async function ensureSchema(env) {
   // À la carte purchases the owner fulfils by hand (poster, deal-of-week, push).
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, item TEXT NOT NULL, amount INTEGER, currency TEXT, email TEXT, note TEXT, status TEXT NOT NULL DEFAULT 'paid', created TEXT NOT NULL DEFAULT (datetime('now')))"
+  ).run();
+  // Flash deals (Feature 4). status: 'pending' (awaiting owner approval via the
+  // Telegram link) | 'auto' (PIN matched — published immediately) | 'approved'.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS flash_deals (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, tier TEXT NOT NULL, text TEXT NOT NULL, alert INTEGER NOT NULL DEFAULT 0, starts_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created TEXT NOT NULL DEFAULT (datetime('now')))"
+  ).run();
+  // Optional per-store 4-digit PIN a flash-deal buyer can supply to skip
+  // moderator approval. Not settable from any UI yet — set directly in D1;
+  // absent by design until a self-service flow exists, so every deal falls
+  // through to the safe default (owner reviews before it goes live).
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS store_pins (store_id TEXT PRIMARY KEY, pin TEXT NOT NULL)"
   ).run();
   _schemaReady = true;
 }
@@ -132,14 +145,18 @@ const NOTE_FIELD = {
   ua: 'Що саме просуваємо? (необовʼязково)',
   en: 'What should we promote? (optional)',
 };
-// Attach an optional free-text field to a Checkout Session.
-function addCustomField(form, field, locale) {
+// Attach a free-text field to a Checkout Session. `opts.required` (default
+// false, matching every existing caller) and `opts.max` (default OFFER_MAX)
+// let a caller ask for something like the flash-deal text, which must not be
+// empty and runs longer than the 48-char offer line.
+function addCustomField(form, field, locale, opts) {
+  opts = opts || {};
   form.set('custom_fields[0][key]', field.key);
   form.set('custom_fields[0][label][type]', 'custom');
   form.set('custom_fields[0][label][custom]', locale === 'en' ? field.en : field.ua);
   form.set('custom_fields[0][type]', 'text');
-  form.set('custom_fields[0][optional]', 'true');
-  form.set('custom_fields[0][text][maximum_length]', String(OFFER_MAX));
+  form.set('custom_fields[0][optional]', opts.required ? 'false' : 'true');
+  form.set('custom_fields[0][text][maximum_length]', String(opts.max || OFFER_MAX));
 }
 // Read it back off the completed session.
 function readCustomField(o, key) {
@@ -147,9 +164,49 @@ function readCustomField(o, key) {
   for (const f of list) if (f && f.key === key) return (f.text && f.text.value) || '';
   return '';
 }
-function cleanOffer(raw) {
+function cleanText(raw, max) {
   const s = String(raw || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
-  return s.slice(0, OFFER_MAX);
+  return s.slice(0, max || OFFER_MAX);
+}
+function cleanOffer(raw) { return cleanText(raw, OFFER_MAX); }
+
+// ── Flash deals (Feature 4) ──────────────────────────────────────────────────
+// A short-lived sale, not a placement tier: pay once for a 3h/24h window, the
+// deal text goes live immediately, and it self-expires (the app hides it
+// client-side once `expires_at` passes — see index.html). No pre-created
+// Stripe object needed: price_data[product_data][name] builds an ad-hoc
+// product+price inline, same as the ad-hoc promo runs above but without even
+// an existing Product id to reference.
+const FLASH_DEAL_TIERS = {
+  '3h':        { amount: 3000,  hours: 3,  alert: false, label: 'Flash deal — 3 hours' },
+  '24h':       { amount: 6000,  hours: 24, alert: false, label: 'Flash deal — 24 hours' },
+  '24h_alert': { amount: 12000, hours: 24, alert: true,  label: 'Flash deal — 24 hours + Telegram alert' },
+};
+const DEAL_MAX = 120;
+const DEAL_TEXT_FIELD = {
+  key: 'dealText',
+  ua: 'Текст спалах-знижки (обовʼязково)',
+  en: 'Flash-deal text (required)',
+};
+
+// Mirrors scripts/patch-store.js's dispatchMapPatch() — see that file's
+// comment for why this is reimplemented rather than imported (node:fs isn't
+// portable to the Workers runtime). A flash deal needs its own GITHUB_PAT on
+// this Worker (separate from the bot Worker's copy of the same secret).
+async function dispatchMapPatch(env, storeId, updates) {
+  if (!env.GITHUB_PAT) throw new Error('GITHUB_PAT not configured');
+  const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_PAT}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'lviv-secondhand-worker',
+    },
+    body: JSON.stringify({ event_type: 'update_map_data', client_payload: { store_id: storeId, updates } }),
+  });
+  if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
 }
 
 // Stripe renders its hosted checkout in the buyer's browser locale unless told
@@ -337,6 +394,55 @@ async function applyPromoEvent(env, ev, ctx) {
   }
 }
 
+// A flash deal (see GET /flash-deal). Unlike a promo tier, a flash deal isn't
+// self-fulfilling: it only reaches the map once approved — automatically if
+// the buyer supplied a PIN on file for that store, otherwise via the owner
+// tapping the link in their Telegram notification (GET /flash-deal/approve).
+async function applyFlashDealEvent(env, ev, ctx) {
+  if (ev.type !== 'checkout.session.completed') return;
+  const o = (ev && ev.data && ev.data.object) || {};
+  const md = o.metadata || {};
+  const storeId = o.client_reference_id || md.storeId;
+  const tier = FLASH_DEAL_TIERS[md.tier];
+  if (!storeId || !tier) return;
+  const text = cleanText(readCustomField(o, 'dealText'), DEAL_MAX);
+  if (!text) return; // required field on Checkout; nothing sane to publish without it
+  const id = o.id;
+  const startsAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + tier.hours * 3600000).toISOString();
+
+  const pin = clean(md.pin, 4);
+  const pinRow = pin ? await env.DB.prepare('SELECT pin FROM store_pins WHERE store_id = ?').bind(storeId).first() : null;
+  const pinOk = !!(pinRow && pinRow.pin === pin);
+
+  await env.DB.prepare(
+    "INSERT INTO flash_deals (id, store_id, tier, text, alert, starts_at, expires_at, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
+    'ON CONFLICT(id) DO NOTHING'
+  ).bind(id, storeId, md.tier, text, tier.alert ? 1 : 0, startsAt, expiresAt, pinOk ? 'auto' : 'pending').run();
+
+  const updates = { flashDeal: { text, startsAt, expiresAt, alert: tier.alert } };
+  if (pinOk) {
+    try {
+      await dispatchMapPatch(env, storeId, updates);
+      tgNotify(env, ctx,
+        `⚡ FLASH DEAL PAID — auto-published (PIN verified)\n\n` +
+        `Store: ${storeId}\nText:  ${text}\nUntil: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n${storeLink(storeId)}`);
+    } catch (e) {
+      tgNotify(env, ctx, `⚠️ Flash deal for ${storeId} was PIN-verified but failed to dispatch — check the map-update workflow logs.\n\n${storeLink(storeId)}`);
+    }
+    return;
+  }
+
+  const approveLink = env.ADMIN_KEY
+    ? `${WORKER_URL}/flash-deal/approve?id=${encodeURIComponent(id)}&key=${encodeURIComponent(env.ADMIN_KEY)}`
+    : null;
+  tgNotify(env, ctx,
+    `⚡ FLASH DEAL PAID — needs your review before it goes live\n\n` +
+    `Store: ${storeId}\nTier:  ${tier.label}\nText:  ${text}\nWould run until: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n` +
+    (approveLink ? `Tap to approve & publish:\n${approveLink}\n\n` : `(Set ADMIN_KEY to get a one-tap approve link here.)\n\n`) +
+    `${storeLink(storeId)}`);
+}
+
 // ── byte helpers ──
 function b64uToBytes(s) {
   s = String(s).replace(/-/g, '+').replace(/_/g, '/');
@@ -506,6 +612,71 @@ export default {
         } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
         return Response.redirect(data.url, 302);
       }
+      // Flash deal: /flash-deal?store=<id>&tier=3h|24h|24h_alert&pin=<optional 4-digit>.
+      // A one-off, short-lived sale — no pre-created Stripe object at all (unlike
+      // /promote's runs, which still reference an existing Product): the deal
+      // text is required at checkout (the paywall — never collected in the app
+      // itself), and a matching PIN publishes it immediately instead of waiting
+      // on the owner. See applyFlashDealEvent().
+      if (url.pathname === '/flash-deal') {
+        const store = url.searchParams.get('store') || '';
+        const tierKey = url.searchParams.get('tier') || '';
+        const pin = clean(url.searchParams.get('pin'), 4);
+        const loc = stripeLocale(url.searchParams.get('lang'));
+        const tier = FLASH_DEAL_TIERS[tierKey];
+        if (!/^[a-z0-9]{1,12}$/i.test(store) || !tier) {
+          return new Response('bad request', { status: 400, headers: cors(origin) });
+        }
+        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
+        const form = new URLSearchParams();
+        form.set('mode', 'payment');
+        form.set('line_items[0][price_data][currency]', 'uah');
+        form.set('line_items[0][price_data][unit_amount]', String(tier.amount));
+        form.set('line_items[0][price_data][product_data][name]', tier.label);
+        form.set('line_items[0][quantity]', '1');
+        form.set('locale', loc);
+        addCustomField(form, DEAL_TEXT_FIELD, loc, { required: true, max: DEAL_MAX });
+        form.set('client_reference_id', store);
+        form.set('metadata[kind]', 'flashDeal');
+        form.set('metadata[storeId]', store);
+        form.set('metadata[tier]', tierKey);
+        if (pin) form.set('metadata[pin]', pin);
+        form.set('success_url', APP_URL + '?flashdeal=' + encodeURIComponent(tierKey));
+        form.set('cancel_url', APP_URL + '?flashdeal=cancel');
+        let data;
+        try {
+          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form,
+          });
+          data = await res.json();
+          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
+        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
+        return Response.redirect(data.url, 302);
+      }
+      // Owner taps this from the Telegram notification to approve & publish a
+      // flash deal that didn't have a matching PIN. GET (not POST) so it works
+      // as a plain tappable link — Telegram auto-linkifies a bare URL even in
+      // a plain-text message. Requires ADMIN_KEY, same as /admin/test.
+      if (url.pathname === '/flash-deal/approve') {
+        if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) return new Response('unauthorized', { status: 401 });
+        const id = url.searchParams.get('id') || '';
+        if (!id) return new Response('bad request', { status: 400 });
+        await ensureSchema(env);
+        const row = await env.DB.prepare('SELECT * FROM flash_deals WHERE id = ?').bind(id).first();
+        if (!row) return new Response('not found', { status: 404 });
+        if (row.status !== 'pending') return new Response(`already ${row.status}`, { status: 200 });
+        try {
+          await dispatchMapPatch(env, row.store_id, {
+            flashDeal: { text: row.text, startsAt: row.starts_at, expiresAt: row.expires_at, alert: !!row.alert },
+          });
+        } catch (e) {
+          return new Response('dispatch failed — check GITHUB_PAT and the map-update workflow logs', { status: 502 });
+        }
+        await env.DB.prepare("UPDATE flash_deals SET status = 'approved' WHERE id = ?").bind(id).run();
+        return new Response(`✅ Flash deal approved and published for ${row.store_id}.`, { status: 200 });
+      }
       // À la carte one-off: /order?store=<id>&item=deal|poster|push. Unlike /promote
       // this buys a service the owner delivers by hand, so the webhook records an order
       // rather than a placement. Nothing in the app changes when one is bought.
@@ -619,7 +790,12 @@ export default {
       const sig = request.headers.get('Stripe-Signature') || '';
       if (!(await verifyStripeSig(payload, sig, env.STRIPE_WEBHOOK_SECRET))) return new Response('bad signature', { status: 400 });
       let ev; try { ev = JSON.parse(payload); } catch { return new Response('bad json', { status: 400 }); }
-      try { await ensureSchema(env); await applyPromoEvent(env, ev, ctx); } catch {}
+      try {
+        await ensureSchema(env);
+        const md = (ev.data && ev.data.object && ev.data.object.metadata) || {};
+        if (md.kind === 'flashDeal') await applyFlashDealEvent(env, ev, ctx);
+        else await applyPromoEvent(env, ev, ctx);
+      } catch {}
       return new Response('ok', { status: 200 }); // 2xx so Stripe stops retrying
     }
 

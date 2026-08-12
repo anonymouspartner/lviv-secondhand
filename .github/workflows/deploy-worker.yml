@@ -86,3 +86,14 @@ jobs:
         run: |
           if [ -z "$BOUNTY_SECRET" ]; then echo "BOUNTY_SECRET not set — skipping (field-scout deep link stays off until you add it)"; exit 0; fi
           printf '%s' "$BOUNTY_SECRET" | npx --yes wrangler@3 secret put BOUNTY_SECRET
+      # Flash deals dispatch their patch through the same pipeline the
+      # field-scout flow uses — needs its own copy of the PAT on this Worker.
+      - name: Set GitHub PAT secret
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+        run: |
+          if [ -z "$GITHUB_PAT" ]; then echo "GITHUB_PAT not set — skipping (flash deals can't auto-publish/approve until you add it)"; exit 0; fi
+          printf '%s' "$GITHUB_PAT" | npx --yes wrangler@3 secret put GITHUB_PAT

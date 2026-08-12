@@ -14,7 +14,9 @@ const REQUIRED_FIELDS = ['id', 'name', 'lat', 'lng', 'cycle'];
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?Z)?$/;
 // Field names that hold a date value, wherever they appear in the store
 // object (top-level or nested, e.g. promo.until, flashDeal.expires_at).
-const DATE_FIELD_RE = /(^|_)(until|date|starts_at|expires_at|starts|expires)$/i;
+// Matches both naming conventions in the dataset: snake_case (starts_at) and
+// the camelCase the app's own JS objects use (startsAt, flashDeal.expiresAt).
+const DATE_FIELD_RE = /(^|_)(until|date)$|(starts|expires)(_at|At)$/i;
 
 function collectDateFields(obj, path, out) {
   if (!obj || typeof obj !== 'object') return;
