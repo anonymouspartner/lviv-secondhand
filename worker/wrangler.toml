@@ -52,3 +52,11 @@ OWNER_ID = "1212541015"
 #                          OWNER_ID above. Without it, sales are silent and the
 #                          order queue has to be read from GET /orders by hand.
 # See docs/ADVERTISING.md §7 for the full activation steps.
+#
+# ── Field-scout deep link (POST /api/bounty/stash) — optional ──
+# Signs a short-lived token identifying a store, for the app's
+# ?store=id&agent_mode=true flow to hand off to the Telegram bot's
+# inline-keyboard cycle/day/hours picker. Off (503) until set — and MUST be
+# the exact same value as the bot Worker's (telegram-bot/) BOUNTY_SECRET,
+# which verifies the token this one signs:
+#   BOUNTY_SECRET — printf '%s' "<random>" | npx wrangler@3 secret put BOUNTY_SECRET

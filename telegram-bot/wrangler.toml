@@ -29,8 +29,8 @@ compatibility_date = "2026-08-01"
 #   3. Set who is who + the pay rates as [vars] below (ids are numeric Telegram
 #      user ids — ask the person to forward a message to @userinfobot, or read
 #      the id from the bot's own logs after they message it).
-#   4. Re-register the webhook allowing location & photo updates:
-#        allowed_updates=["message"]   (the default already includes these)
+#   4. Re-register the webhook (register-webhook.yml already requests both
+#      message and callback_query updates).
 #
 [[kv_namespaces]]
 binding = "VISITS"
@@ -41,3 +41,16 @@ OWNER_ID   = "1212541015"    # owner — gets /report, /export, and a live push 
 AGENT_IDS  = "1212541015,5677605074"    # agents allowed to run /visit (comma-separated): owner (smoke-test) + field agent.
 RATE_VISIT = "80"  # ₴ per verified visit
 RATE_BONUS = "200" # ₴ per bonus event (poster placed / owner contact + consent)
+
+# ── Field-scout "bounty" flow (opt-in) ──────────────────────────────────────
+# Adds the inline-keyboard cycle/day/hours picker, entered via a deep link
+# from ?store=id&agent_mode=true in the app (see telegram-agent-keyboards.js).
+# Stays off (link replies "invalid") until both secrets below are set, on top
+# of BOT_TOKEN + VISITS above:
+#   BOUNTY_SECRET — HMAC key verifying the deep-link token. MUST be the exact
+#                  same value as the metrics Worker's BOUNTY_SECRET (worker/),
+#                  which signs it — set both with the same random string:
+#                    printf '%s' "<random>" | npx wrangler@3 secret put BOUNTY_SECRET
+#   GITHUB_PAT    — classic PAT with the `repo` scope, used to dispatch the
+#                  confirmed patch to .github/workflows/update-map.yml:
+#                    printf '%s' "<pat>" | npx wrangler@3 secret put GITHUB_PAT

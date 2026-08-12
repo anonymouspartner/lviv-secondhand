@@ -75,3 +75,14 @@ jobs:
         run: |
           if [ -z "$STRIPE_WEBHOOK_SECRET" ]; then echo "STRIPE_WEBHOOK_SECRET not set — skipping (promo self-fulfil stays off until you add it)"; exit 0; fi
           printf '%s' "$STRIPE_WEBHOOK_SECRET" | npx --yes wrangler@3 secret put STRIPE_WEBHOOK_SECRET
+      # Field-scout deep link (?agent_mode=true → Telegram). MUST be the same
+      # value as the bot Worker's BOUNTY_SECRET — see telegram-bot/wrangler.toml.
+      - name: Set bounty token secret
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BOUNTY_SECRET: ${{ secrets.BOUNTY_SECRET }}
+        run: |
+          if [ -z "$BOUNTY_SECRET" ]; then echo "BOUNTY_SECRET not set — skipping (field-scout deep link stays off until you add it)"; exit 0; fi
+          printf '%s' "$BOUNTY_SECRET" | npx --yes wrangler@3 secret put BOUNTY_SECRET

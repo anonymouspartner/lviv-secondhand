@@ -245,6 +245,31 @@ async function verifyStripeSig(payload, header, secret) {
   return diff === 0;
 }
 
+// ── Field-scout "bounty" token (see docs/FIELD_AGENT.md agent_mode flow) ──
+// Signs a short, self-contained, tamper-evident token identifying a store —
+// `storeId.expBase36.mac` — small enough to fit inside Telegram's 64-character
+// /start deep-link payload limit (a truncated 6-byte MAC keeps it short; this
+// only ever pre-fills a suggestion an agent still confirms field-by-field via
+// Telegram's own keyboard flow, so a short MAC is an acceptable trade-off).
+// The bot Worker verifies it with the *same* BOUNTY_SECRET — see
+// telegram-bot/worker.js's verifyBountyToken().
+const BOUNTY_TOKEN_TTL_MIN = 30;
+const TG_BOT_USERNAME = 'Secondhandlvivbot';
+
+function b64url(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function signBountyToken(env, storeId) {
+  const expB36 = Math.floor(Date.now() / 60000 + BOUNTY_TOKEN_TTL_MIN).toString(36);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.BOUNTY_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${storeId}.${expB36}`));
+  const mac = b64url(new Uint8Array(sig).slice(0, 6));
+  return `${storeId}.${expB36}.${mac}`;
+}
+
 // Apply a verified Stripe event to the promos table (activate / extend / cancel).
 async function applyPromoEvent(env, ev, ctx) {
   const o = (ev && ev.data && ev.data.object) || {};
@@ -630,6 +655,19 @@ export default {
       body = JSON.parse(text);
     } catch {
       return new Response('bad json', { status: 400, headers: cors(origin) });
+    }
+
+    // ── Field-scout deep link: sign a short-lived token identifying a store,
+    // for the ?agent_mode=true flow in index.html to hand off to the Telegram
+    // bot. Inert until BOUNTY_SECRET is set (must match the bot Worker's).
+    if (url.pathname === '/api/bounty/stash') {
+      if (!env.BOUNTY_SECRET) return json({ ok: false, reason: 'not_configured' }, 503, origin);
+      const storeId = body && body.storeId;
+      if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      const token = await signBountyToken(env, storeId);
+      return json({ token, deepLink: `https://t.me/${TG_BOT_USERNAME}?start=bounty_${token}` }, 200, origin);
     }
 
     // ── Push subscription management ──
