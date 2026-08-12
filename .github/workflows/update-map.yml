@@ -1,0 +1,67 @@
+name: Update map data
+
+# Applies a single-store patch to stores.json without a human in the loop.
+# Triggered by a `repository_dispatch` event of type `update_map_data`, sent
+# by scripts/patch-store.js (or a Worker calling the same GitHub API
+# endpoint directly) with a payload shaped:
+#   { store_id: "c21", updates: { phone: "...", hours: { mon: "..." } } }
+#
+# `updates` is a *partial* patch (deep-merged into the matching store, see
+# scripts/apply-map-patch.mjs), never the whole file — so two patches for
+# different stores arriving close together can't race and clobber each
+# other's unrelated fields the way a full-file overwrite could.
+#
+# The concurrency group still serialises runs (queued, not cancelled) so two
+# patches for the *same* store can't interleave their read-modify-write.
+on:
+  repository_dispatch:
+    types: [update_map_data]
+
+concurrency:
+  group: map-data-update
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Step 1 — apply the patch. Reads store_id/updates from the event
+      # payload (GITHUB_EVENT_PATH), not a workflow-expression env var, so
+      # nested/quoted JSON survives without shell-escaping surprises.
+      - name: Apply patch
+        run: node scripts/apply-map-patch.mjs
+
+      # Step 2 — schema gate. Aborts the whole run (nothing committed) if the
+      # patch produced anything the app can't safely render: broken JSON,
+      # a missing required field, an out-of-range coordinate, a duplicate id,
+      # or a non-ISO date.
+      - name: Validate schema
+        run: node scripts/validate-stores.mjs
+
+      # Step 3 — commit & deploy. GitHub Pages for this repo serves straight
+      # from `main` (no separate build/deploy workflow), so pushing here IS
+      # the deploy. Skips cleanly if the patch was a no-op (e.g. updates
+      # matched the existing values).
+      - name: Commit
+        run: |
+          git config user.name "lviv-secondhand-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add stores.json
+          if git diff --cached --quiet; then
+            echo "No changes after patch — nothing to commit."
+            exit 0
+          fi
+          STORE_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.GITHUB_EVENT_PATH,'utf8')).client_payload.store_id)")
+          git commit -m "Auto-update store ${STORE_ID} [skip ci]"
+          git push
