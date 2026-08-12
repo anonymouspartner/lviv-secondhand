@@ -23,6 +23,10 @@
 // live in the VISITS KV namespace, keyed so they sort chronologically.
 // ─────────────────────────────────────────────────────────────────────────────
 import { STORES } from './stores.gen.js';
+import {
+  getCycleLengthKeyboard, getDayOfWeekKeyboard, getOpenTimeKeyboard, getCloseTimeKeyboard,
+  getConfirmKeyboard, summaryText, sessionToUpdates,
+} from './telegram-agent-keyboards.js';
 
 const APP_URL = 'https://www.lvivsecondhand.com/';
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -254,6 +258,203 @@ function say(env, chatId, text, keyboard) {
     ? { keyboard: keyboard.map((row) => row.map((t) => ({ text: t }))), resize_keyboard: true, one_time_keyboard: true }
     : { remove_keyboard: true };
   return tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIELD-SCOUT "BOUNTY" SUBSYSTEM — a short, inline-keyboard-driven alternative
+// to /visit's free-text questionnaire, entered via a deep link from the map
+// (?store=id&agent_mode=true in index.html → POST /api/bounty/stash on the
+// metrics Worker → t.me/…?start=bounty_{token}). Session state lives in the
+// same VISITS KV as /visit, under a distinct bounty-session: prefix so the two
+// flows can't collide for one user. Needs BOT_TOKEN + VISITS (like /visit) plus
+// BOUNTY_SECRET (must match the metrics Worker's BOUNTY_SECRET — it verifies
+// the token that Worker signed) and GITHUB_PAT (to dispatch the resulting
+// patch — see scripts/patch-store.js and .github/workflows/update-map.yml).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BOUNTY_SESSION_TTL = 60 * 30; // 30 min — generous for a short keyboard flow
+const bountySessionKey = (uid) => `bounty-session:${uid}`;
+const getBountySession = (env, uid) => env.VISITS.get(bountySessionKey(uid), { type: 'json' });
+const putBountySession = (env, uid, s) => env.VISITS.put(bountySessionKey(uid), JSON.stringify(s), { expirationTtl: BOUNTY_SESSION_TTL });
+const clearBountySession = (env, uid) => env.VISITS.delete(bountySessionKey(uid));
+const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+function b64url(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+// Verifies a token minted by the metrics Worker's /api/bounty/stash (same
+// scheme: HMAC-SHA256 over "storeId.expBase36", truncated to 6 bytes so the
+// whole token fits Telegram's 64-character /start deep-link payload limit).
+// Returns the storeId on success, or null (bad shape, expired, or bad MAC).
+async function verifyBountyToken(env, token) {
+  if (!env.BOUNTY_SECRET) return null;
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) return null;
+  const [storeId, expB36, mac] = parts;
+  if (!/^[a-z0-9]{1,12}$/i.test(storeId)) return null;
+  const exp = parseInt(expB36, 36);
+  if (!Number.isFinite(exp) || Math.floor(Date.now() / 60000) > exp) return null;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.BOUNTY_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${storeId}.${expB36}`));
+  const expected = b64url(new Uint8Array(sig).slice(0, 6));
+  if (expected.length !== mac.length) return null;
+  let diff = 0; for (let i = 0; i < mac.length; i++) diff |= mac.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0 ? storeId : null;
+}
+
+// Sends the confirmed { cycle, restockDay, hours } patch to the automated map
+// pipeline. Mirrors scripts/patch-store.js's dispatchMapPatch(), reimplemented
+// here rather than imported — that script uses node:fs to resolve paths and
+// isn't portable to the Workers runtime.
+async function dispatchMapPatch(env, storeId, updates) {
+  if (!env.GITHUB_PAT) throw new Error('GITHUB_PAT not configured');
+  const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_PAT}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'lviv-secondhand-bot',
+    },
+    body: JSON.stringify({ event_type: 'update_map_data', client_payload: { store_id: storeId, updates } }),
+  });
+  if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
+}
+
+// `/start bounty_{token}` — the deep-link entry point. Returns true if it
+// consumed the update (whether or not the token was valid).
+async function handleBountyStart(env, c, ctx) {
+  if (!c.enabled) return false;
+  const { userId, chatId, text } = ctx;
+  const m = /^\/start\s+bounty_(\S+)/.exec(String(text || '').trim());
+  if (!m) return false;
+  const storeId = await verifyBountyToken(env, m[1]);
+  if (!storeId) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Це посилання застаріле або недійсне. Спробуйте ще раз з карти. · This link expired or is invalid — try again from the map.' });
+    return true;
+  }
+  const store = STORES.find((s) => s.id === storeId);
+  if (!store) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Магазин не знайдено. · Store not found.' });
+    return true;
+  }
+  await putBountySession(env, userId, { storeId, storeName: store.name, step: 'cycle' });
+  await tg(env, 'sendMessage', {
+    chat_id: chatId,
+    text: `📦 <b>${esc(store.name)}</b>\n\nПеріодичність завезення? · Restock cycle?`,
+    parse_mode: 'HTML',
+    reply_markup: getCycleLengthKeyboard(),
+  });
+  return true;
+}
+
+// Plain-text follow-up after "✏️ Інший" on a time step. Returns true if it
+// consumed the update.
+async function handleBountyText(env, c, ctx) {
+  if (!c.enabled) return false;
+  const { userId, chatId, text } = ctx;
+  const session = await getBountySession(env, userId);
+  if (!session || (session.step !== 'open_custom' && session.step !== 'close_custom') || !text) return false;
+  const m = TIME_RE.exec(text.trim());
+  if (!m) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: 'Невірний формат. Введіть час як ГГ:ХХ (напр. 09:15) · Invalid format — enter as HH:MM (e.g. 09:15):' });
+    return true;
+  }
+  const time = `${m[1].padStart(2, '0')}:${m[2]}`;
+  if (session.step === 'open_custom') {
+    session.open = time; session.step = 'close';
+    await putBountySession(env, userId, session);
+    await tg(env, 'sendMessage', { chat_id: chatId, text: `📦 <b>${esc(session.storeName)}</b>\n\nЧас закриття? · Closing time?`, parse_mode: 'HTML', reply_markup: getCloseTimeKeyboard() });
+  } else {
+    session.close = time; session.step = 'confirm';
+    await putBountySession(env, userId, session);
+    await tg(env, 'sendMessage', { chat_id: chatId, text: summaryText(session), parse_mode: 'HTML', reply_markup: getConfirmKeyboard() });
+  }
+  return true;
+}
+
+// Every callback_query (inline-keyboard tap) for the bounty flow.
+async function handleAgentCallback(env, c, cq) {
+  await tg(env, 'answerCallbackQuery', { callback_query_id: cq.id });
+  if (!c.enabled) return;
+  const uid = cq.from.id;
+  const chatId = cq.message.chat.id;
+  const message_id = cq.message.message_id;
+  const data = String(cq.data || '');
+  const edit = (text, keyboard) => tg(env, 'editMessageText', { chat_id: chatId, message_id, text, parse_mode: 'HTML', reply_markup: keyboard });
+
+  if (data === 'confirm' || data === 'cancel') {
+    const session = await getBountySession(env, uid);
+    await clearBountySession(env, uid);
+    if (!session) { await edit('Сесія застаріла.'); return; }
+    if (data === 'cancel') { await edit('Скасовано. · Cancelled.'); return; }
+    const updates = sessionToUpdates(session);
+    try {
+      await dispatchMapPatch(env, session.storeId, updates);
+      await edit('✅ Дякуємо! Зміни надіслано на перевірку — зʼявляться на карті за кілька хвилин. · Thanks — changes are on their way to the map.');
+    } catch (e) {
+      await edit('⚠️ Не вдалося надіслати зміни. Спробуйте пізніше. · Could not send the changes — try again later.');
+    }
+    return;
+  }
+
+  const i = data.indexOf(':');
+  const kind = i === -1 ? data : data.slice(0, i);
+  const val = i === -1 ? '' : data.slice(i + 1);
+  const session = await getBountySession(env, uid);
+  if (!session) { await edit('Сесія застаріла. Спробуйте ще раз з карти. · Session expired — try again from the map.'); return; }
+  const title = `📦 <b>${esc(session.storeName)}</b>\n\n`;
+
+  if (kind === 'cyc') {
+    session.cycle = val;
+    if (val === '7' || val === '14' || val === '35') {
+      session.step = 'day';
+      await putBountySession(env, uid, session);
+      await edit(title + 'День завезення? · Restock day?', getDayOfWeekKeyboard());
+    } else {
+      session.step = 'open';
+      await putBountySession(env, uid, session);
+      await edit(title + 'Час відкриття? · Opening time?', getOpenTimeKeyboard());
+    }
+    return;
+  }
+  if (kind === 'day') {
+    session.restockDay = val;
+    session.step = 'open';
+    await putBountySession(env, uid, session);
+    await edit(title + 'Час відкриття? · Opening time?', getOpenTimeKeyboard());
+    return;
+  }
+  if (kind === 'open') {
+    if (val === 'custom') {
+      session.step = 'open_custom';
+      await putBountySession(env, uid, session);
+      await edit('Введіть час відкриття (напр. 09:15): · Enter the opening time (e.g. 09:15):');
+      return;
+    }
+    session.open = val;
+    session.step = 'close';
+    await putBountySession(env, uid, session);
+    await edit(title + 'Час закриття? · Closing time?', getCloseTimeKeyboard());
+    return;
+  }
+  if (kind === 'close') {
+    if (val === 'custom') {
+      session.step = 'close_custom';
+      await putBountySession(env, uid, session);
+      await edit('Введіть час закриття (напр. 19:45): · Enter the closing time (e.g. 19:45):');
+      return;
+    }
+    session.close = val;
+    session.step = 'confirm';
+    await putBountySession(env, uid, session);
+    await edit(summaryText(session), getConfirmKeyboard());
+    return;
+  }
 }
 
 // Telegram command menus. Everyone gets PUBLIC_CMDS; the owner & agents get an
@@ -698,17 +899,27 @@ export default {
       return ok(); // Malformed body — ack so Telegram doesn't retry forever.
     }
 
+    const c = cfg(env);
+
+    // Inline-keyboard taps (bounty flow) arrive as callback_query, not message.
+    if (update.callback_query) {
+      try { await handleAgentCallback(env, c, update.callback_query); } catch (e) {}
+      return ok();
+    }
+
     const msg = update.message || update.edited_message;
-    if (!msg) return ok(); // Ignore callbacks/joins/etc.
+    if (!msg) return ok(); // Ignore joins/etc.
     const from = msg.from || {};
     const chatId = msg.chat.id;
     const text = typeof msg.text === 'string' ? msg.text : null;
+    const ctx = { userId: from.id, chatId, text, from };
 
-    // Field-agent subsystem (stateful). Only when BOT_TOKEN + VISITS are set.
-    const c = cfg(env);
+    // Field-agent subsystems (stateful). Only when BOT_TOKEN + VISITS are set.
     if (c.enabled) {
       try {
-        const consumed = await handleVisit(env, c, msg, { userId: from.id, chatId, text, from });
+        if (await handleBountyStart(env, c, ctx)) return ok();
+        if (await handleBountyText(env, c, ctx)) return ok();
+        const consumed = await handleVisit(env, c, msg, ctx);
         if (consumed) return ok();
       } catch (e) {
         // Never let the field flow break the public bot; ack and move on.

@@ -58,7 +58,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Generate bot dataset from index.html
+      - name: Generate bot dataset from stores.json
         run: node build-data.mjs
 
       - name: Deploy worker
@@ -73,3 +73,25 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
         run: printf '%s' "$BOT_TOKEN" | npx wrangler secret put BOT_TOKEN
+
+      # Field-scout "bounty" flow (see telegram-agent-keyboards.js) — both
+      # optional, skip cleanly if unset. BOUNTY_SECRET must match the metrics
+      # Worker's (worker/wrangler.toml) exactly.
+      - name: Set BOUNTY_SECRET on the worker
+        working-directory: telegram-bot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BOUNTY_SECRET: ${{ secrets.BOUNTY_SECRET }}
+        run: |
+          if [ -z "$BOUNTY_SECRET" ]; then echo "BOUNTY_SECRET not set — skipping (field-scout flow stays off until you add it)"; exit 0; fi
+          printf '%s' "$BOUNTY_SECRET" | npx wrangler secret put BOUNTY_SECRET
+      - name: Set GITHUB_PAT on the worker
+        working-directory: telegram-bot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+        run: |
+          if [ -z "$GITHUB_PAT" ]; then echo "GITHUB_PAT not set — skipping (field-scout flow can't dispatch patches until you add it)"; exit 0; fi
+          printf '%s' "$GITHUB_PAT" | npx wrangler secret put GITHUB_PAT
