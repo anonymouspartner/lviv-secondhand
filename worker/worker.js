@@ -77,6 +77,13 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS store_pins (store_id TEXT PRIMARY KEY, pin TEXT NOT NULL)"
   ).run();
+  // Telegram chat ids following a store for flash-deal alerts (Feature 5) —
+  // separate from the Web Push restock-follow list (push_subs above): this
+  // one is opt-in per store, reaches Telegram directly, and only fires on a
+  // paid "+ Telegram alert" flash deal, not every restock.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS store_subs (store_id TEXT NOT NULL, chat_id TEXT NOT NULL, created TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (store_id, chat_id))"
+  ).run();
   _schemaReady = true;
 }
 
@@ -236,6 +243,17 @@ function tgNotify(env, ctx, text) {
     body: JSON.stringify({ chat_id: env.OWNER_ID, text, disable_web_page_preview: true }),
   }).catch(() => {});
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
+}
+// Same as tgNotify but to an arbitrary chat id — used to broadcast a flash
+// deal to a store's Telegram subscribers (store_subs). Same no-parse_mode
+// reasoning: the deal text is buyer-supplied.
+function tgSend(env, chatId, text) {
+  if (!env.BOT_TOKEN) return Promise.resolve();
+  return fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+  }).catch(() => {});
 }
 const uah = (kop) => (kop == null ? '?' : '₴' + (kop / 100).toLocaleString('uk-UA'));
 const storeLink = (id) => `${APP_URL}?store=${encodeURIComponent(id)}`;
@@ -427,6 +445,7 @@ async function applyFlashDealEvent(env, ev, ctx) {
       tgNotify(env, ctx,
         `⚡ FLASH DEAL PAID — auto-published (PIN verified)\n\n` +
         `Store: ${storeId}\nText:  ${text}\nUntil: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n${storeLink(storeId)}`);
+      if (tier.alert) await broadcastFlashDeal(env, ctx, storeId, text, expiresAt);
     } catch (e) {
       tgNotify(env, ctx, `⚠️ Flash deal for ${storeId} was PIN-verified but failed to dispatch — check the map-update workflow logs.\n\n${storeLink(storeId)}`);
     }
@@ -441,6 +460,21 @@ async function applyFlashDealEvent(env, ev, ctx) {
     `Store: ${storeId}\nTier:  ${tier.label}\nText:  ${text}\nWould run until: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n` +
     (approveLink ? `Tap to approve & publish:\n${approveLink}\n\n` : `(Set ADMIN_KEY to get a one-tap approve link here.)\n\n`) +
     `${storeLink(storeId)}`);
+}
+
+// Pings every Telegram chat following this store (store_subs — see /api/sub)
+// once its "+ Telegram alert" flash deal is actually live. Capped at 500
+// recipients per deal (matches the defensive caps used elsewhere, e.g. the
+// 200-store cap on a single push subscription's follow list).
+async function broadcastFlashDeal(env, ctx, storeId, text, expiresAt) {
+  if (!env.BOT_TOKEN) return;
+  const res = await env.DB.prepare('SELECT chat_id FROM store_subs WHERE store_id = ? LIMIT 500').bind(storeId).all();
+  const rows = (res && res.results) || [];
+  if (!rows.length) return;
+  const hoursLeft = Math.max(1, Math.round((new Date(expiresAt) - Date.now()) / 3600000));
+  const msg = `⚡ Спалах-знижка: ${text}\nЗникає приблизно через ${hoursLeft} год. · Flash deal: ${text} — ends in about ${hoursLeft}h\n\n${storeLink(storeId)}`;
+  const p = Promise.all(rows.map((r) => tgSend(env, r.chat_id, msg)));
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p); else await p;
 }
 
 // ── byte helpers ──
@@ -675,6 +709,7 @@ export default {
           return new Response('dispatch failed — check GITHUB_PAT and the map-update workflow logs', { status: 502 });
         }
         await env.DB.prepare("UPDATE flash_deals SET status = 'approved' WHERE id = ?").bind(id).run();
+        if (row.alert) await broadcastFlashDeal(env, ctx, row.store_id, row.text, row.expires_at);
         return new Response(`✅ Flash deal approved and published for ${row.store_id}.`, { status: 200 });
       }
       // À la carte one-off: /order?store=<id>&item=deal|poster|push. Unlike /promote
@@ -844,6 +879,33 @@ export default {
       }
       const token = await signBountyToken(env, storeId);
       return json({ token, deepLink: `https://t.me/${TG_BOT_USERNAME}?start=bounty_${token}` }, 200, origin);
+    }
+
+    // ── Flash-deal Telegram subscribers (store_subs) — called by the bot
+    // Worker, not the browser, when someone opens t.me/…?start=sub_<storeId>
+    // or sends /stop. Low-stakes (opting a chat id into a marketing message,
+    // nothing sensitive), so no signature — the per-IP rate limit above and
+    // basic shape validation are enough.
+    if (url.pathname === '/api/sub') {
+      const storeId = body && body.storeId;
+      const chatId = body && body.chatId;
+      if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)
+          || (typeof chatId !== 'string' && typeof chatId !== 'number')) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      await ensureSchema(env);
+      await env.DB.prepare('INSERT INTO store_subs (store_id, chat_id) VALUES (?, ?) ON CONFLICT DO NOTHING')
+        .bind(storeId, String(chatId)).run();
+      return new Response(null, { status: 204, headers: cors(origin) });
+    }
+    if (url.pathname === '/api/unsub-all') {
+      const chatId = body && body.chatId;
+      if (typeof chatId !== 'string' && typeof chatId !== 'number') {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      await ensureSchema(env);
+      await env.DB.prepare('DELETE FROM store_subs WHERE chat_id = ?').bind(String(chatId)).run();
+      return new Response(null, { status: 204, headers: cors(origin) });
     }
 
     // ── Push subscription management ──

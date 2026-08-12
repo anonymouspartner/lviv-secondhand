@@ -7,6 +7,13 @@
 //   /cheap        — best by-weight deals right now (late in the weekly cycle)
 //   /submit       — point store owners at the web submission form
 //
+// Flash-deal alerts (active, needs BOT_TOKEN — no VISITS/session involved):
+//   /start sub_<storeId> — deep link from the map; follow a store's paid
+//                          "+ Telegram alert" flash deals (store_subs, kept
+//                          on the metrics Worker's D1 — proxied over HTTP,
+//                          this Worker has no D1 binding of its own)
+//   /stop                — unsubscribe from every store's flash-deal alerts
+//
 // Field-agent commands (stateful — require BOT_TOKEN + the VISITS KV binding):
 //   /visit        — guided store-survey flow (store → GPS → photo → questionnaire)
 //   /myvisits     — an agent's own running visit count
@@ -19,7 +26,7 @@
 // payment scheme, and questions; keep the two in sync.
 //
 // Data source for the public commands: the app's curated dataset, extracted from
-// index.html at build time into stores.gen.js (see build-data.mjs). Visit records
+// stores.json at build time into stores.gen.js (see build-data.mjs). Visit records
 // live in the VISITS KV namespace, keyed so they sort chronologically.
 // ─────────────────────────────────────────────────────────────────────────────
 import { STORES } from './stores.gen.js';
@@ -29,6 +36,7 @@ import {
 } from './telegram-agent-keyboards.js';
 
 const APP_URL = 'https://www.lvivsecondhand.com/';
+const METRICS_WORKER_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_NAMES = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 
@@ -323,6 +331,49 @@ async function dispatchMapPatch(env, storeId, updates) {
     body: JSON.stringify({ event_type: 'update_map_data', client_payload: { store_id: storeId, updates } }),
   });
   if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
+}
+
+// `/start sub_{storeId}` — opts this chat into Telegram alerts for a store's
+// paid "+ Telegram alert" flash deals (store_subs, on the metrics Worker's
+// D1 — this Worker has no D1 binding, so it proxies the write over HTTP).
+// Only needs BOT_TOKEN, not the full field-agent `c.enabled` gate — no
+// session, no VISITS KV involved.
+async function handleFlashSubStart(env, ctx) {
+  if (!env.BOT_TOKEN) return false;
+  const { chatId, text } = ctx;
+  const m = /^\/start\s+sub_(\S+)/.exec(String(text || '').trim());
+  if (!m) return false;
+  const storeId = m[1];
+  if (!/^[a-z0-9]{1,12}$/i.test(storeId)) return false;
+  const store = STORES.find((s) => s.id === storeId);
+  try {
+    await fetch(`${METRICS_WORKER_URL}/api/sub`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId, chatId }),
+    });
+  } catch (e) {}
+  await tg(env, 'sendMessage', {
+    chat_id: chatId,
+    text: `📣 Стежите за акціями <b>${esc(store ? store.name : storeId)}</b>. Напишемо, якщо буде спалах-знижка. Відписатися від усіх — /stop\n\n` +
+          `📣 Following <b>${esc(store ? store.name : storeId)}</b> for flash-deal alerts. We'll message you if one goes live. Unsubscribe from all — /stop`,
+    parse_mode: 'HTML',
+  });
+  return true;
+}
+
+// /stop — unsubscribe this chat from every store's flash-deal alerts.
+async function handleStopCommand(env, ctx) {
+  if (!env.BOT_TOKEN) return false;
+  const { chatId, text } = ctx;
+  if (!/^\/stop\b/i.test(String(text || '').trim())) return false;
+  try {
+    await fetch(`${METRICS_WORKER_URL}/api/unsub-all`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId }),
+    });
+  } catch (e) {}
+  await tg(env, 'sendMessage', { chat_id: chatId, text: '🔕 Відписано від усіх акцій. · Unsubscribed from all flash-deal alerts.' });
+  return true;
 }
 
 // `/start bounty_{token}` — the deep-link entry point. Returns true if it
@@ -913,6 +964,12 @@ export default {
     const chatId = msg.chat.id;
     const text = typeof msg.text === 'string' ? msg.text : null;
     const ctx = { userId: from.id, chatId, text, from };
+
+    // Flash-deal subscribe/unsubscribe (Feature 5). Only needs BOT_TOKEN.
+    try {
+      if (await handleFlashSubStart(env, ctx)) return ok();
+      if (await handleStopCommand(env, ctx)) return ok();
+    } catch (e) {}
 
     // Field-agent subsystems (stateful). Only when BOT_TOKEN + VISITS are set.
     if (c.enabled) {
