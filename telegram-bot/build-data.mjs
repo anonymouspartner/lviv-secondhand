@@ -1,29 +1,17 @@
-// Extracts the store list from the app's single source of truth (../index.html)
-// and writes a slim, bot-only module (stores.gen.js). This keeps ONE canonical
-// dataset — index.html — instead of a second hand-maintained copy, and it does
-// NOT create a public raw-JSON endpoint: the output is bundled into the Worker at
-// deploy time and git-ignored. Only the fields the bot needs are kept.
+// Extracts the store list from the app's single source of truth (../stores.json,
+// fetched at runtime by index.html) and writes a slim, bot-only module
+// (stores.gen.js). This keeps ONE canonical dataset instead of a second
+// hand-maintained copy, and it does NOT create a public raw-JSON endpoint: the
+// output is bundled into the Worker at deploy time and git-ignored. Only the
+// fields the bot needs are kept.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const htmlPath = fileURLToPath(new URL('../index.html', import.meta.url));
+const jsonPath = fileURLToPath(new URL('../stores.json', import.meta.url));
 const outPath = fileURLToPath(new URL('./stores.gen.js', import.meta.url));
 
-const html = readFileSync(htmlPath, 'utf8');
-
-// Slice out the `const STORES = [ ... ];` array literal.
-const marker = 'const STORES = [';
-const start = html.indexOf(marker);
-if (start === -1) throw new Error('Could not find STORES array in index.html');
-const open = html.indexOf('[', start);
-const close = html.indexOf('\n];', open);
-if (close === -1) throw new Error('Could not find end of STORES array');
-const literal = html.slice(open, close + 2); // through the closing ]
-
-// index.html is our own trusted code; evaluate the array literal to real objects.
-// Wrapped in parens so the leading [ is parsed as an expression, not a block.
-const STORES = (0, eval)('(' + literal + ')');
-if (!Array.isArray(STORES) || !STORES.length) throw new Error('STORES did not evaluate to a non-empty array');
+const STORES = JSON.parse(readFileSync(jsonPath, 'utf8'));
+if (!Array.isArray(STORES) || !STORES.length) throw new Error('stores.json did not parse to a non-empty array');
 
 // Drop the watermark canary and keep only what the bot renders / reasons about.
 const slim = STORES

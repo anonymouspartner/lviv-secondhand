@@ -1,6 +1,7 @@
 // Renders a 1080×1080 "best deals right now" share image (Instagram/Telegram)
-// from the app's /cheap logic, straight out of index.html (single source of
-// truth). Run: `npm run deals` → marketing/deals-this-week.png
+// from the app's /cheap logic, straight out of stores.json (single source of
+// truth, same file index.html fetches at runtime). Run: `npm run deals` →
+// marketing/deals-this-week.png
 //
 // The ranking mirrors telegram-bot/worker.js cheapText(): by-weight stores with
 // a fixed weekly restock day, ranked by how many days they are into their weekly
@@ -17,13 +18,8 @@ mkdirSync(outDir, { recursive: true });
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
-// ── Extract STORES from index.html (same method as telegram-bot/build-data.mjs) ──
-const html = readFileSync(resolve(repoRoot, 'index.html'), 'utf8');
-const start = html.indexOf('const STORES = [');
-const open = html.indexOf('[', start);
-const close = html.indexOf('\n];', open);
-if (start === -1 || close === -1) throw new Error('Could not locate STORES array in index.html');
-const STORES = (0, eval)('(' + html.slice(open, close + 2) + ')');
+// ── Load STORES from stores.json (same source index.html fetches at runtime) ──
+const STORES = JSON.parse(readFileSync(resolve(repoRoot, 'stores.json'), 'utf8'));
 
 // ── /cheap ranking ──
 const kyivWeekday = () => {

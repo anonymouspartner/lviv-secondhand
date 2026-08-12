@@ -2,7 +2,7 @@
    - App shell + Leaflet are precached so the app opens offline.
    - HTML is network-first so an online visit always gets the latest build.
    - Map tiles are cached opportunistically for offline panning of visited areas. */
-const SHELL_CACHE = 'lviv-sh-shell-v3';
+const SHELL_CACHE = 'lviv-sh-shell-v4';
 const TILE_CACHE  = 'lviv-sh-tiles-v1';
 const MAX_TILES = 400;
 
@@ -10,7 +10,8 @@ const SHELL = [
   './', 'index.html', 'privacy.html', 'manifest.webmanifest',
   'favicon.svg', 'favicon-32.png', 'apple-touch-icon.png',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
-  'vendor/leaflet.css', 'vendor/leaflet.js', 'vendor/qrcode.js'
+  'vendor/leaflet.css', 'vendor/leaflet.js', 'vendor/qrcode.js',
+  'stores.json'
 ];
 
 self.addEventListener('install', (e) => {
@@ -96,6 +97,20 @@ self.addEventListener('fetch', (e) => {
       fetch(req)
         .then((res) => { const copy = res.clone(); caches.open(SHELL_CACHE).then((c) => c.put(req, copy)); return res; })
         .catch(() => caches.match(req).then((h) => h || caches.match('index.html')))
+    );
+    return;
+  }
+
+  // stores.json: also network-first (store data changes without an app redeploy),
+  // but the app appends a cache-busting ?v= so every request has a unique URL —
+  // cache and match it under a normalized key instead, or offline lookups would
+  // always miss.
+  if (url.pathname.endsWith('/stores.json')) {
+    const cacheKey = new Request(url.origin + url.pathname);
+    e.respondWith(
+      fetch(req)
+        .then((res) => { const copy = res.clone(); caches.open(SHELL_CACHE).then((c) => c.put(cacheKey, copy)); return res; })
+        .catch(() => caches.match(cacheKey))
     );
     return;
   }
