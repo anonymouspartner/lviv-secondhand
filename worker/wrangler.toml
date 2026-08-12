@@ -60,3 +60,17 @@ OWNER_ID = "1212541015"
 # the exact same value as the bot Worker's (telegram-bot/) BOUNTY_SECRET,
 # which verifies the token this one signs:
 #   BOUNTY_SECRET — printf '%s' "<random>" | npx wrangler@3 secret put BOUNTY_SECRET
+#
+# ── Flash deals (GET /flash-deal, POST /stripe-webhook, GET /flash-deal/approve) — optional ──
+# A short-lived paid sale (Stripe self-fulfilment, same pattern as promotions
+# above). Needs STRIPE_API_KEY + STRIPE_WEBHOOK_SECRET above, plus:
+#   GITHUB_PAT — classic PAT with the `repo` scope, used to dispatch the
+#               published deal to .github/workflows/update-map.yml (same
+#               pipeline the field-scout flow uses — see scripts/patch-store.js):
+#                 printf '%s' "<pat>" | npx wrangler@3 secret put GITHUB_PAT
+# ADMIN_KEY (already used by /admin/test and /orders — see docs/ADVERTISING.md)
+# gates the one-tap "approve" link sent to the owner when a deal has no
+# matching PIN on file. A store's PIN (optional; lets a trusted buyer skip
+# owner review) has no self-service UI yet — set it directly:
+#   npx wrangler@3 d1 execute lviv-metrics --remote --command \
+#     "INSERT INTO store_pins (store_id, pin) VALUES ('c21', '1234') ON CONFLICT(store_id) DO UPDATE SET pin=excluded.pin"
