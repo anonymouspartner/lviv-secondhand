@@ -81,7 +81,7 @@ const PROMO_PRICES = {
   spotlight_annual:  'price_1U1dw17ZlQqI3gQVuizcyhYi',
 };
 const PROMO_TIERS = new Set(['verified', 'featured', 'spotlight']);
-const PROMO_CADENCES = new Set(['monthly', 'annual', 'run7', 'run30']);
+const PROMO_CADENCES = new Set(['monthly', 'annual', 'run1', 'run7', 'run30']);
 
 // Ad-hoc runs: pay once for a fixed window, no subscription and nothing to cancel.
 // Priced inline against the existing tier Products (no new Price objects to create
@@ -93,14 +93,17 @@ const TIER_PRODUCTS = {
   spotlight: 'prod_V1hKo6mVYDGRYn',
 };
 const PROMO_RUNS = {
-  verified_run7:   { amount:  10000, days: 7  },
-  verified_run30:  { amount:  25000, days: 30 },
-  featured_run7:   { amount:  20000, days: 7  },
-  featured_run30:  { amount:  60000, days: 30 },
-  spotlight_run7:  { amount:  40000, days: 7  },
+  verified_run1:   {  amount:  5000, days: 1  },
+  verified_run7:   {  amount: 10000, days: 7  },
+  verified_run30:  {  amount: 25000, days: 30 },
+  featured_run1:   {  amount: 10000, days: 1  },
+  featured_run7:   {  amount: 20000, days: 7  },
+  featured_run30:  {  amount: 60000, days: 30 },
+  spotlight_run1:  {  amount: 20000, days: 1  },
+  spotlight_run7:  {  amount: 40000, days: 7  },
   spotlight_run30: { amount: 120000, days: 30 },
 };
-const isRun = (c) => c === 'run7' || c === 'run30';
+const isRun = (c) => c === 'run1' || c === 'run7' || c === 'run30';
 
 // À la carte one-offs. These are *orders*, not placements: the app has no surface to
 // render them into (the poster is physical, deal-of-week and sponsored push are not
@@ -112,11 +115,38 @@ const ORDER_ITEMS = {
   push:   { price: 'price_1U1dwe7ZlQqI3gQV1yCPZoEc', label: 'Sponsored push' },
 };
 
-// The shopper-facing offer line ("-10% з застосунком"). Free text typed by whoever
-// pays, so it is clamped here before it ever reaches Stripe metadata or D1: angle
-// brackets stripped, whitespace collapsed, length capped. The app also escapes it
-// on render — this is the second of the two gates, not the only one.
+// The shopper-facing offer line ("-10% з застосунком"). It is collected as a Stripe
+// Checkout custom field rather than in the app, so it sits behind the paywall: only
+// someone who reaches the payment page can write it, and only a completed payment
+// makes it public. Still cleaned on the way out of Stripe — angle brackets stripped,
+// whitespace collapsed, length capped — and escaped again on render.
 const OFFER_MAX = 48;
+// Labels for that field. Stripe caps a custom-field label at 50 characters.
+const OFFER_FIELD = {
+  key: 'offer',
+  ua: 'Пропозиція для покупців (необовʼязково)',
+  en: 'Offer shown to shoppers (optional)',
+};
+const NOTE_FIELD = {
+  key: 'note',
+  ua: 'Що саме просуваємо? (необовʼязково)',
+  en: 'What should we promote? (optional)',
+};
+// Attach an optional free-text field to a Checkout Session.
+function addCustomField(form, field, locale) {
+  form.set('custom_fields[0][key]', field.key);
+  form.set('custom_fields[0][label][type]', 'custom');
+  form.set('custom_fields[0][label][custom]', locale === 'en' ? field.en : field.ua);
+  form.set('custom_fields[0][type]', 'text');
+  form.set('custom_fields[0][optional]', 'true');
+  form.set('custom_fields[0][text][maximum_length]', String(OFFER_MAX));
+}
+// Read it back off the completed session.
+function readCustomField(o, key) {
+  const list = (o && o.custom_fields) || [];
+  for (const f of list) if (f && f.key === key) return (f.text && f.text.value) || '';
+  return '';
+}
 function cleanOffer(raw) {
   const s = String(raw || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
   return s.slice(0, OFFER_MAX);
@@ -231,10 +261,11 @@ async function applyPromoEvent(env, ev, ctx) {
         'ON CONFLICT(id) DO NOTHING'
       ).bind(
         o.id, storeId, md.item, o.amount_total || null, o.currency || null,
-        (o.customer_details && o.customer_details.email) || null, cleanOffer(md.note) || null
+        (o.customer_details && o.customer_details.email) || null,
+        cleanOffer(readCustomField(o, 'note') || md.note) || null
       ).run();
       const email = (o.customer_details && o.customer_details.email) || '—';
-      const note = cleanOffer(md.note);
+      const note = cleanOffer(readCustomField(o, 'note') || md.note);
       tgNotify(env, ctx,
         `🧾 NEW ORDER — you need to fulfil this\n\n` +
         `Item:  ${ORDER_ITEMS[md.item].label}\n` +
@@ -251,7 +282,7 @@ async function applyPromoEvent(env, ev, ctx) {
     if (!storeId || !PROMO_TIERS.has(tier)) return;
     // Re-clean rather than trusting the round-trip: metadata could have been set
     // by any caller holding the key, not just our own /promote.
-    const offer = cleanOffer(md.offer) || null;
+    const offer = cleanOffer(readCustomField(o, 'offer') || md.offer) || null;
     // A run ends exactly when it was bought to end; a subscription runs to the next
     // invoice plus a few days' grace. A run has no subscription, so no portal either.
     const run = PROMO_RUNS[`${tier}_${cadence}`];
@@ -403,7 +434,7 @@ export default {
         const store = url.searchParams.get('store') || '';
         const tier = url.searchParams.get('tier') || 'featured';
         const cadence = url.searchParams.get('cadence') || 'monthly';
-        const offer = cleanOffer(url.searchParams.get('offer'));
+        const loc = stripeLocale(url.searchParams.get('lang'));
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
@@ -423,7 +454,10 @@ export default {
         }
         form.set('line_items[0][quantity]', '1');
         form.set('allow_promotion_codes', 'true');
-        form.set('locale', stripeLocale(url.searchParams.get('lang')));
+        form.set('locale', loc);
+        // The offer line is asked for on the payment page itself, so only a buyer
+        // who got that far can write one, and only a completed payment publishes it.
+        addCustomField(form, OFFER_FIELD, loc);
         form.set('client_reference_id', store);
         form.set('metadata[storeId]', store);
         form.set('metadata[tier]', tier);
@@ -432,10 +466,6 @@ export default {
           form.set('subscription_data[metadata][storeId]', store);
           form.set('subscription_data[metadata][tier]', tier);
           form.set('subscription_data[metadata][cadence]', cadence);
-        }
-        if (offer) {
-          form.set('metadata[offer]', offer);
-          if (!run) form.set('subscription_data[metadata][offer]', offer);
         }
         form.set('success_url', APP_URL + '?promoted=' + encodeURIComponent(tier));
         form.set('cancel_url', APP_URL + '?promoted=cancel');
@@ -457,7 +487,7 @@ export default {
       if (url.pathname === '/order') {
         const store = url.searchParams.get('store') || '';
         const item = url.searchParams.get('item') || '';
-        const note = cleanOffer(url.searchParams.get('note'));
+        const loc = stripeLocale(url.searchParams.get('lang'));
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !ORDER_ITEMS[item]) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
@@ -467,11 +497,11 @@ export default {
         form.set('line_items[0][price]', ORDER_ITEMS[item].price);
         form.set('line_items[0][quantity]', '1');
         form.set('allow_promotion_codes', 'true');
-        form.set('locale', stripeLocale(url.searchParams.get('lang')));
+        form.set('locale', loc);
+        addCustomField(form, NOTE_FIELD, loc);
         form.set('client_reference_id', store);
         form.set('metadata[storeId]', store);
         form.set('metadata[item]', item);
-        if (note) form.set('metadata[note]', note);
         form.set('success_url', APP_URL + '?ordered=' + encodeURIComponent(item));
         form.set('cancel_url', APP_URL + '?ordered=cancel');
         try {
