@@ -98,9 +98,9 @@ Stores you add or edit are normally saved only on your own device. The **🤝 bu
 
 Contributions arrive as GitHub issues labelled `map-contribution`. Each issue lists the added/edited/removed stores in plain text plus a collapsible `json` block. To merge:
 
-- **`custom`** — copy each object into the `STORES` array in `index.html` (assign a stable `id`, fill in `hours`).
+- **`custom`** — copy each object into the `STORES` array in `stores.json` (assign a stable `id`, fill in `hours`).
 - **`overrides`** — fold each into the matching store's fields.
-- **`removed`** — a list of built-in store `id`s the contributor reports as non-existent/wrong; delete those entries from the `STORES` array.
+- **`removed`** — a list of built-in store `id`s the contributor reports as non-existent/wrong; delete those entries from `stores.json`.
 
 ## 📣 Store promotions (advertising)
 
