@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # GitHub Actions used across every workflow in .github/workflows/.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Telegram bot Worker (wrangler, etc.).
+  - package-ecosystem: "npm"
+    directory: "/telegram-bot"
+    schedule:
+      interval: "weekly"
+
+  # Android/Capacitor wrapper.
+  - package-ecosystem: "npm"
+    directory: "/native"
+    schedule:
+      interval: "weekly"

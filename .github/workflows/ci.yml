@@ -1,0 +1,40 @@
+name: CI
+
+# Runs the checks that used to only happen by hand before a merge: the
+# stores.json schema gate, a syntax check on index.html's inline script (it
+# has no build step, so nothing else parses it), and a syntax check on both
+# Cloudflare Workers. No dependencies to install — every check here is a
+# plain Node script.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate stores.json schema
+        run: node scripts/validate-stores.mjs
+
+      - name: Syntax-check index.html's inline script
+        run: node scripts/check-inline-js.mjs
+
+      - name: Syntax-check the metrics Worker
+        run: node --check worker/worker.js
+
+      - name: Syntax-check the Telegram bot Worker
+        run: node --check telegram-bot/worker.js
+
+      - name: Generate the bot's dataset (stores.json → stores.gen.js)
+        run: node build-data.mjs
+        working-directory: telegram-bot
