@@ -45,6 +45,9 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
 - 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` for stores restocking today, `/cheap` for the best by-weight deals
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
+- ⚡ **Flash deals** — a store can run a short paid sale (3h / 24h) with a live countdown banner and toast; follow a store on Telegram to hear the moment one goes live
+- ✏️ **Suggest a correction** — send a fix via Telegram; a moderator reviews it, or a trusted contributor's own edit publishes instantly
+- 🎉 **Day-0 filter** — see which stores have fresh stock today, with a suggested walking route between them
 - 📶 **Works offline** — installable PWA with on-device caching, no CDN dependency
 
 ## 🗺️ Map legend
@@ -84,6 +87,8 @@ Green → amber → red is one scale, not three categories: it is the same journ
 
 **Verified+ deliberately changes nothing here.** It buys a badge on the card, not a pin — which is what keeps the map honest and the two ad tiers worth their price.
 
+**🎉 Fresh Today filter.** Isolates every store currently at day 0 — green, just restocked, whether that comes from a recorded delivery date or a published restock-day schedule. On the map it also draws a suggested walking route: a nearest-neighbour line connecting the fresh stores (starting from "Near me" if that's set), with each pin numbered to match. Not a shortest-path solver, just a quick, deterministic suggestion for a handful of same-day stores.
+
 ## 🤝 Sharing & Contributing
 
 Stores you add or edit are normally saved only on your own device. The **🤝 button** (top-right) lets you share them:
@@ -98,9 +103,11 @@ Stores you add or edit are normally saved only on your own device. The **🤝 bu
 
 Contributions arrive as GitHub issues labelled `map-contribution`. Each issue lists the added/edited/removed stores in plain text plus a collapsible `json` block. To merge:
 
-- **`custom`** — copy each object into the `STORES` array in `stores.json` (assign a stable `id`, fill in `hours`).
+- **`custom`** — copy each object into `stores.json` (a plain JSON array; assign a stable `id`, fill in `hours`).
 - **`overrides`** — fold each into the matching store's fields.
 - **`removed`** — a list of built-in store `id`s the contributor reports as non-existent/wrong; delete those entries from `stores.json`.
+
+A single-store correction (a field-scout visit, a Telegram edit suggestion) doesn't go through a GitHub issue at all — see **🛠️ Automated map updates** below.
 
 ## 📣 Store promotions (advertising)
 
@@ -136,6 +143,71 @@ Purchases fulfil themselves: Stripe → signed webhook → D1 → the app's `/pr
 
 It all stays inert until `STRIPE_API_KEY` and `STRIPE_WEBHOOK_SECRET` exist — without them the buy button never appears.
 
+## ⚡ Flash deals
+
+A **short, paid sale window** — separate from the ongoing promotion tiers above, and priced and sold separately. Open a store → **⚡ Flash sale? Start one now** → pick a length and pay in ₴; the deal text itself is written on Stripe's own payment page, not in the app, so nobody unpaid can publish sale copy.
+
+| Length | Price |
+| --- | --- |
+| **3 hours** | ₴30 |
+| **24 hours** | ₴60 |
+| **24 hours + Telegram alert** | ₴120 |
+
+**Going live.** A store with a 4-digit PIN on file publishes instantly on payment. Without one (the default — there's no self-service way to set a PIN yet), the deal is held for a quick owner review and goes live once approved, usually within minutes.
+
+**Shoppers see it two ways**: a high-contrast banner with a live countdown on the store's own page, and a floating toast shown once per app load for any store with a deal currently running — both disappear on their own the moment the deal expires, nothing to clean up.
+
+**🔔 Follow a store's flash deals on Telegram** — tap the link on any store page to open [@Secondhandlvivbot](https://t.me/Secondhandlvivbot) and subscribe (`/stop` to unsubscribe from everything). This is separate from the restock-alert 🔔 above: it only ever fires for a paid "+ Telegram alert" deal, and it reaches you on Telegram directly, which works everywhere (no browser notification permission needed — the restock alerts need one, and iOS Safari in particular makes that a real hurdle).
+
+### For maintainers
+
+| Piece | Where |
+| --- | --- |
+| Tiers + checkout | `worker/worker.js` (`FLASH_DEAL_TIERS`, `GET /flash-deal`) |
+| Webhook → publish/queue | `applyFlashDealEvent()`, `GET /flash-deal/approve` |
+| Owner PIN (no UI yet — set directly) | D1 table `store_pins` |
+| Subscribers + broadcast | D1 table `store_subs`, `broadcastFlashDeal()`, bot `/start sub_<id>` · `/stop` |
+| Shopper-facing banner/toast | `index.html` (`activeFlashDeal()`, `tickFlashCountdowns()`) |
+
+Needs `GITHUB_PAT` (on both Workers — publishing a deal dispatches through the same pipeline as everything else below) and, for the owner-review path, the existing `ADMIN_KEY`. Both optional; the feature stays inert without them.
+
+## ✏️ Community edits & the leaderboard
+
+Anyone can propose a fix from inside the app — open a store → **Edit Store** → make the change → **📨 Submit for review via Telegram**. The app has no login, so the correction starts anonymous; it only gets a real identity the moment someone opens the Telegram link the app hands back, which is also the moment that decides what happens to it:
+
+- **A trusted contributor** (500+ points) claiming their own submission **publishes it immediately**.
+- **Everyone else's** goes to a moderator, who taps ✅ or ❌ on a Telegram message and can see exactly what's being proposed before deciding.
+
+Approved edits earn **10 points**. **`/leaderboard`** in the bot shows the top 10 contributors.
+
+**⏳ Early-bird perk.** When a store's flash-deal alert goes out (above), trusted contributors hear about it the instant it's live; everyone else following that store waits 15 minutes.
+
+### For maintainers
+
+| Piece | Where |
+| --- | --- |
+| Stash / claim / resolve | `worker/worker.js` (`POST /api/edit/stash` · `/claim` · `/resolve`) |
+| Points + leaderboard | D1 table `contributors`, `GET /api/leaderboard` |
+| Moderator ✅/❌ | Telegram bot `handleAgentCallback()`, gated to the owner + configured agent ids |
+| Early-bird delay | D1 table `pending_broadcasts`, swept by a `*/5 * * * *` cron |
+
+`MODERATOR_CHANNEL_ID` is optional — edit reviews land in the owner's own Telegram DMs if it's unset.
+
+## 🛠️ Automated map updates
+
+Every feature above that changes the map — a field-scout correction, a published flash deal, an approved community edit — goes through the same pipeline rather than editing `stores.json` directly:
+
+1. A signed **`repository_dispatch`** event carries a *targeted patch* (`{ store_id, updates }`), never the whole file, so two unrelated changes landing close together can't clobber each other.
+2. **`.github/workflows/update-map.yml`** applies it as a deep merge, runs it through a **schema gate** (valid JSON, required fields, coordinate ranges, no duplicate ids, ISO-formatted dates) that aborts the run on any violation, then commits straight to `main` — which *is* the deploy, since GitHub Pages serves this repo from `main` directly.
+
+`scripts/patch-store.js` is the reusable sender (also usable as a CLI: `node scripts/patch-store.js <store_id> '<json>'`) — both Workers call the same GitHub API endpoint it wraps. Needs a `GITHUB_PAT` (classic, `repo` scope) wherever it's called from; `repository_dispatch` can't be triggered with a workflow's own default token.
+
+## 🔍 Field-scout tool
+
+A faster alternative to the full `/visit` survey (see the handbook below) for a quick, structured correction while standing in a store: open `?store=<id>&agent_mode=true` from the map → **📨 Send to Telegram bot** → the bot walks through inventory cycle, restock weekday, and opening hours entirely via tappable buttons, no typing. Confirming dispatches straight through the pipeline above.
+
+Needs `BOUNTY_SECRET` (identical value on both Workers — one signs the short-lived link, the other verifies it) and `GITHUB_PAT` on the bot Worker.
+
 ## 💼 Business model
 
 The app is **free for shoppers and always will be**. It is funded by the shops it sends people to — not by advertising networks, and not by anything to do with who you are.
@@ -146,6 +218,7 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 | --- | --- |
 | **Store promotions** | Verified+ / Featured / Spotlight, monthly or annual — the recurring core |
 | **One-off runs** | 7 or 30 days, no subscription — for a sale week or a seasonal push |
+| **Flash deals** | 3 or 24 hours, ₴30–₴120 — a single sale-day push, sold separately from the tiers above |
 | **Extras** | Deal-of-the-week, poster placement, sponsored push — fulfilled by hand |
 
 **Costs**
@@ -172,6 +245,8 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 | `/cheap` | Best by-weight prices right now |
 | `/submit` | Submit your own store (for shop owners) |
 | `/materials` | Printable flyers, posters and QR stickers |
+| `/leaderboard` | Top 10 community contributors by points |
+| `/stop` | Unsubscribe from every store's flash-deal alerts |
 | `/help` | Command list and info |
 
 **Field agent & owner only** — these appear in the menu only for authorised Telegram IDs, and are refused for anyone else:
@@ -205,7 +280,9 @@ Surveying ~90 stores and keeping their restock schedules accurate is fieldwork, 
 
 ## 🔒 Privacy
 
-No accounts, no ad networks, no personal tracking. Local stores can pay for a clearly-labelled placement on the map, sold directly by us — there is no ad network involved and nothing about you is used to choose what you see. Everything you do stays in your own browser on your own device — it's never sent to a server, and nothing leaves your phone unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking. Full details: **[Privacy Policy](https://www.lvivsecondhand.com/privacy.html)** (also linked from the in-app **?** Help panel).
+No accounts, no ad networks, no personal tracking. Local stores can pay for a clearly-labelled placement on the map, sold directly by us — there is no ad network involved and nothing about you is used to choose what you see. Browsing, adding, and editing stores all stay in your own browser on your own device — none of it is ever sent to a server unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking.
+
+The exception is the **Telegram-based features** (flash-deal alerts, field-scout corrections, community edit suggestions) — these are opt-in and inherently involve Telegram: your chat id is stored so a subscription or a contribution has somewhere to go, alongside a display name and points total if you submit an edit. None of it is linked to your browsing on the map, and none of it is shared beyond what running the feature requires. Full details: **[Privacy Policy](https://www.lvivsecondhand.com/privacy.html)** (also linked from the in-app **?** Help panel) — *note: the policy document itself is still being updated to reflect this; treat this README as the more current source until it is.*
 
 ## 📊 Analytics & metrics (for maintainers)
 
@@ -224,7 +301,7 @@ Anonymous events (store opens, filter/tab/language switches, add/share/export/co
 | Client `track()` | `index.html` (`METRICS_URL`, fire-and-forget via `sendBeacon`) |
 | Collector Worker | `worker/worker.js` → `https://lviv-metrics.lshanalytic.workers.dev` |
 | Worker config | `worker/wrangler.toml` (binds the D1 database) |
-| Database | Cloudflare **D1** `lviv-metrics` — one `events` table (`ts, day, type, key, lang`) |
+| Database | Cloudflare **D1** `lviv-metrics` — the `events` table (`ts, day, type, key, lang`); the same database also holds promotions, flash deals, and the other tables described in their own sections above |
 | Auto-deploy | `.github/workflows/deploy-worker.yml` — redeploys the Worker on any `worker/**` change |
 
 - **Event shape:** `{ type, key, lang }` where `type` ∈ `store_open · filter · tab · lang · action`. The Worker validates against that enum and stores **no** IP, id, coordinates, or free text.
@@ -286,6 +363,9 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
 - 💬 **Телеграм-бот** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` — завезення сьогодні, `/cheap` — найкращі ціни на вагу
 - 📣 **Просування магазину** — власник може просувати свій магазин прямо із застосунку; кожне платне розміщення позначене
+- ⚡ **Спалах-знижки** — магазин може запустити короткий платний розпродаж (3 год / 24 год) з таймером зворотного відліку; стежте за магазином у Telegram, щоб дізнатися, щойно знижка стане активною
+- ✏️ **Запропонувати виправлення** — надішліть правку через Telegram; модератор перевірить її, або довірений редактор одразу опублікує свою
+- 🎉 **Фільтр «Свіжий сьогодні»** — побачте, які магазини мають свіжий товар сьогодні, з пропонованим маршрутом між ними
 - 📶 **Працює офлайн** — встановлюваний застосунок (PWA) із локальним кешуванням, без залежності від CDN
 
 ## 🗺️ Позначки на карті
@@ -325,6 +405,8 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **Verified+ навмисно нічого тут не змінює.** Він купує значок на картці, а не позначку на карті — саме це тримає карту чесною, а два рекламні тарифи — вартими своєї ціни.
 
+**Фільтр «🎉 Свіжий сьогодні».** Показує лише магазини, які зараз на дні 0 — щойно завезли, чи то за записаною датою поставки, чи за опублікованим графіком завезення. На карті цей фільтр також малює пропонований маршрут: лінію найближчого сусіда між свіжими магазинами (починаючи з «Поруч», якщо його встановлено), а кожна позначка отримує відповідний номер. Це не пошук найкоротшого шляху, а швидка й однозначна підказка для кількох магазинів, що завезли товар сьогодні.
+
 ## 🤝 Обмін і внесок
 
 Магазини, які ви додаєте чи редагуєте, зазвичай зберігаються лише на вашому пристрої. Кнопка **🤝** (праворуч зверху) дозволяє поділитися ними:
@@ -355,6 +437,44 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **Кожне платне розміщення позначене**, кількість реклами свідомо обмежена, і розміщення визначається тим, що купив магазин, — ніколи не тим, хто дивиться. Повний прайс і налаштування: **[`docs/ADVERTISING.md`](docs/ADVERTISING.md)** (англійською).
 
+## ⚡ Спалах-знижки
+
+**Короткий платний розпродаж** — окремо від постійних тарифів вище, з окремим ціноутворенням. Відкрийте магазин → **⚡ Спалах-знижка? Почати зараз** → оберіть тривалість і оплатіть у ₴; сам текст пропозиції пишеться на сторінці оплати Stripe, а не в застосунку, тож ніхто, хто не заплатив, не може опублікувати текст розпродажу.
+
+| Тривалість | Ціна |
+| --- | --- |
+| **3 години** | ₴30 |
+| **24 години** | ₴60 |
+| **24 години + сповіщення в Telegram** | ₴120 |
+
+**Публікація.** Магазин зі збереженим 4-значним PIN публікує знижку одразу після оплати. Без нього (за замовчуванням — сервісу самостійного встановлення PIN поки немає) знижка чекає на швидку перевірку власником і зʼявляється після підтвердження, зазвичай протягом кількох хвилин.
+
+**Покупці бачать це двома способами**: яскравий банер з таймером на сторінці магазину та плаваюче повідомлення, що показується раз на завантаження застосунку для будь-якого магазину з активною знижкою — обидва зникають самі, щойно знижка завершується.
+
+**🔔 Стежте за спалах-знижками магазину в Telegram** — натисніть посилання на сторінці будь-якого магазину, щоб відкрити [@Secondhandlvivbot](https://t.me/Secondhandlvivbot) і підписатися (`/stop`, щоб відписатися від усього). Це окремо від сповіщень про завезення 🔔 вище — тут повідомлення надходить лише для платної знижки «+ сповіщення в Telegram», і приходить прямо в Telegram, що працює всюди (дозвіл браузера на сповіщення не потрібен — на відміну від сповіщень про завезення, де він потрібен, а на iOS Safari це особливо відчутне обмеження).
+
+## ✏️ Спільнотні правки та рейтинг
+
+Будь-хто може запропонувати виправлення прямо із застосунку — відкрийте магазин → **Редагувати** → внесіть зміну → **📨 Надіслати на перевірку через Telegram**. У застосунку немає входу в акаунт, тож правка спершу анонімна; вона отримує справжню особу лише тоді, коли хтось відкриває надіслане застосунком посилання в Telegram — і саме ця мить визначає, що станеться далі:
+
+- **Довірений редактор** (500+ балів), який підтверджує власне подання, **публікує його одразу**.
+- **Усі інші** подання йдуть до модератора, який натискає ✅ або ❌ у повідомленні в Telegram, бачачи точно, що пропонується, перш ніж вирішити.
+
+Затверджені правки дають **10 балів**. **`/leaderboard`** у боті показує топ-10 учасників.
+
+**⏳ Бонус для перших.** Коли надсилається сповіщення про спалах-знижку магазину (вище), довірені редактори дізнаються про неї миттєво; усі інші, хто стежить за цим магазином, чекають 15 хвилин.
+
+## 🛠️ Автоматичне оновлення карти
+
+Кожна функція вище, що змінює карту — правка від польового агента, опублікована спалах-знижка, затверджена спільнотна правка — проходить через один і той самий конвеєр, а не редагує `stores.json` напряму:
+
+1. Підписана подія **`repository_dispatch`** несе *цільовий патч* (`{ store_id, updates }`), ніколи не весь файл, тож дві незалежні зміни, що надійшли майже одночасно, не затруть одна одну.
+2. **`.github/workflows/update-map.yml`** застосовує його як глибоке злиття, пропускає через **перевірку схеми** (коректний JSON, обов'язкові поля, діапазони координат, відсутність дублікатів id, дати у форматі ISO), яка зупиняє процес при будь-якому порушенні, а потім комітить прямо в `main` — що і є публікацією, оскільки GitHub Pages обслуговує цей репозиторій прямо з `main`.
+
+## 🔍 Інструмент польового агента
+
+Швидша альтернатива повній анкеті `/visit` (див. довідник нижче) для швидкого структурованого виправлення просто в магазині: відкрийте `?store=<id>&agent_mode=true` з карти → **📨 Надіслати в Telegram-бота** → бот проведе через цикл поставок, день завезення та години роботи повністю кнопками, без набору тексту. Підтвердження надсилає зміни через той самий конвеєр вище.
+
 ## 💼 Бізнес-модель
 
 Застосунок **безкоштовний для покупців і залишиться таким**. Його фінансують магазини, до яких він приводить людей, — а не рекламні мережі й нічого, повʼязане з тим, хто ви є.
@@ -365,6 +485,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | --- | --- |
 | **Просування магазинів** | Verified+ / Featured / Spotlight, щомісяця або щороку — постійна основа |
 | **Разові розміщення** | 7 або 30 днів, без підписки — на тиждень розпродажу чи сезонний поштовх |
+| **Спалах-знижки** | 3 або 24 години, ₴30–₴120 — поштовх на один день розпродажу, продається окремо від тарифів вище |
 | **Додаткові послуги** | Знижка тижня, розміщення постера, push-розсилка — виконуємо вручну |
 
 **Витрати**
@@ -391,6 +512,8 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | `/cheap` | Найкращі ціни на вагу зараз |
 | `/submit` | Додати свій магазин (для власників) |
 | `/materials` | Матеріали для друку: флаєри, постери, QR-наліпки |
+| `/leaderboard` | Топ-10 учасників спільноти за балами |
+| `/stop` | Відписатися від усіх сповіщень про спалах-знижки |
 | `/help` | Команди та інформація |
 
 **Лише для агента та власника** — зʼявляються в меню тільки для дозволених Telegram ID, іншим відмовлено:
@@ -424,4 +547,6 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 ## 🔒 Конфіденційність
 
-Без облікових записів, рекламних мереж і персонального стеження. Місцеві магазини можуть оплатити чітко позначене розміщення на карті — його продаємо безпосередньо ми, без рекламних мереж, і для вибору того, що ви бачите, не використовується жодна інформація про вас. Усе, що ви робите, залишається у вашому браузері на вашому пристрої — воно ніколи не надсилається на сервер і не залишає ваш телефон, доки ви самі не вирішите поділитися. Єдине, що вимірюється, — це анонімний, узагальнений трафік (перегляди та відвідування) через **Cloudflare Web Analytics** та анонімне використання додатка (які магазини/фільтри застосовують) через невеликий власний сервіс на Cloudflare — обидва без файлів cookie, без персональних даних і без відстеження окремих відвідувачів чи міжсайтового стеження. Докладніше: **[Політика конфіденційності](https://www.lvivsecondhand.com/privacy.html)** (також доступна з панелі довідки **?** у застосунку).
+Без облікових записів, рекламних мереж і персонального стеження. Місцеві магазини можуть оплатити чітко позначене розміщення на карті — його продаємо безпосередньо ми, без рекламних мереж, і для вибору того, що ви бачите, не використовується жодна інформація про вас. Перегляд карти, додавання й редагування магазинів залишаються у вашому браузері на вашому пристрої — нічого з цього не надсилається на сервер, доки ви самі не вирішите поділитися. Єдине, що вимірюється, — це анонімний, узагальнений трафік (перегляди та відвідування) через **Cloudflare Web Analytics** та анонімне використання додатка (які магазини/фільтри застосовують) через невеликий власний сервіс на Cloudflare — обидва без файлів cookie, без персональних даних і без відстеження окремих відвідувачів чи міжсайтового стеження.
+
+Виняток — **функції на основі Telegram** (сповіщення про спалах-знижки, правки польового агента, спільнотні пропозиції змін): вони добровільні (opt-in) і за своєю суттю повʼязані з Telegram — ваш chat id зберігається, щоб було куди надсилати підписку чи внесок, а також імʼя для показу й кількість балів, якщо ви пропонуєте правку. Ніщо з цього не повʼязується з вашою активністю на карті й не передається понад те, що потрібно для роботи функції. Докладніше: **[Політика конфіденційності](https://www.lvivsecondhand.com/privacy.html)** (також доступна з панелі довідки **?** у застосунку) — *примітка: сам документ політики ще оновлюється відповідно до цього; до того часу вважайте цей README актуальнішим джерелом.*
