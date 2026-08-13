@@ -17,10 +17,14 @@ type = "ratelimit"
 namespace_id = "1001"
 simple = { limit = 120, period = 60 }
 
-# Daily restock-notification cron: 07:00 UTC (~09:00–10:00 Kyiv). The handler
-# figures out which stores restock "today" (Europe/Kyiv) and pushes to followers.
+# Two crons share scheduled() in worker.js (branches on event.cron):
+#   0 7 * * *  — daily restock-notification: 07:00 UTC (~09:00–10:00 Kyiv).
+#                Figures out which stores restock "today" (Europe/Kyiv) and
+#                pushes to followers.
+#   */5 * * * * — early-bird flash-deal broadcast sweep (Feature 6): sends any
+#                pending_broadcasts row whose 15-minute delay has elapsed.
 [triggers]
-crons = ["0 7 * * *"]
+crons = ["0 7 * * *", "*/5 * * * *"]
 
 # Public VAPID key (safe to publish; matches VAPID_PUBLIC_KEY in index.html).
 # The private key is set separately as the VAPID_PRIVATE secret — NEVER commit it.
@@ -30,6 +34,11 @@ VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYM
 # Not a secret (it is just a chat id, same value as telegram-bot/wrangler.toml).
 # The notification stays off until the BOT_TOKEN secret is also set — see below.
 OWNER_ID = "1212541015"
+# Optional: a separate group/channel chat id for edit-suggestion moderation
+# (Feature 6, POST /api/edit/stash → claim → the moderator's ✅/❌). Falls
+# back to OWNER_ID above when unset — set this only if you want edit review
+# to go somewhere other than the owner's own DMs.
+# MODERATOR_CHANNEL_ID = "-100..."
 
 # ── Paid promotions (Stripe self-fulfilment) — optional, off until configured ──
 # GET /promos serves the live promo set with no secret. Selling + auto-fulfil

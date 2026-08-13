@@ -84,6 +84,23 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS store_subs (store_id TEXT NOT NULL, chat_id TEXT NOT NULL, created TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (store_id, chat_id))"
   ).run();
+  // Crowdsourced moderation (Feature 6). A web-submitted correction sits as a
+  // 'draft' (no contributor identity yet — the web app has no login) until
+  // claimed by whoever opens the Telegram deep link, which is the first
+  // moment a real chat id exists for it.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS pending_edits (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, updates TEXT NOT NULL, contributor_chat_id TEXT, status TEXT NOT NULL DEFAULT 'draft', created TEXT NOT NULL DEFAULT (datetime('now')))"
+  ).run();
+  // Points earned by approved edits. >= TRUSTED_POINTS bypasses moderation.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS contributors (chat_id TEXT PRIMARY KEY, name TEXT, points INTEGER NOT NULL DEFAULT 0)"
+  ).run();
+  // Early-bird broadcast delay (Feature 6): a flash-deal alert queued here
+  // for a non-trusted subscriber, sent by the */5 cron once send_at passes.
+  // Trusted subscribers skip this table entirely — see broadcastFlashDeal().
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS pending_broadcasts (id TEXT PRIMARY KEY, chat_id TEXT NOT NULL, text TEXT NOT NULL, send_at TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0)"
+  ).run();
   _schemaReady = true;
 }
 
@@ -473,7 +490,92 @@ async function broadcastFlashDeal(env, ctx, storeId, text, expiresAt) {
   if (!rows.length) return;
   const hoursLeft = Math.max(1, Math.round((new Date(expiresAt) - Date.now()) / 3600000));
   const msg = `⚡ Спалах-знижка: ${text}\nЗникає приблизно через ${hoursLeft} год. · Flash deal: ${text} — ends in about ${hoursLeft}h\n\n${storeLink(storeId)}`;
-  const p = Promise.all(rows.map((r) => tgSend(env, r.chat_id, msg)));
+  // Early-bird perk (Feature 6): a trusted contributor (>= TRUSTED_POINTS)
+  // hears about it the moment it's live; everyone else waits EARLY_BIRD_DELAY_MIN.
+  const trusted = [], standard = [];
+  for (const r of rows) {
+    const c = await env.DB.prepare('SELECT points FROM contributors WHERE chat_id = ?').bind(r.chat_id).first();
+    (c && c.points >= TRUSTED_POINTS ? trusted : standard).push(r.chat_id);
+  }
+  const tasks = [Promise.all(trusted.map((id) => tgSend(env, id, msg)))];
+  if (standard.length) {
+    const sendAt = new Date(Date.now() + EARLY_BIRD_DELAY_MIN * 60000).toISOString();
+    tasks.push(Promise.all(standard.map((id) =>
+      env.DB.prepare('INSERT INTO pending_broadcasts (id, chat_id, text, send_at) VALUES (?, ?, ?, ?)')
+        .bind(crypto.randomUUID(), id, msg, sendAt).run()
+    )));
+  }
+  const p = Promise.all(tasks);
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p); else await p;
+}
+
+// Sweeps due pending_broadcasts — called every 5 minutes (see scheduled()
+// below and worker/wrangler.toml's crons). Capped per run so one sweep can't
+// run away; anything left over is picked up by the next one.
+async function sweepPendingBroadcasts(env) {
+  if (!env.BOT_TOKEN) return;
+  await ensureSchema(env);
+  const now = new Date().toISOString();
+  const res = await env.DB.prepare('SELECT id, chat_id, text FROM pending_broadcasts WHERE sent = 0 AND send_at <= ? LIMIT 300').bind(now).all();
+  const rows = (res && res.results) || [];
+  for (const r of rows) {
+    await tgSend(env, r.chat_id, r.text);
+    await env.DB.prepare('UPDATE pending_broadcasts SET sent = 1 WHERE id = ?').bind(r.id).run();
+  }
+}
+
+// ── Crowdsourced moderation (Feature 6) ──────────────────────────────────────
+// "✏️ Suggest changes" on the app submits a correction anonymously (the app
+// has no login) as a 'draft' pending_edits row — POST /api/edit/stash. It
+// only becomes attributable to a real Telegram identity once someone opens
+// the deep link the app hands them (POST /api/edit/claim, called by the bot):
+// a trusted contributor's own claim auto-publishes it on the spot; anyone
+// else's sends it to the moderator channel for a human "✅/❌" tap
+// (POST /api/edit/resolve, ADMIN_KEY-gated — same trust boundary as
+// /flash-deal/approve).
+const TRUSTED_POINTS = 500;
+const EDIT_POINTS = 10;
+const EARLY_BIRD_DELAY_MIN = 15;
+const UPDATES_MAX_JSON = 4000; // bytes — generous for a store's editable fields
+
+async function awardPoints(env, chatId, name, points) {
+  if (name) {
+    await env.DB.prepare(
+      'INSERT INTO contributors (chat_id, name, points) VALUES (?, ?, ?) ' +
+      'ON CONFLICT(chat_id) DO UPDATE SET points = points + excluded.points, name = excluded.name'
+    ).bind(chatId, name, points).run();
+  } else {
+    await env.DB.prepare(
+      'INSERT INTO contributors (chat_id, points) VALUES (?, ?) ON CONFLICT(chat_id) DO UPDATE SET points = points + excluded.points'
+    ).bind(chatId, points).run();
+  }
+}
+
+// Posts the edit to the moderator channel (MODERATOR_CHANNEL_ID) — or, if
+// that isn't set, to OWNER_ID, same fallback every other notification here
+// uses. The inline Approve/Reject buttons are handled by the bot Worker's
+// callback_query webhook (whichever service sends a message, Telegram always
+// delivers the resulting tap to whoever's webhook is registered).
+async function sendModeratorMessage(env, ctx, id, storeId, updates, contributorLabel) {
+  if (!env.BOT_TOKEN) return;
+  const chatId = env.MODERATOR_CHANNEL_ID || env.OWNER_ID;
+  if (!chatId) return;
+  const summary = Object.entries(updates)
+    .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n');
+  const text = `✏️ NEW EDIT SUGGESTION\n\nStore: ${storeId}\nBy: ${contributorLabel}\n\n${summary}\n\n${storeLink(storeId)}`;
+  const p = fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text, // no parse_mode: the summary embeds contributor-controlled text
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [[
+        { text: '✅ Затвердити', callback_data: `editapprove:${id}` },
+        { text: '❌ Відхилити', callback_data: `editreject:${id}` },
+      ]] },
+    }),
+  }).catch(() => {});
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p); else await p;
 }
 
@@ -591,6 +693,15 @@ export default {
           }
           return json(out, 200, origin);
         } catch { return json({}, 200, origin); }
+      }
+      // Top contributors by points — the bot's /leaderboard command reads this.
+      // Public and read-only: a chat id + points + display name is not sensitive.
+      if (url.pathname === '/api/leaderboard') {
+        try {
+          await ensureSchema(env);
+          const res = await env.DB.prepare('SELECT chat_id, name, points FROM contributors WHERE points > 0 ORDER BY points DESC LIMIT 10').all();
+          return json((res && res.results) || [], 200, origin);
+        } catch { return json([], 200, origin); }
       }
       // Store-bound Stripe Checkout: /promote?store=<id>&tier=<t>&cadence=<c>.
       // Redirects to a hosted checkout carrying the store id so the webhook can
@@ -908,6 +1019,84 @@ export default {
       return new Response(null, { status: 204, headers: cors(origin) });
     }
 
+    // ── Crowdsourced moderation (Feature 6) ──
+    // Step 1: the app stashes a correction with no identity attached yet.
+    if (url.pathname === '/api/edit/stash') {
+      const storeId = body && body.storeId;
+      const updates = body && body.updates;
+      if (!/^[a-z0-9]{1,12}$/i.test(String(storeId || ''))
+          || !updates || typeof updates !== 'object' || Array.isArray(updates) || 'id' in updates) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      const payloadJson = JSON.stringify(updates);
+      if (payloadJson.length > UPDATES_MAX_JSON) return new Response('too large', { status: 413, headers: cors(origin) });
+      await ensureSchema(env);
+      const id = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+      await env.DB.prepare("INSERT INTO pending_edits (id, store_id, updates, status, created) VALUES (?, ?, ?, 'draft', datetime('now'))")
+        .bind(id, storeId, payloadJson).run();
+      return json({ id }, 200, origin);
+    }
+    // Step 2: whoever opens the Telegram deep link claims it — called by the
+    // bot Worker, not the browser, so this is where a real chat id first
+    // exists for the edit. A trusted contributor's own claim auto-publishes.
+    if (url.pathname === '/api/edit/claim') {
+      const id = body && body.id;
+      const chatId = body && body.chatId;
+      const name = clean(body && body.name, 60) || null;
+      if (typeof id !== 'string' || (typeof chatId !== 'string' && typeof chatId !== 'number')) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      await ensureSchema(env);
+      const row = await env.DB.prepare('SELECT * FROM pending_edits WHERE id = ?').bind(id).first();
+      if (!row) return json({ ok: false, reason: 'not_found' }, 404, origin);
+      if (row.status !== 'draft') return json({ ok: false, reason: 'already_' + row.status }, 200, origin);
+      const chatIdStr = String(chatId);
+      let updates; try { updates = JSON.parse(row.updates); } catch { updates = null; }
+      if (!updates) return json({ ok: false, reason: 'corrupt' }, 500, origin);
+      const contributor = await env.DB.prepare('SELECT points FROM contributors WHERE chat_id = ?').bind(chatIdStr).first();
+      const trusted = !!(contributor && contributor.points >= TRUSTED_POINTS);
+      if (trusted) {
+        try {
+          await dispatchMapPatch(env, row.store_id, updates);
+        } catch (e) {
+          return json({ ok: false, reason: 'dispatch_failed' }, 502, origin);
+        }
+        await env.DB.prepare("UPDATE pending_edits SET status = 'auto', contributor_chat_id = ? WHERE id = ?").bind(chatIdStr, id).run();
+        await awardPoints(env, chatIdStr, name, EDIT_POINTS);
+        return json({ status: 'auto', storeId: row.store_id }, 200, origin);
+      }
+      await env.DB.prepare("UPDATE pending_edits SET status = 'pending', contributor_chat_id = ? WHERE id = ?").bind(chatIdStr, id).run();
+      await sendModeratorMessage(env, ctx, id, row.store_id, updates, name || chatIdStr);
+      return json({ status: 'pending', storeId: row.store_id }, 200, origin);
+    }
+    // Step 3: a moderator taps ✅/❌ in Telegram — the bot Worker relays it
+    // here (it holds no D1 itself). Same ADMIN_KEY gate as /flash-deal/approve.
+    if (url.pathname === '/api/edit/resolve') {
+      const id = body && body.id;
+      const action = body && body.action;
+      if (!env.ADMIN_KEY || (body && body.key) !== env.ADMIN_KEY) return json({ ok: false }, 401, origin);
+      if (typeof id !== 'string' || (action !== 'approve' && action !== 'reject')) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      await ensureSchema(env);
+      const row = await env.DB.prepare('SELECT * FROM pending_edits WHERE id = ?').bind(id).first();
+      if (!row || row.status !== 'pending') return json({ ok: false, reason: 'not_pending' }, 200, origin);
+      if (action === 'reject') {
+        await env.DB.prepare("UPDATE pending_edits SET status = 'rejected' WHERE id = ?").bind(id).run();
+        return json({ ok: true, action, storeId: row.store_id }, 200, origin);
+      }
+      let updates; try { updates = JSON.parse(row.updates); } catch { updates = null; }
+      if (!updates) return json({ ok: false, reason: 'corrupt' }, 500, origin);
+      try {
+        await dispatchMapPatch(env, row.store_id, updates);
+      } catch (e) {
+        return json({ ok: false, reason: 'dispatch_failed' }, 502, origin);
+      }
+      await env.DB.prepare("UPDATE pending_edits SET status = 'approved' WHERE id = ?").bind(id).run();
+      if (row.contributor_chat_id) await awardPoints(env, row.contributor_chat_id, null, EDIT_POINTS);
+      return json({ ok: true, action, storeId: row.store_id }, 200, origin);
+    }
+
     // ── Push subscription management ──
     if (url.pathname === '/subscribe') {
       const sub = body && body.subscription;
@@ -992,6 +1181,10 @@ export default {
 
   // ── Daily cron: notify followers whose next predicted restock date has arrived ──
   async scheduled(event, env, ctx) {
+    // Two crons share this handler (see worker/wrangler.toml): the daily
+    // restock push (below, unchanged) and a 5-minute sweep for early-bird
+    // flash-deal broadcasts (Feature 6) that are now due.
+    if (event.cron === '*/5 * * * *') { await sweepPendingBroadcasts(env); return; }
     const today = kyivDateStr(); // 'YYYY-MM-DD' (Europe/Kyiv)
     await ensureSchema(env);
     const res = await env.DB.prepare('SELECT endpoint, p256dh, auth, stores FROM push_subs').all();

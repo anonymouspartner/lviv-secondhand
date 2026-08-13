@@ -54,3 +54,14 @@ RATE_BONUS = "200" # ₴ per bonus event (poster placed / owner contact + consen
 #   GITHUB_PAT    — classic PAT with the `repo` scope, used to dispatch the
 #                  confirmed patch to .github/workflows/update-map.yml:
 #                    printf '%s' "<pat>" | npx wrangler@3 secret put GITHUB_PAT
+#
+# ── Crowdsourced moderation (opt-in) ────────────────────────────────────────
+# Adds /start edit_<id> (claims a web-submitted correction — see
+# POST /api/edit/stash in worker/worker.js), the ✅/❌ moderator buttons
+# (isOwner/isAgent only, from OWNER_ID/AGENT_IDS above), and /leaderboard.
+# Needs one more secret, on top of BOT_TOKEN + VISITS:
+#   ADMIN_KEY — MUST be the exact same value as the metrics Worker's
+#              ADMIN_KEY (already used there by /admin/test and
+#              /flash-deal/approve) — this Worker calls POST /api/edit/resolve
+#              with it when a moderator taps ✅/❌:
+#                printf '%s' "<same value as the metrics Worker's ADMIN_KEY>" | npx wrangler@3 secret put ADMIN_KEY

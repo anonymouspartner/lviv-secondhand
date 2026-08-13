@@ -95,3 +95,15 @@ jobs:
         run: |
           if [ -z "$GITHUB_PAT" ]; then echo "GITHUB_PAT not set — skipping (field-scout flow can't dispatch patches until you add it)"; exit 0; fi
           printf '%s' "$GITHUB_PAT" | npx wrangler secret put GITHUB_PAT
+
+      # Crowdsourced moderation (Feature 6) — MUST match the metrics Worker's
+      # ADMIN_KEY exactly (already used there by /admin/test, /flash-deal/approve).
+      - name: Set ADMIN_KEY on the worker
+        working-directory: telegram-bot
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          if [ -z "$ADMIN_KEY" ]; then echo "ADMIN_KEY not set — skipping (moderator approve/reject buttons stay off until you add it)"; exit 0; fi
+          printf '%s' "$ADMIN_KEY" | npx wrangler secret put ADMIN_KEY

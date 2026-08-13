@@ -14,6 +14,14 @@
 //                          this Worker has no D1 binding of its own)
 //   /stop                — unsubscribe from every store's flash-deal alerts
 //
+// Crowdsourced moderation (active, needs BOT_TOKEN):
+//   /start edit_<id> — claims a web-submitted correction with this chat's
+//                      real identity (POST /api/edit/stash → claim on the
+//                      metrics Worker); a trusted contributor's own claim
+//                      auto-publishes, anyone else's goes to moderation
+//   /leaderboard     — top contributors by points
+//   ✅/❌ buttons on a moderator-channel edit message — isOwner/isAgent only
+//
 // Field-agent commands (stateful — require BOT_TOKEN + the VISITS KV binding):
 //   /visit        — guided store-survey flow (store → GPS → photo → questionnaire)
 //   /myvisits     — an agent's own running visit count
@@ -376,6 +384,54 @@ async function handleStopCommand(env, ctx) {
   return true;
 }
 
+// `/start edit_{id}` — claims a web-submitted correction (see
+// /api/edit/stash) with this chat's real identity, the first moment one
+// exists for it. A trusted contributor's own claim auto-publishes; anyone
+// else's goes to the moderator channel. Only needs BOT_TOKEN.
+async function handleEditStart(env, ctx) {
+  if (!env.BOT_TOKEN) return false;
+  const { chatId, from, text } = ctx;
+  const m = /^\/start\s+edit_(\S+)/.exec(String(text || '').trim());
+  if (!m) return false;
+  const name = (from && (from.first_name || from.username)) || null;
+  let out = {};
+  try {
+    const res = await fetch(`${METRICS_WORKER_URL}/api/edit/claim`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: m[1], chatId, name }),
+    });
+    out = await res.json().catch(() => ({}));
+  } catch (e) {}
+  if (out.status === 'auto') {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: `✅ Дякуємо! Вашу пропозицію одразу опубліковано (довірений редактор). +${EDIT_POINTS_LABEL} балів.\n\n✅ Thanks — published immediately (trusted editor). +${EDIT_POINTS_LABEL} points.` });
+  } else if (out.status === 'pending') {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: '📨 Дякуємо! Пропозицію надіслано на перевірку модератору.\n\n📨 Thanks — sent to a moderator for review.' });
+  } else {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Це посилання застаріле, недійсне або вже опрацьоване. · This link is expired, invalid, or already handled.' });
+  }
+  return true;
+}
+const EDIT_POINTS_LABEL = 10; // must match EDIT_POINTS in worker/worker.js — display only
+
+// /leaderboard — top contributors by points.
+async function handleLeaderboardCommand(env, ctx) {
+  if (!env.BOT_TOKEN) return false;
+  const { chatId, text } = ctx;
+  if (!/^\/leaderboard\b/i.test(String(text || '').trim())) return false;
+  let rows = [];
+  try {
+    const res = await fetch(`${METRICS_WORKER_URL}/api/leaderboard`);
+    rows = await res.json().catch(() => []);
+  } catch (e) {}
+  if (!Array.isArray(rows) || !rows.length) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: '🏆 Поки що немає учасників. · No contributors yet.' });
+    return true;
+  }
+  const lines = rows.map((r, i) => `${i + 1}. ${esc(r.name || r.chat_id)} — ${r.points} pts`);
+  await tg(env, 'sendMessage', { chat_id: chatId, text: `🏆 <b>Leaderboard</b>\n\n${lines.join('\n')}`, parse_mode: 'HTML' });
+  return true;
+}
+
 // `/start bounty_{token}` — the deep-link entry point. Returns true if it
 // consumed the update (whether or not the token was valid).
 async function handleBountyStart(env, c, ctx) {
@@ -456,6 +512,39 @@ async function handleAgentCallback(env, c, cq) {
   const i = data.indexOf(':');
   const kind = i === -1 ? data : data.slice(0, i);
   const val = i === -1 ? '' : data.slice(i + 1);
+
+  // Moderator tapping ✅/❌ on an edit-suggestion message (Feature 6). Gated
+  // on isOwner/isAgent — defense in depth in case the moderator channel is
+  // ever forwarded or shared beyond its intended audience. No parse_mode on
+  // the edit below: the original message embeds contributor-supplied text
+  // (see sendModeratorMessage in worker/worker.js, sent the same way for the
+  // same reason), so re-sending it through an HTML-mode edit would let that
+  // text be interpreted as markup instead of shown as plain text.
+  const editPlain = (text) => tg(env, 'editMessageText', { chat_id: chatId, message_id, text });
+  if (kind === 'editapprove' || kind === 'editreject') {
+    const isOwner = c.ownerId && String(uid) === c.ownerId;
+    const isAgent = c.agentIds.includes(String(uid));
+    const original = cq.message.text || '';
+    if (!isOwner && !isAgent) { await editPlain(original + '\n\n⛔ Not authorized.'); return; }
+    if (!env.ADMIN_KEY) { await editPlain(original + '\n\n⚠️ ADMIN_KEY not set on the metrics Worker.'); return; }
+    const action = kind === 'editapprove' ? 'approve' : 'reject';
+    try {
+      const res = await fetch(`${METRICS_WORKER_URL}/api/edit/resolve`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: val, action, key: env.ADMIN_KEY }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (out.ok) {
+        await editPlain(original + (action === 'approve' ? '\n\n✅ Approved — dispatched to the map.' : '\n\n❌ Rejected.'));
+      } else {
+        await editPlain(original + `\n\n⚠️ ${out.reason || 'Failed'}.`);
+      }
+    } catch (e) {
+      await editPlain(original + '\n\n⚠️ Could not reach the metrics Worker.');
+    }
+    return;
+  }
+
   const session = await getBountySession(env, uid);
   if (!session) { await edit('Сесія застаріла. Спробуйте ще раз з карти. · Session expired — try again from the map.'); return; }
   const title = `📦 <b>${esc(session.storeName)}</b>\n\n`;
@@ -969,6 +1058,12 @@ export default {
     try {
       if (await handleFlashSubStart(env, ctx)) return ok();
       if (await handleStopCommand(env, ctx)) return ok();
+    } catch (e) {}
+
+    // Crowdsourced moderation (Feature 6). Only needs BOT_TOKEN.
+    try {
+      if (await handleEditStart(env, ctx)) return ok();
+      if (await handleLeaderboardCommand(env, ctx)) return ok();
     } catch (e) {}
 
     // Field-agent subsystems (stateful). Only when BOT_TOKEN + VISITS are set.
