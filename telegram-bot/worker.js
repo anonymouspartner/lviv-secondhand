@@ -241,7 +241,10 @@ const NEAR_METERS = 250; // GPS this close to the picked store's pin = "on site"
 // labels). Keep in sync with docs/FIELD_AGENT.md.
 const QUESTIONS = [
   { key: 'pricing', q: '3️⃣ Тип цін? · Pricing type?', kb: [['⚖️ Вага / By weight', '🏷️ Штука / Itemized'], ['🔀 Обидва / Both', '❓ Не знаю / Unknown']] },
-  { key: 'restock', q: '4️⃣ День завезення (для ваги)? · Restock day (by-weight)?', kb: [['Пн/Mon', 'Вт/Tue', 'Ср/Wed'], ['Чт/Thu', 'Пт/Fri', 'Сб/Sat'], ['Нд/Sun', '— Немає/None', '❓ Unknown']], onlyWeight: true },
+  // A concrete date beats a weekday: the app's tracker works off restock_date
+  // for ANY cycle length, whereas a weekday only pins down a 7-day cycle — so
+  // this is asked at every store, not just the by-weight ones.
+  { key: 'lastdel', q: '4️⃣ Коли був останній завіз? · When was the last delivery?\n(або дата: 13.08) · (or a date)', kb: [['Сьогодні / Today', 'Вчора / Yesterday'], ['❓ Не знаю / Unknown']] },
   { key: 'hours', q: '5️⃣ Години роботи? (напр. 10:00–20:00, або «зачинено») · Opening hours?', kb: null },
   { key: 'size', q: '6️⃣ Розмір магазину? · Store size?', kb: [['🟢 S малий/small', '🟡 M середній/medium', '🔴 L великий/large']] },
   { key: 'poster', q: '7️⃣ QR-плакат розміщено? · QR poster placed?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
@@ -509,6 +512,38 @@ async function handleAgentCallback(env, c, cq) {
     return;
   }
 
+  // Owner tapped ✅/❌ on a visit push — the one-tap path from a field survey
+  // onto the live map, using the same dispatch the bounty flow uses.
+  if (data === 'vskip') {
+    await tg(env, 'editMessageReplyMarkup', { chat_id: chatId, message_id, reply_markup: { inline_keyboard: [] } });
+    await tg(env, 'sendMessage', { chat_id: chatId, text: '❌ Пропущено — на карту нічого не пішло. · Skipped, nothing published.' });
+    return;
+  }
+  if (data.startsWith('vpub:')) {
+    if (!c.ownerId || String(uid) !== c.ownerId) return;   // owner-only
+    const key = 'visit:' + data.slice(5);
+    let rec = null;
+    try { rec = await env.VISITS.get(key, { type: 'json' }); } catch (e) {}
+    if (!rec || !rec.store || !rec.store.id) {
+      await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Запис візиту не знайдено. · Visit record not found.' });
+      return;
+    }
+    const updates = visitToUpdates(rec);
+    if (!Object.keys(updates).length) {
+      await tg(env, 'sendMessage', { chat_id: chatId, text: 'ℹ️ У цьому візиті немає даних для карти. · Nothing in this visit maps to a store field.' });
+      return;
+    }
+    try {
+      await dispatchMapPatch(env, rec.store.id, updates);
+      await tg(env, 'editMessageReplyMarkup', { chat_id: chatId, message_id, reply_markup: { inline_keyboard: [] } });
+      await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML',
+        text: `✅ Надіслано на карту · Published to the map — <b>${esc(rec.store.name)}</b>\n<code>${esc(JSON.stringify(updates))}</code>` });
+    } catch (e) {
+      await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Не вдалося надіслати — перевірте GH_PAT і лог update-map. · Dispatch failed — check GH_PAT and the map-update workflow logs.' });
+    }
+    return;
+  }
+
   const i = data.indexOf(':');
   const kind = i === -1 ? data : data.slice(0, i);
   const val = i === -1 ? '' : data.slice(i + 1);
@@ -601,7 +636,7 @@ async function handleAgentCallback(env, c, cq) {
 // extended per-chat menu that also lists /visit — so only they see it in the menu
 // (it's already functionally gated regardless). Bump CMD_VER to force a re-sync
 // after editing the lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v3';
+const CMD_VER = 'v4';
 const PUBLIC_CMDS = [
   { command: 'today', description: 'Магазини із завезенням сьогодні' },
   { command: 'cheap', description: 'Найкращі ціни на вагу зараз' },
@@ -619,6 +654,7 @@ async function syncBotCommands(env, userId, isOwner, isAgent) {
   if (!(isOwner || isAgent)) return;
   if ((await env.VISITS.get('cmds:' + userId)) === CMD_VER) return;
   const cmds = PUBLIC_CMDS.concat([
+    { command: 'route', description: '🧭 Маршрут по найближчих магазинах' },
     { command: 'visit', description: '📝 Записати візит у магазин' },
     { command: 'myvisits', description: 'Мої візити' },
     { command: 'pay', description: '💰 Схема оплати' },
@@ -653,6 +689,82 @@ function distM(a, b) {
   return Math.round(2 * R * Math.asin(Math.sqrt(s)));
 }
 
+// Nearest `n` stores to a point, closest first. The agent is standing at the
+// shop, so proximity identifies it far more reliably than typing a Cyrillic
+// name into a phone — and half the map is called some variant of "Second hand".
+function nearestStores(from, n) {
+  return STORES
+    .filter((s) => !s.watermark && typeof s.lat === 'number' && typeof s.lng === 'number')
+    .map((s) => ({ s, d: distM(from, s) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, n);
+}
+
+// Greedy nearest-neighbour walking order — deliberately the same algorithm as
+// the app's Day-0 route (nearestNeighborOrder in index.html), so a route from
+// the bot and a route on the map agree. Not a shortest-path solver; with a
+// dozen stops greedy is close enough and instant.
+function walkOrder(stores, from) {
+  const remaining = stores.slice();
+  const order = [];
+  let cur = from;
+  while (remaining.length) {
+    let idx = 0, best = Infinity;
+    remaining.forEach((s, i) => { const d = distM(cur, s); if (d < best) { best = d; idx = i; } });
+    const [next] = remaining.splice(idx, 1);
+    order.push(next);
+    cur = next;
+  }
+  return order;
+}
+
+const fmtDist = (m) => (m < 1000 ? `${m} м` : `${(m / 1000).toFixed(1)} км`);
+
+// "9.00-19.00" -> "09:00–19:00". The app only recognises colon-separated HH:MM
+// (isOpenNow), so hours captured with a period would silently make the store
+// read as closed all day. Mirrors normalizeHourStr() in index.html.
+function normalizeHours(v) {
+  const s = String(v || '').trim();
+  if (!s) return '';
+  if (/^зач|^close/i.test(s)) return 'closed';
+  return s
+    .replace(/\s*[-–—]\s*/, '–')
+    .replace(/(\d{1,2})\.(\d{2})/g, (m, h, mm) => h.padStart(2, '0') + ':' + mm)
+    .slice(0, 40);
+}
+
+const isoDay = (offsetDays) => {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + (offsetDays || 0));
+  return d.toISOString().slice(0, 10);
+};
+// Free-typed "13.08" / "13.08.2026" / "2026-08-13" -> ISO, else null.
+function readDate(t) {
+  const s = String(t || '').trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (m) return s;
+  m = /^(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{4}))?$/.exec(s);
+  if (!m) return null;
+  const y = m[3] || String(new Date().getUTCFullYear());
+  return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+// Button text -> a delivery date. Precise for the two answers that cover most
+// visits; anything vaguer is better recorded as unknown than guessed.
+function readLastDelivery(t) {
+  const n = norm(t);
+  if (n.includes('сьогод') || n.includes('today')) return isoDay(0);
+  if (n.includes('вчора') || n.includes('yesterday')) return isoDay(-1);
+  if (n.includes('не знаю') || n.includes('unknown') || n === '-') return null;
+  return readDate(t);
+}
+
+// Last time any agent logged this store, so a re-walked street doesn't get
+// surveyed (and paid) twice by accident. One tiny key per store beats scanning
+// every visit:* record.
+const lastVisitKey = (storeId) => `lastvisit:${storeId}`;
+const ROUTE_TTL = 60 * 60 * 12;
+const routeKey = (uid) => `route:${uid}`;
+
 const sessionKey = (uid) => `session:${uid}`;
 const getSession = (env, uid) => env.VISITS.get(sessionKey(uid), { type: 'json' });
 const putSession = (env, uid, s) => env.VISITS.put(sessionKey(uid), JSON.stringify(s), { expirationTtl: SESSION_TTL });
@@ -666,14 +778,6 @@ function readPricing(t) {
   if (n.includes('обид') || n.includes('both')) return 'both';
   return 'unknown';
 }
-function readDay(t) {
-  const n = norm(t);
-  for (const d of DAYS) if (n.startsWith(d) || n.includes('/' + d)) return d;
-  if (n.includes('пн')) return 'mon'; if (n.includes('вт')) return 'tue'; if (n.includes('ср')) return 'wed';
-  if (n.includes('чт')) return 'thu'; if (n.includes('пт')) return 'fri'; if (n.includes('сб')) return 'sat'; if (n.includes('нд')) return 'sun';
-  if (n.includes('немає') || n.includes('none')) return '—';
-  return 'unknown';
-}
 function readSize(t) {
   const n = norm(t);
   if (n.includes('s ') || n.includes('мал') || n.includes('small')) return 'S';
@@ -682,16 +786,74 @@ function readSize(t) {
 }
 const readYes = (t) => /так|yes|✅/i.test(String(t));
 
-// Advance to the next questionnaire step, skipping restock for non-weight stores.
+const ROUTE_SIZE = 12;        // a day's zone, matching the handbook's 10–15
+const DUP_WINDOW_DAYS = 30;   // re-surveying inside this warns before submit
+
+async function startVisit(env, uid, chatId) {
+  await putSession(env, uid, { step: 'location', qi: 0, data: {} });
+  await say(env, chatId,
+    '📝 <b>Новий візит · New visit</b>\n' +
+    '1️⃣ Надішліть <b>геолокацію</b> (📎 → Location → Send current location) — покажу найближчі магазини.\n' +
+    'Share your <b>location</b> and I\u2019ll list the stores around you.\n\n' +
+    '/cancel щоб вийти · to abort');
+}
+
+// Offer the stores closest to where the agent is standing, numbered, with a
+// route marker so someone following /route knows which stop is which.
+async function promptStorePick(env, uid, chatId, session) {
+  const from = { lat: session.data.lat, lng: session.data.lng };
+  const near = nearestStores(from, 8);
+  let routeIds = [];
+  try {
+    const r = await env.VISITS.get(routeKey(uid), { type: 'json' });
+    if (r && Array.isArray(r.ids)) routeIds = r.ids;
+  } catch (e) {}
+  session.data.nearby = near.map(({ s }) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng }));
+  session.step = 'store';
+  await putSession(env, uid, session);
+  const lines = near.map(({ s, d }, i) => {
+    const onRoute = routeIds.includes(s.id) ? ` 🧭${routeIds.indexOf(s.id) + 1}` : '';
+    return `${i + 1}. <b>${esc(s.name)}</b>${onRoute} · ${fmtDist(d)}${s.address ? ' — ' + esc(s.address) : ''}`;
+  });
+  await say(env, chatId,
+    '2️⃣ Який це магазин? Надішліть номер · Which store? Reply with the number:\n' + lines.join('\n') +
+    '\n\nНемає у списку — надішліть назву, або <code>new Назва</code>.\nNot listed — send a name, or <code>new Name</code>.',
+    near.map((_, i) => [String(i + 1)]));
+}
+
+// Common tail for every way of choosing a store: distance sanity-check against
+// the map pin, duplicate-survey warning, then on to the photo.
+async function pickStore(env, uid, chatId, session, store) {
+  session.data.store = store;
+  session.data.distM = (store.lat != null && session.data.lat != null)
+    ? distM({ lat: store.lat, lng: store.lng }, { lat: session.data.lat, lng: session.data.lng })
+    : null;
+  session.data.dupDays = null;
+  if (store.id) {
+    try {
+      const last = await env.VISITS.get(lastVisitKey(store.id));
+      if (last) {
+        const days = Math.floor((Date.now() - Date.parse(last)) / 86400000);
+        if (days >= 0 && days < DUP_WINDOW_DAYS) session.data.dupDays = days;
+      }
+    } catch (e) {}
+  }
+  session.step = 'photo';
+  await putSession(env, uid, session);
+  const warn = session.data.distM != null && session.data.distM > NEAR_METERS
+    ? `\n⚠️ ~${session.data.distM} м від точки на карті — переконайтесь, що ви біля магазину. · ~${session.data.distM} m from the map pin.`
+    : '';
+  const dup = session.data.dupDays != null
+    ? `\n⚠️ Цей магазин уже обстежували <b>${session.data.dupDays} дн. тому</b> — база за візит нараховується раз на цикл. · Already surveyed ${session.data.dupDays} day(s) ago.`
+    : '';
+  await say(env, chatId, `✅ ${esc(store.name)}${store.isNew ? ' <i>(новий · new)</i>' : ''}${warn}${dup}\n\n📷 Надішліть <b>одне фото</b> вітрини/входу. · Send <b>one photo</b> of the storefront.`);
+}
+
+// Advance to the next questionnaire step.
 async function askNext(env, uid, chatId, session) {
   let i = session.qi;
   while (i < QUESTIONS.length) {
     const question = QUESTIONS[i];
-    if (question.onlyWeight && !['kg', 'both'].includes(session.data.pricing)) {
-      session.data.restock = 'n/a';
-      i++;
-      continue;
-    }
     session.qi = i;
     session.step = 'question';
     await putSession(env, uid, session);
@@ -714,7 +876,8 @@ function summary(session) {
   if (d.lat != null) lines.push(`🗺️ GPS ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}${d.distM != null ? ` (~${d.distM} м від точки/from pin)` : ''}`);
   lines.push(`📷 Фото · Photo: ${d.photoFileId ? '✅' : '—'}`);
   lines.push(`💰 Ціни · Pricing: ${esc(d.pricing || '—')}`);
-  if (d.restock && d.restock !== 'n/a') lines.push(`📦 Завезення · Restock: ${esc(d.restock)}`);
+  if (d.lastDelivery) lines.push(`📦 Останній завіз · Last delivery: ${esc(d.lastDelivery)}`);
+  if (d.dupDays != null) lines.push(`⚠️ <b>Цей магазин уже обстежували ${d.dupDays} дн. тому.</b> · Already surveyed ${d.dupDays} day(s) ago.`);
   lines.push(`🕐 Години · Hours: ${esc(d.hours || '—')}`);
   lines.push(`📐 Розмір · Size: ${esc(d.size || '—')}`);
   lines.push(`🪧 Плакат · Poster: ${d.poster ? '✅' : '❌'}`);
@@ -727,6 +890,19 @@ async function bump(env, key, by = 1) {
   const cur = Number((await env.VISITS.get('count:' + key)) || 0) + by;
   await env.VISITS.put('count:' + key, String(cur));
   return cur;
+}
+
+// The survey answers that correspond to real stores.json fields. Anything the
+// agent left unknown is omitted rather than written as a guess.
+function visitToUpdates(rec) {
+  const u = {};
+  if (rec.hours) {
+    const h = normalizeHours(rec.hours);
+    if (h) { u.hours = {}; for (const d of ['mon','tue','wed','thu','fri','sat','sun']) u.hours[d] = h; }
+  }
+  if (rec.pricing === 'kg' || rec.pricing === 'item') u.pricing = rec.pricing;
+  if (rec.lastDelivery) u.restock_date = rec.lastDelivery;
+  return u;
 }
 
 async function finishVisit(env, c, uid, chatId, session, from) {
@@ -742,7 +918,7 @@ async function finishVisit(env, c, uid, chatId, session, from) {
     distM: d.distM ?? null,
     photoFileId: d.photoFileId || null,
     pricing: d.pricing || null,
-    restock: d.restock || null,
+    lastDelivery: d.lastDelivery || null,
     hours: d.hours || null,
     size: d.size || null,
     poster: !!d.poster,
@@ -751,6 +927,18 @@ async function finishVisit(env, c, uid, chatId, session, from) {
   };
   // Key sorts chronologically; include uid so two agents can't collide on a ts.
   await env.VISITS.put(`visit:${rec.ts}:${uid}`, JSON.stringify(rec));
+  // Stamp the store so a re-walk inside DUP_WINDOW_DAYS warns next time, and
+  // tick it off the agent's route if they're following one.
+  if (rec.store && rec.store.id) {
+    await env.VISITS.put(lastVisitKey(rec.store.id), rec.ts);
+    try {
+      const r = await env.VISITS.get(routeKey(uid), { type: 'json' });
+      if (r && Array.isArray(r.ids) && r.ids.includes(rec.store.id) && !r.done.includes(rec.store.id)) {
+        r.done.push(rec.store.id);
+        await env.VISITS.put(routeKey(uid), JSON.stringify(r), { expirationTtl: ROUTE_TTL });
+      }
+    } catch (e) {}
+  }
   const bonusUnits = (rec.poster ? 1 : 0) + (rec.contact ? 1 : 0);
   await bump(env, 'total');
   await bump(env, 'agent:' + uid);
@@ -768,8 +956,18 @@ async function finishVisit(env, c, uid, chatId, session, from) {
   // Real-time push to the owner (photo + summary) for verification, if configured.
   if (c.ownerId) {
     const caption = summary(session).replace('🧾 <b>Перевірте візит · Review visit</b>', `🆕 <b>Візит · Visit</b> — ${esc(rec.agentName)}`);
-    if (rec.photoFileId) await tg(env, 'sendPhoto', { chat_id: c.ownerId, photo: rec.photoFileId, caption, parse_mode: 'HTML' });
-    else await tg(env, 'sendMessage', { chat_id: c.ownerId, text: caption, parse_mode: 'HTML' });
+    // A survey collects exactly the fields stores.json holds, so offer to put
+    // them on the map right here rather than leaving the owner to retype a CSV.
+    // Only for stores that already exist — a brand-new one has no id to patch.
+    const patch = visitToUpdates(rec);
+    const kb = (rec.store && rec.store.id && Object.keys(patch).length)
+      ? { inline_keyboard: [[
+          { text: '✅ Опублікувати · Publish', callback_data: `vpub:${rec.ts}:${uid}` },
+          { text: '❌ Пропустити · Skip', callback_data: 'vskip' },
+        ]] }
+      : undefined;
+    if (rec.photoFileId) await tg(env, 'sendPhoto', { chat_id: c.ownerId, photo: rec.photoFileId, caption, parse_mode: 'HTML', reply_markup: kb });
+    else await tg(env, 'sendMessage', { chat_id: c.ownerId, text: caption, parse_mode: 'HTML', reply_markup: kb });
   }
 }
 
@@ -790,12 +988,12 @@ async function ownerReport(env, c, chatId) {
 
 async function ownerExport(env, chatId) {
   const list = await env.VISITS.list({ prefix: 'visit:', limit: 1000 });
-  const rows = [['ts', 'agentId', 'agentName', 'storeId', 'storeName', 'lat', 'lng', 'distM', 'pricing', 'restock', 'hours', 'size', 'poster', 'contact', 'notes', 'photoFileId']];
+  const rows = [['ts', 'agentId', 'agentName', 'storeId', 'storeName', 'lat', 'lng', 'distM', 'pricing', 'lastDelivery', 'hours', 'size', 'poster', 'contact', 'notes', 'photoFileId']];
   for (const k of list.keys) {
     const r = await env.VISITS.get(k.name, { type: 'json' });
     if (!r) continue;
     const csv = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-    rows.push([r.ts, r.agentId, r.agentName, r.store?.id || '', r.store?.name || '', r.lat, r.lng, r.distM, r.pricing, r.restock, r.hours, r.size, r.poster, r.contact, r.notes, r.photoFileId].map(csv));
+    rows.push([r.ts, r.agentId, r.agentName, r.store?.id || '', r.store?.name || '', r.lat, r.lng, r.distM, r.pricing, r.lastDelivery, r.hours, r.size, r.poster, r.contact, r.notes, r.photoFileId].map(csv));
   }
   const csvText = rows.map((row) => row.join(',')).join('\n');
   const form = new FormData();
@@ -885,15 +1083,31 @@ async function handleVisit(env, c, msg, ctx) {
     await say(env, chatId, jobText());
     return true;
   }
+  if (command === 'route') {
+    if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    await putSession(env, userId, { step: 'route_loc', qi: 0, data: {} });
+    await say(env, chatId,
+      '🧭 <b>Маршрут на сьогодні · Today\u2019s route</b>\n' +
+      'Надішліть свою <b>геолокацію</b> — складу маршрут по найближчих магазинах.\n' +
+      'Share your <b>location</b> and I\u2019ll plan a walking route through the nearest stores.\n\n' +
+      '/cancel щоб вийти · to abort');
+    return true;
+  }
+
   if (command === 'visit') {
     if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
-    const fresh = { step: 'store', qi: 0, data: {} };
-    await putSession(env, userId, fresh);
-    await say(env, chatId,
-      '📝 <b>Новий візит · New visit</b>\n' +
-      '1️⃣ Назва магазину (або частина)? Для нового магазину: <code>new Назва</code>.\n' +
-      'Store name (or part)? For a store not on the map: <code>new Name</code>.\n\n' +
-      '/cancel щоб вийти · to abort');
+    // Don't silently discard a half-finished survey — losing a photo and six
+    // answers to a mistyped command is the worst thing this flow can do.
+    if (session && session.step !== 'route_loc' && session.step !== 'done') {
+      session.step = 'resume_ask';
+      await putSession(env, userId, session);
+      await say(env, chatId,
+        '⚠️ У вас є незавершений візит' + (session.data.store ? ` — <b>${esc(session.data.store.name)}</b>` : '') + '.\n' +
+        'You have a survey in progress. Continue it, or start over?',
+        [['▶️ Продовжити / Continue', '🔄 Почати заново / Restart']]);
+      return true;
+    }
+    await startVisit(env, userId, chatId);
     return true;
   }
 
@@ -905,27 +1119,79 @@ async function handleVisit(env, c, msg, ctx) {
   if (command) return false;
 
   // ── In-session step machine ──
+  if (session.step === 'resume_ask') {
+    if (/продовж|continue|▶/i.test(text || '')) {
+      // Put them back on the step they were answering.
+      session.step = session.data.photoFileId ? 'question' : (session.data.store ? 'photo' : 'store');
+      await putSession(env, userId, session);
+      if (session.step === 'question') return askNext(env, userId, chatId, session);
+      if (session.step === 'photo') { await say(env, chatId, '📷 Надішліть <b>одне фото</b> вітрини/входу. · Send <b>one photo</b> of the storefront.'); return true; }
+      await promptStorePick(env, userId, chatId, session);
+      return true;
+    }
+    await startVisit(env, userId, chatId);
+    return true;
+  }
+
+  // /route — one location in, a walking order out.
+  if (session.step === 'route_loc') {
+    if (!msg.location) { await say(env, chatId, '📍 Потрібна геолокація: 📎 → Location. · Please share a location.'); return true; }
+    const from = { lat: msg.location.latitude, lng: msg.location.longitude };
+    const near = nearestStores(from, ROUTE_SIZE).map((x) => x.s);
+    await clearSession(env, userId);
+    if (!near.length) { await say(env, chatId, '🤷 Поблизу нічого не знайшов. · No stores found nearby.'); return true; }
+    const ordered = walkOrder(near, from);
+    let cur = from, total = 0;
+    const lines = ordered.map((s, i) => {
+      const leg = distM(cur, s); total += leg; cur = s;
+      return `${i + 1}. <b>${esc(s.name)}</b>${s.address ? ' — ' + esc(s.address) : ''} · ${fmtDist(leg)}`;
+    });
+    await env.VISITS.put(routeKey(userId), JSON.stringify({ ids: ordered.map((s) => s.id), done: [], ts: Date.now() }), { expirationTtl: ROUTE_TTL });
+    // Google Maps caps a walking URL at ~10 waypoints; keep the link inside that.
+    const mapsUrl = 'https://www.google.com/maps/dir/?api=1&travelmode=walking'
+      + `&origin=${from.lat},${from.lng}`
+      + `&destination=${ordered[ordered.length - 1].lat},${ordered[ordered.length - 1].lng}`
+      + (ordered.length > 1 ? '&waypoints=' + ordered.slice(0, -1).slice(0, 9).map((s) => `${s.lat},${s.lng}`).join('|') : '');
+    await say(env, chatId,
+      `🧭 <b>Маршрут · Route</b> — ${ordered.length} магазинів, ~${fmtDist(total)} пішки\n\n` +
+      lines.join('\n') +
+      `\n\n🗺️ <a href="${mapsUrl}">Відкрити в Google Maps · Open in Google Maps</a>\n\n` +
+      'Далі — /visit біля першого магазину. · Then /visit at the first store.');
+    return true;
+  }
+
+  // GPS first: the agent is standing at the shop, so proximity names it far
+  // faster and more reliably than typing into a phone.
+  if (session.step === 'location') {
+    if (!msg.location) { await say(env, chatId, '📍 Потрібна геолокація: 📎 → Location → Send current location.\nPlease share a location.'); return true; }
+    session.data.lat = msg.location.latitude;
+    session.data.lng = msg.location.longitude;
+    await promptStorePick(env, userId, chatId, session);
+    return true;
+  }
+
   if (session.step === 'store') {
     const raw = (text || '').trim();
-    if (!raw) { await say(env, chatId, 'Надішліть назву магазину текстом. · Send the store name as text.'); return true; }
+    if (!raw) { await say(env, chatId, 'Оберіть номер зі списку, або надішліть назву. · Pick a number, or send a name.'); return true; }
+
     if (/^new\s+/i.test(raw)) {
-      session.data.store = { isNew: true, name: raw.replace(/^new\s+/i, '').trim() };
-      session.step = 'location';
-      await putSession(env, userId, session);
-      await say(env, chatId, '📍 Надішліть <b>геолокацію</b> магазину (📎 → Location → Send current location).\nShare the store <b>location</b>.');
+      await pickStore(env, userId, chatId, session, { isNew: true, name: raw.replace(/^new\s+/i, '').trim() });
       return true;
     }
+    // A bare number picks from the nearby list we just showed.
+    const n = parseInt(raw, 10);
+    if (!isNaN(n) && session.data.nearby && session.data.nearby[n - 1]) {
+      await pickStore(env, userId, chatId, session, session.data.nearby[n - 1]);
+      return true;
+    }
+    // Otherwise fall back to name search, for a store that isn't nearby.
     const hits = searchStores(raw);
-    if (!hits.length) { await say(env, chatId, '🤷 Не знайдено. Спробуйте іншу назву, або <code>new Назва</code>.\nNo match — try again, or <code>new Name</code>.'); return true; }
+    if (!hits.length) { await say(env, chatId, '🤷 Не знайдено. Оберіть номер, спробуйте іншу назву, або <code>new Назва</code>.\nNo match — pick a number, try another name, or <code>new Name</code>.'); return true; }
     if (hits.length === 1) {
       const s = hits[0];
-      session.data.store = { id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng };
-      session.step = 'location';
-      await putSession(env, userId, session);
-      await say(env, chatId, `✅ ${esc(s.name)}\n📍 Тепер надішліть <b>геолокацію</b> магазину.\nNow share the store <b>location</b> (📎 → Location).`);
+      await pickStore(env, userId, chatId, session, { id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng });
       return true;
     }
-    // Ambiguous → numbered list.
     session.step = 'store_pick';
     session.data.candidates = hits.slice(0, MATCH_LIMIT).map((s) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng }));
     await putSession(env, userId, session);
@@ -939,28 +1205,8 @@ async function handleVisit(env, c, msg, ctx) {
     const n = parseInt((text || '').trim(), 10);
     const pick = session.data.candidates && session.data.candidates[n - 1];
     if (!pick) { await say(env, chatId, 'Надішліть номер зі списку. · Reply with a number from the list.'); return true; }
-    session.data.store = pick;
     delete session.data.candidates;
-    session.step = 'location';
-    await putSession(env, userId, session);
-    await say(env, chatId, `✅ ${esc(pick.name)}\n📍 Надішліть <b>геолокацію</b> магазину. · Share the store <b>location</b>.`);
-    return true;
-  }
-
-  if (session.step === 'location') {
-    if (!msg.location) { await say(env, chatId, '📍 Потрібна геолокація: 📎 → Location → Send current location.\nPlease share a location.'); return true; }
-    session.data.lat = msg.location.latitude;
-    session.data.lng = msg.location.longitude;
-    const st = session.data.store;
-    if (st && st.lat != null) {
-      session.data.distM = distM({ lat: st.lat, lng: st.lng }, { lat: session.data.lat, lng: session.data.lng });
-    }
-    session.step = 'photo';
-    await putSession(env, userId, session);
-    const warn = session.data.distM != null && session.data.distM > NEAR_METERS
-      ? `\n⚠️ ~${session.data.distM} м від точки на карті. Переконайтесь, що ви біля магазину. · ~${session.data.distM} m from the map pin — make sure you're at the store.`
-      : '';
-    await say(env, chatId, '📷 Надішліть <b>одне фото</b> вітрини/входу. · Send <b>one photo</b> of the storefront.' + warn);
+    await pickStore(env, userId, chatId, session, pick);
     return true;
   }
 
@@ -978,8 +1224,8 @@ async function handleVisit(env, c, msg, ctx) {
     if (!val && question.key !== 'notes') { await say(env, chatId, 'Оберіть варіант або надішліть відповідь. · Pick an option or send an answer.'); return true; }
     switch (question.key) {
       case 'pricing': session.data.pricing = readPricing(val); break;
-      case 'restock': session.data.restock = readDay(val); break;
-      case 'hours': session.data.hours = val; break;
+      case 'lastdel': session.data.lastDelivery = readLastDelivery(val); break;
+      case 'hours': session.data.hours = normalizeHours(val); break;
       case 'size': session.data.size = readSize(val); break;
       case 'poster': session.data.poster = readYes(val); break;
       case 'contact': session.data.contact = readYes(val); break;
