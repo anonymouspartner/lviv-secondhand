@@ -215,14 +215,14 @@ const DEAL_TEXT_FIELD = {
 
 // Mirrors scripts/patch-store.js's dispatchMapPatch() — see that file's
 // comment for why this is reimplemented rather than imported (node:fs isn't
-// portable to the Workers runtime). A flash deal needs its own GITHUB_PAT on
+// portable to the Workers runtime). A flash deal needs its own GH_PAT on
 // this Worker (separate from the bot Worker's copy of the same secret).
 async function dispatchMapPatch(env, storeId, updates) {
-  if (!env.GITHUB_PAT) throw new Error('GITHUB_PAT not configured');
+  if (!env.GH_PAT) throw new Error('GH_PAT not configured');
   const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${env.GITHUB_PAT}`,
+      Authorization: `Bearer ${env.GH_PAT}`,
       Accept: 'application/vnd.github+json',
       'Content-Type': 'application/json',
       'X-GitHub-Api-Version': '2022-11-28',
@@ -817,7 +817,7 @@ export default {
             flashDeal: { text: row.text, startsAt: row.starts_at, expiresAt: row.expires_at, alert: !!row.alert },
           });
         } catch (e) {
-          return new Response('dispatch failed — check GITHUB_PAT and the map-update workflow logs', { status: 502 });
+          return new Response('dispatch failed — check GH_PAT and the map-update workflow logs', { status: 502 });
         }
         await env.DB.prepare("UPDATE flash_deals SET status = 'approved' WHERE id = ?").bind(id).run();
         if (row.alert) await broadcastFlashDeal(env, ctx, row.store_id, row.text, row.expires_at);

@@ -169,7 +169,7 @@ A **short, paid sale window** — separate from the ongoing promotion tiers abov
 | Subscribers + broadcast | D1 table `store_subs`, `broadcastFlashDeal()`, bot `/start sub_<id>` · `/stop` |
 | Shopper-facing banner/toast | `index.html` (`activeFlashDeal()`, `tickFlashCountdowns()`) |
 
-Needs `GITHUB_PAT` (on both Workers — publishing a deal dispatches through the same pipeline as everything else below) and, for the owner-review path, the existing `ADMIN_KEY`. Both optional; the feature stays inert without them.
+Needs `GH_PAT` (on both Workers — publishing a deal dispatches through the same pipeline as everything else below) and, for the owner-review path, the existing `ADMIN_KEY`. Both optional; the feature stays inert without them.
 
 ## ✏️ Community edits & the leaderboard
 
@@ -200,13 +200,13 @@ Every feature above that changes the map — a field-scout correction, a publish
 1. A signed **`repository_dispatch`** event carries a *targeted patch* (`{ store_id, updates }`), never the whole file, so two unrelated changes landing close together can't clobber each other.
 2. **`.github/workflows/update-map.yml`** applies it as a deep merge, runs it through a **schema gate** (valid JSON, required fields, coordinate ranges, no duplicate ids, ISO-formatted dates) that aborts the run on any violation, then commits straight to `main` — which *is* the deploy, since GitHub Pages serves this repo from `main` directly.
 
-`scripts/patch-store.js` is the reusable sender (also usable as a CLI: `node scripts/patch-store.js <store_id> '<json>'`) — both Workers call the same GitHub API endpoint it wraps. Needs a `GITHUB_PAT` (classic, `repo` scope) wherever it's called from; `repository_dispatch` can't be triggered with a workflow's own default token.
+`scripts/patch-store.js` is the reusable sender (also usable as a CLI: `node scripts/patch-store.js <store_id> '<json>'`) — both Workers call the same GitHub API endpoint it wraps. Needs a `GH_PAT` (classic, `repo` scope) wherever it's called from; `repository_dispatch` can't be triggered with a workflow's own default token.
 
 ## 🔍 Field-scout tool
 
 A faster alternative to the full `/visit` survey (see the handbook below) for a quick, structured correction while standing in a store: open `?store=<id>&agent_mode=true` from the map → **📨 Send to Telegram bot** → the bot walks through inventory cycle, restock weekday, and opening hours entirely via tappable buttons, no typing. Confirming dispatches straight through the pipeline above.
 
-Needs `BOUNTY_SECRET` (identical value on both Workers — one signs the short-lived link, the other verifies it) and `GITHUB_PAT` on the bot Worker.
+Needs `BOUNTY_SECRET` (identical value on both Workers — one signs the short-lived link, the other verifies it) and `GH_PAT` on the bot Worker.
 
 ## 💼 Business model
 

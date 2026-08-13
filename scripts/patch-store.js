@@ -17,15 +17,15 @@
 //   import { dispatchMapPatch } from './scripts/patch-store.js';
 //   await dispatchMapPatch({ storeId: 'c21', updates: {...} });
 //
-// Requires a GITHUB_PAT environment variable — a classic PAT with the `repo`
+// Requires a GH_PAT environment variable — a classic PAT with the `repo`
 // scope (repository_dispatch cannot be triggered with the default
 // GITHUB_TOKEN a workflow run gets automatically; it needs a real PAT).
 // NEVER commit a token — set it as an env var or a repo/CLI secret.
 
 const DEFAULT_REPO = 'anonymouspartner/lviv-secondhand';
 
-export async function dispatchMapPatch({ storeId, updates, repo = DEFAULT_REPO, token = process.env.GITHUB_PAT }) {
-  if (!token) throw new Error('GITHUB_PAT is not set — cannot authenticate to the GitHub API.');
+export async function dispatchMapPatch({ storeId, updates, repo = DEFAULT_REPO, token = process.env.GH_PAT }) {
+  if (!token) throw new Error('GH_PAT is not set — cannot authenticate to the GitHub API.');
   if (!/^[a-z0-9]{1,20}$/i.test(String(storeId || ''))) throw new Error('storeId must be a short alphanumeric id.');
   if (!updates || typeof updates !== 'object' || Array.isArray(updates)) throw new Error('updates must be a plain object.');
 
