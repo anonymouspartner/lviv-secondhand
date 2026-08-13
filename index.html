@@ -703,6 +703,20 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
       <option value="14">2-week (14 days)</option>
       <option value="35">5-week (35 days)</option>
     </select>
+    <div class="field-lbl">Restock day (optional — only used for a weekly cycle)</div>
+    <select class="field" id="add-restockday">
+      <option value="">Not known / not fixed</option>
+      <option value="mon">Monday</option>
+      <option value="tue">Tuesday</option>
+      <option value="wed">Wednesday</option>
+      <option value="thu">Thursday</option>
+      <option value="fri">Friday</option>
+      <option value="sat">Saturday</option>
+      <option value="sun">Sunday</option>
+    </select>
+    <div class="field-lbl">Opening hours (optional)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Leave a day blank if unknown · <a onclick="copyAddHoursToAll()" role="button" tabindex="0" style="color:var(--orange);cursor:pointer;text-decoration:underline;">copy first day to all</a></div>
+    <div id="add-hours"></div>
     <div class="field-lbl">Notes (optional)</div>
     <input type="text" class="field" id="add-note" placeholder="Anything useful to remember"/>
     <div style="display:flex;gap:10px;margin-bottom:6px;">
@@ -1988,8 +2002,21 @@ function openAddStoreModal(lat,lng){
   document.getElementById('add-phone').value='';
   document.getElementById('add-pricing').value='item';
   document.getElementById('add-cycle').value='7';
+  document.getElementById('add-restockday').value='';
   document.getElementById('add-note').value='';
+  document.getElementById('add-hours').innerHTML = DAYS.map(d => {
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">`
+      + `<label for="add-hr-${d}" style="width:96px;flex-shrink:0;font-size:13px;color:var(--muted);">${escHtml(dayName(d))}</label>`
+      + `<input type="text" class="field" style="margin:0;flex:1;min-width:0;" id="add-hr-${d}" placeholder="${escHtml(t('hoursPlaceholder'))}"/></div>`;
+  }).join('');
   document.getElementById('add-overlay').classList.remove('hidden');
+}
+
+// Same convenience as the Edit modal's copyHoursToAll(), for the add-hr-* inputs.
+function copyAddHoursToAll(){
+  let src = '';
+  for(const d of DAYS){ const v = document.getElementById('add-hr-' + d).value.trim(); if(v){ src = v; break; } }
+  DAYS.forEach(d => { document.getElementById('add-hr-' + d).value = src; });
 }
 
 function saveCustomStore(){
@@ -2000,7 +2027,8 @@ function saveCustomStore(){
   if(isNaN(lat)||isNaN(lng)){ alert(t('alertNoLoc')); return; }
   const arr = getCustomStores();
   const id = uid();
-  arr.push({
+  const restockDay = document.getElementById('add-restockday').value;
+  const store = {
     id, name,
     address: document.getElementById('add-addr').value.trim(),
     addressEn: document.getElementById('add-addr').value.trim(),
@@ -2009,9 +2037,11 @@ function saveCustomStore(){
     cycle: parseInt(document.getElementById('add-cycle').value),
     lat, lng,
     note: document.getElementById('add-note').value.trim(),
-    hours:{mon:'?',tue:'?',wed:'?',thu:'?',fri:'?',sat:'?',sun:'?'},
+    hours: readHoursInputs('add-hr-'),
     custom:true
-  });
+  };
+  if(restockDay) store.restockDay = restockDay;
+  arr.push(store);
   saveCustomStores(arr);
   track('action','add');
   if(tempMarker){ tempMarker.remove(); tempMarker=null; }
@@ -2068,11 +2098,13 @@ function openEditModal(id){
   document.getElementById('edit-overlay').classList.remove('hidden');
 }
 
-// Reads the 7 day inputs into a normalized hours object.
-function readHoursInputs(){
+// Reads the 7 day inputs into a normalized hours object. `prefix` selects which
+// modal's inputs to read (defaults to the Edit modal's edit-hr-*).
+function readHoursInputs(prefix){
+  prefix = prefix || 'edit-hr-';
   const hours = {};
   DAYS.forEach(d => {
-    let v = (document.getElementById('edit-hr-' + d).value || '').trim();
+    let v = (document.getElementById(prefix + d).value || '').trim();
     if(!v){ v = '?'; }
     else if(/^close|^зач/i.test(v)){ v = 'closed'; }
     else { v = v.replace(/\s*[-–—]\s*/, '–').slice(0, 40); }  // normalize any dash to en-dash
@@ -2434,9 +2466,13 @@ function contributeGitHub(){
   if(c.added){
     lines.push('### ➕ Stores added (' + c.added + ')');
     (b.custom||[]).forEach(s => {
+      const hrs = Object.keys(s.hours||{}).filter(d => s.hours[d] && s.hours[d] !== '?').map(d => d + ' ' + s.hours[d]).join(', ');
       lines.push('- **' + s.name + '** — ' + (s.addressEn||s.address||'') +
         ' (`' + s.lat + ', ' + s.lng + '`)' +
         (s.pricing==='kg'?' · by KG':' · itemized') +
+        (s.cycle ? ' · cycle ' + s.cycle + 'd' : '') +
+        (s.restockDay ? ' · restocks ' + s.restockDay : '') +
+        (hrs ? ' · hours: ' + hrs : '') +
         (s.note ? ' — ' + s.note : ''));
     });
     lines.push('');
@@ -2822,7 +2858,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-13.1';
+const APP_VERSION = '2026-08-13.2';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
