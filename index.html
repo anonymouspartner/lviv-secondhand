@@ -2107,7 +2107,14 @@ function readHoursInputs(prefix){
     let v = (document.getElementById(prefix + d).value || '').trim();
     if(!v){ v = '?'; }
     else if(/^close|^зач/i.test(v)){ v = 'closed'; }
-    else { v = v.replace(/\s*[-–—]\s*/, '–').slice(0, 40); }  // normalize any dash to en-dash
+    else {
+      v = v.replace(/\s*[-–—]\s*/, '–');
+      // "9.00" -> "09:00": isOpenNow() only matches colon-separated HH:MM, so a
+      // period typed as the hour:minute separator would otherwise silently
+      // make the store look closed all day.
+      v = v.replace(/(\d{1,2})\.(\d{2})/g, (m, h, mm) => h.padStart(2, '0') + ':' + mm);
+      v = v.slice(0, 40);
+    }
     hours[d] = v;
   });
   return hours;
