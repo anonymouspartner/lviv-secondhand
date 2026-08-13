@@ -113,6 +113,15 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS restock_published (store_id TEXT NOT NULL, report_date TEXT NOT NULL, created TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (store_id, report_date))"
   ).run();
+  // Community submissions awaiting the owner's ✅/❌ in Telegram. One table for
+  // all three kinds ('contribution' | 'owner' | 'claim') because the lifecycle
+  // is identical — only what approval *does* differs (see /submit/approve).
+  // `payload` is the raw JSON the app sent; the issue body is rendered from it
+  // on approval rather than accepted from the client, so nobody can post
+  // arbitrary markdown into the repo.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS submissions (id TEXT PRIMARY KEY, kind TEXT NOT NULL, store_id TEXT, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', issue_url TEXT, pin TEXT, created TEXT NOT NULL DEFAULT (datetime('now')))"
+  ).run();
   _schemaReady = true;
 }
 
@@ -589,6 +598,139 @@ async function publishRestockDate(env, storeId, date) {
   return true;
 }
 
+// ── Community submissions → owner approval → GitHub issue ────────────────────
+// Contributions and owner submissions used to open a pre-filled GitHub issue in
+// the contributor's browser, which meant every contributor needed a GitHub
+// account and anything they typed landed in the repo unreviewed. Now the app
+// POSTs here, the owner gets a ✅/❌ in Telegram, and only an approval creates
+// the issue — via the API, using GH_PAT, with the body rendered server-side
+// from structured fields so no one can inject markdown into the repo.
+const SUB_KINDS = new Set(['contribution', 'owner', 'claim']);
+const SUB_MAX_JSON = 24000;   // a contribution bundle can carry many stores
+
+// Markdown-safe: strips the characters that could break out of a list item or
+// forge structure in the rendered issue, then caps length.
+function mdSafe(v, max) {
+  return String(v == null ? '' : v).replace(/[<>`|\\]/g, '').replace(/\r?\n/g, ' ').trim().slice(0, max || 200);
+}
+
+function renderSubmissionIssue(kind, payload) {
+  if (kind === 'owner') {
+    const p = payload || {};
+    const rows = [
+      ['Store', mdSafe(p.name, 120)],
+      ['Address', mdSafe(p.address, 200)],
+      ['Pricing', p.pricing === 'kg' ? 'by KG (by weight)' : 'itemized'],
+      ['Restock', mdSafe(p.restock, 200)],
+      ['Opening hours', mdSafe(p.hours, 200)],
+      ['Phone', mdSafe(p.phone, 40)],
+      ['Submitter role & contact', mdSafe(p.contact, 200)],
+      ['Notes', mdSafe(p.note, 500)],
+    ];
+    return {
+      title: 'Owner submission: ' + (mdSafe(p.name, 80) || 'unnamed store'),
+      labels: ['owner-submission'],
+      body: 'A store owner submitted their store for the official map, and the maintainer approved it in Telegram.\n\n'
+        + rows.map(([k, v]) => `- **${k}:** ${v || '—'}`).join('\n')
+        + '\n\n_Verify the contact before merging._',
+    };
+  }
+  // contribution — the app's own bundle {custom, overrides, overrideList, removed}
+  const b = payload || {};
+  const custom = Array.isArray(b.custom) ? b.custom.slice(0, 200) : [];
+  const overrideList = Array.isArray(b.overrideList) ? b.overrideList.slice(0, 200) : [];
+  const removed = Array.isArray(b.removed) ? b.removed.slice(0, 200) : [];
+  const lines = ['Approved in Telegram by the maintainer. Submitted from the app — the contributor has no GitHub account.', ''];
+  if (custom.length) {
+    lines.push(`### ➕ Stores added (${custom.length})`);
+    for (const s of custom) {
+      const hrs = Object.keys(s.hours || {}).filter((d) => s.hours[d] && s.hours[d] !== '?')
+        .map((d) => `${d} ${mdSafe(s.hours[d], 40)}`).join(', ');
+      lines.push(`- **${mdSafe(s.name, 120)}** — ${mdSafe(s.addressEn || s.address, 200)}`
+        + ` (\`${Number(s.lat) || 0}, ${Number(s.lng) || 0}\`)`
+        + (s.pricing === 'kg' ? ' · by KG' : ' · itemized')
+        + (s.cycle ? ` · cycle ${parseInt(s.cycle, 10) || 7}d` : '')
+        + (s.restockDay ? ` · restocks ${mdSafe(s.restockDay, 4)}` : '')
+        + (s.restock_date ? ` · delivery ${mdSafe(s.restock_date, 10)}` : '')
+        + (hrs ? ` · hours: ${hrs}` : '')
+        + (s.note ? ` — ${mdSafe(s.note, 300)}` : ''));
+    }
+    lines.push('');
+  }
+  if (overrideList.length) {
+    lines.push(`### ✏️ Corrections to existing stores (${overrideList.length})`);
+    for (const o of overrideList) {
+      const ch = o.changes || {};
+      const fields = Object.keys(ch).map((k) => {
+        const v = ch[k];
+        const shown = (v && typeof v === 'object')
+          ? Object.keys(v).map((d) => `${d} ${mdSafe(v[d], 40)}`).join(', ')
+          : mdSafe(v, 300);
+        return `${mdSafe(k, 40)}: ${shown}`;
+      }).join('; ');
+      lines.push(`- **${mdSafe(o.name, 120)}** (\`${mdSafe(o.id, 12)}\`) → ${fields}`);
+    }
+    lines.push('');
+  }
+  if (removed.length) {
+    lines.push(`### 🗑️ Suggested removals (${removed.length})`);
+    for (const r of removed) lines.push(`- **${mdSafe(r.name, 120)}** (\`${mdSafe(r.id, 12)}\`)`);
+    lines.push('');
+  }
+  const counts = `${custom.length} added, ${overrideList.length} edited, ${removed.length} removed`;
+  return {
+    title: `Map contribution: ${counts}`,
+    labels: ['map-contribution'],
+    body: lines.join('\n'),
+  };
+}
+
+// Same PAT the map-patch dispatch uses (classic, `repo` scope), so issue
+// creation needs no new secret.
+async function createGithubIssue(env, title, body, labels) {
+  if (!env.GH_PAT) throw new Error('GH_PAT not configured');
+  const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/issues', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GH_PAT}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'lviv-secondhand-worker',
+    },
+    body: JSON.stringify({ title, body, labels }),
+  });
+  if (res.status !== 201) throw new Error(`issue create failed: ${res.status}`);
+  const data = await res.json();
+  return data.html_url;
+}
+
+// A store's PIN lets its owner's future flash-deal purchase publish without
+// waiting on manual review (see applyFlashDealEvent). Four digits, uniform —
+// crypto.getRandomValues modulo 10000 is fine here because 2^32 is not a
+// multiple of 10000 only by a negligible bias at this size, and the PIN is a
+// convenience gate, not a credential protecting money.
+function generatePin() {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return String(a[0] % 10000).padStart(4, '0');
+}
+
+function submissionSummary(kind, storeId, payload) {
+  const p = payload || {};
+  if (kind === 'owner') {
+    return `🏪 STORE OWNER SUBMISSION\n\nStore: ${mdSafe(p.name, 120)}\nAddress: ${mdSafe(p.address, 200) || '—'}\nContact: ${mdSafe(p.contact, 200)}`;
+  }
+  if (kind === 'claim') {
+    return `🔑 STORE CLAIM — someone says they own ${storeId}\n\nName: ${mdSafe(p.name, 120)}\nContact: ${mdSafe(p.contact, 200)}\nNote: ${mdSafe(p.note, 300) || '—'}`;
+  }
+  const b = p;
+  const nCustom = Array.isArray(b.custom) ? b.custom.length : 0;
+  const nEdit = Array.isArray(b.overrideList) ? b.overrideList.length : 0;
+  const nRem = Array.isArray(b.removed) ? b.removed.length : 0;
+  return `🗺️ MAP CONTRIBUTION\n\n➕ ${nCustom} added\n✏️ ${nEdit} edited\n🗑️ ${nRem} removed`;
+}
+
 async function awardPoints(env, chatId, name, points) {
   if (name) {
     await env.DB.prepare(
@@ -874,6 +1016,50 @@ export default {
         if (row.alert) await broadcastFlashDeal(env, ctx, row.store_id, row.text, row.expires_at);
         return new Response(`✅ Flash deal approved and published for ${row.store_id}.`, { status: 200 });
       }
+      // Owner taps ✅ / ❌ in Telegram on a community submission. Approval is
+      // the only path to GitHub (or to a PIN) — nothing the app POSTs reaches
+      // either without it.
+      if (url.pathname === '/submit/approve' || url.pathname === '/submit/reject') {
+        if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) return new Response('unauthorized', { status: 401 });
+        const id = url.searchParams.get('id') || '';
+        if (!id) return new Response('bad request', { status: 400 });
+        await ensureSchema(env);
+        const row = await env.DB.prepare('SELECT * FROM submissions WHERE id = ?').bind(id).first();
+        if (!row) return new Response('not found', { status: 404 });
+        if (row.status !== 'pending') {
+          // Re-tapping is common (Telegram links get pressed twice) — report the
+          // settled outcome instead of erroring or acting a second time.
+          return new Response(row.status === 'approved'
+            ? `Already approved.${row.issue_url ? '\n' + row.issue_url : ''}${row.pin ? '\nPIN: ' + row.pin : ''}`
+            : `Already ${row.status}.`, { status: 200 });
+        }
+        if (url.pathname === '/submit/reject') {
+          await env.DB.prepare("UPDATE submissions SET status = 'rejected' WHERE id = ?").bind(id).run();
+          return new Response('❌ Rejected. Nothing was published.', { status: 200 });
+        }
+        let payload; try { payload = JSON.parse(row.payload); } catch { payload = null; }
+        if (!payload) return new Response('corrupt submission', { status: 500 });
+
+        if (row.kind === 'claim') {
+          const pin = generatePin();
+          await env.DB.prepare('INSERT INTO store_pins (store_id, pin) VALUES (?, ?) ON CONFLICT(store_id) DO UPDATE SET pin = excluded.pin')
+            .bind(row.store_id, pin).run();
+          await env.DB.prepare("UPDATE submissions SET status = 'approved', pin = ? WHERE id = ?").bind(pin, id).run();
+          return new Response(
+            `✅ Claim approved for ${row.store_id}.\n\nPIN: ${pin}\n\n` +
+            `Pass this to the store owner. Entering it on a flash-deal purchase publishes their deal immediately, with no review.`,
+            { status: 200 });
+        }
+        let issueUrl;
+        try {
+          const issue = renderSubmissionIssue(row.kind, payload);
+          issueUrl = await createGithubIssue(env, issue.title, issue.body, issue.labels);
+        } catch (e) {
+          return new Response('issue creation failed — check GH_PAT and that it still has repo scope', { status: 502 });
+        }
+        await env.DB.prepare("UPDATE submissions SET status = 'approved', issue_url = ? WHERE id = ?").bind(issueUrl, id).run();
+        return new Response(`✅ Approved — issue created:\n${issueUrl}`, { status: 200 });
+      }
       // Owner taps this from the "1 of 2" restock notification to publish a
       // single report without waiting for a second one. Same GET-so-Telegram-
       // linkifies-it and same ADMIN_KEY gate as /flash-deal/approve above.
@@ -1086,6 +1272,44 @@ export default {
       await ensureSchema(env);
       await env.DB.prepare('DELETE FROM store_subs WHERE chat_id = ?').bind(String(chatId)).run();
       return new Response(null, { status: 204, headers: cors(origin) });
+    }
+
+    // ── Community submission: contribution / owner submission / store claim ──
+    // Stored pending; the owner approves or rejects from Telegram. Nothing
+    // reaches GitHub (or grants a PIN) without that tap.
+    if (url.pathname === '/api/submit') {
+      const kind = body && body.kind;
+      const payload = body && body.payload;
+      const storeId = (body && body.storeId) || null;
+      if (!SUB_KINDS.has(String(kind || '')) || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      if (storeId !== null && !/^[a-z0-9]{1,12}$/i.test(String(storeId))) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      // A claim is about one specific store, so it is meaningless without one.
+      if (kind === 'claim' && !storeId) return new Response('bad request', { status: 400, headers: cors(origin) });
+      const payloadJson = JSON.stringify(payload);
+      if (payloadJson.length > SUB_MAX_JSON) return new Response('too large', { status: 413, headers: cors(origin) });
+      await ensureSchema(env);
+      const id = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+      await env.DB.prepare("INSERT INTO submissions (id, kind, store_id, payload, status) VALUES (?, ?, ?, ?, 'pending')")
+        .bind(id, kind, storeId, payloadJson).run();
+      const approve = env.ADMIN_KEY ? `${WORKER_URL}/submit/approve?id=${id}&key=${encodeURIComponent(env.ADMIN_KEY)}` : null;
+      const reject = env.ADMIN_KEY ? `${WORKER_URL}/submit/reject?id=${id}&key=${encodeURIComponent(env.ADMIN_KEY)}` : null;
+      tgNotify(env, ctx,
+        submissionSummary(kind, storeId, payload) + '\n\n' +
+        (approve
+          ? `✅ Approve:\n${approve}\n\n❌ Reject:\n${reject}`
+          : '(Set ADMIN_KEY to get one-tap approve/reject links here.)') +
+        (storeId ? `\n\n${storeLink(storeId)}` : ''));
+      return json({ ok: true, id }, 200, origin);
+    }
+    // Owner taps ✅ in Telegram. A contribution or owner submission becomes a
+    // GitHub issue; a claim mints the store's PIN. GET so Telegram linkifies it,
+    // ADMIN_KEY-gated like every other approve route here.
+    if (url.pathname === '/submit/approve' || url.pathname === '/submit/reject') {
+      return new Response('use GET', { status: 405, headers: cors(origin) });
     }
 
     // ── Crowdsourced restock confirmation ──

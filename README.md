@@ -41,7 +41,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - ✅ Mark stores as **visited**
 - 🔔 **Restock alerts** — follow a store and get a push notification the morning it restocks (opt-in; installed PWA required on iOS 16.4+)
 - ➕ **Add**, ✏️ **edit**, and 🗑️ **remove/hide** stores
-- 🤝 **Share your map** & **contribute** additions/edits to everyone
+- 🤝 **Contribute** additions/edits for review, and **back up** everything on your device
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
 - 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` for stores restocking today, `/cheap` for the best by-weight deals
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
@@ -91,17 +91,17 @@ Green → amber → red is one scale, not three categories: it is the same journ
 
 ## 🤝 Sharing & Contributing
 
-Stores you add or edit are normally saved only on your own device. The **🤝 button** (top-right) lets you share them:
+Stores you add or edit are saved only on your own device. The **🤝 button** (top-right) is where they leave it:
 
-- **🔗 Copy share link** — sends your added & edited stores to anyone. When they open the link, your stores merge onto their map (duplicates are skipped automatically). You can also **download a file** or **copy a short code** instead.
-- **📥 Import from others** — paste a link/code someone sent you, or load their `.json` file, to add their stores to yours.
-- **🌍 Contribute to the official map** — opens a pre-filled [GitHub issue](https://github.com/anonymouspartner/lviv-secondhand/issues) with your additions and corrections. Once a maintainer merges it, your changes ship in the map everyone downloads. (A free GitHub account is needed to post.)
+- **🌍 Contribute to the official map** — sends your additions and corrections to the maintainer for review. **No GitHub account needed.** The app posts to the metrics Worker, the maintainer gets a ✅/❌ in Telegram, and only an approval creates the GitHub issue (server-side, via the API).
+- **🏪 Own a store?** and **🔑 I own this store** — an owner submitting their shop, or claiming one already on the map. Both go through the same Telegram approval. Approving a *claim* mints that store's 4-digit PIN, which lets a flash deal the owner buys publish immediately instead of waiting for review.
+- **🛟 Backup & restore** — a complete snapshot of everything this device holds (visits, delivery dates, added stores, edits, follows), saved as a file you keep. Restoring puts it all back.
 
-> Because the app is a static site with no server, peer sharing is instant and private, while contributions to the *official* map go through GitHub so a maintainer can review and merge them.
+> Peer-to-peer sharing (share links, codes, and importing someone else's map) was removed: everything now flows through the same reviewed pipeline, so the shared map has one path in and one place where quality is checked.
 
 ### For maintainers
 
-Contributions arrive as GitHub issues labelled `map-contribution`. Each issue lists the added/edited/removed stores in plain text plus a collapsible `json` block. To merge:
+Approving a submission in Telegram opens a GitHub issue labelled `map-contribution` (or `owner-submission`). Each lists the added/edited/removed stores in plain text. To merge:
 
 - **`custom`** — copy each object into `stores.json` (a plain JSON array; assign a stable `id`, fill in `hours`).
 - **`overrides`** — fold each into the matching store's fields.
@@ -274,7 +274,7 @@ Surveying ~90 stores and keeping their restock schedules accurate is fieldwork, 
 
 **What counts as a visit** — GPS reading, clear storefront photo, and every question answered. Incomplete submissions don't count, the bot records distance from the store's map pin so far-off visits get flagged, and re-visiting the same store in one survey cycle doesn't earn a second base.
 
-**Updating the map** — restock days, hours, names, addresses and notes are edited **in the app**, then submitted via 🤝 → 🌍 Contribute → 🚀 Submit on GitHub, which opens a pre-filled issue (a free GitHub account is required). Photos, chat and live location go through Telegram, which the app can't do.
+**Updating the map** — restock days, hours, names, addresses and notes are edited **in the app**, then submitted via 🤝 → 🌍 Contribute → 🚀 Send for review, which reaches the maintainer on Telegram (no GitHub account required). Photos, chat and live location go through Telegram, which the app can't do.
 
 **Phase 2** — once pricing is validated, the agent also sells promotions and earns a one-time commission per signed store. Not active yet.
 
@@ -282,7 +282,7 @@ Surveying ~90 stores and keeping their restock schedules accurate is fieldwork, 
 
 No accounts, no ad networks, no personal tracking. Local stores can pay for a clearly-labelled placement on the map, sold directly by us — there is no ad network involved and nothing about you is used to choose what you see. Browsing, adding, and editing stores all stay in your own browser on your own device — none of it is ever sent to a server unless you choose to share it. The only things measured are anonymous, aggregate traffic (page views and visits) via **Cloudflare Web Analytics** and anonymous in-app usage (which stores/filters get used) via a small first-party service on Cloudflare — both cookieless, with no personal data and no individual-visitor or cross-site tracking.
 
-The exception is the **Telegram-based features** (flash-deal alerts, field-scout corrections, community edit suggestions) — these are opt-in and inherently involve Telegram: your chat id is stored so a subscription or a contribution has somewhere to go, alongside a display name and points total if you submit an edit. None of it is linked to your browsing on the map, and none of it is shared beyond what running the feature requires. Full details: **[Privacy Policy](https://www.lvivsecondhand.com/privacy.html)** (also linked from the in-app **?** Help panel) — *note: the policy document itself is still being updated to reflect this; treat this README as the more current source until it is.*
+The exception is the **Telegram-based features** (flash-deal alerts, field-scout corrections, community edit suggestions) — these are opt-in and inherently involve Telegram: your chat id is stored so a subscription or a contribution has somewhere to go, alongside a display name and points total if you submit an edit. None of it is linked to your browsing on the map, and none of it is shared beyond what running the feature requires. Full details: **[Privacy Policy](https://www.lvivsecondhand.com/privacy.html)** (also linked from the in-app **?** Help panel)
 
 ## 📊 Analytics & metrics (for maintainers)
 
