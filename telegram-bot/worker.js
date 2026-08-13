@@ -815,8 +815,12 @@ async function promptStorePick(env, uid, chatId, session) {
     const onRoute = routeIds.includes(s.id) ? ` 🧭${routeIds.indexOf(s.id) + 1}` : '';
     return `${i + 1}. <b>${esc(s.name)}</b>${onRoute} · ${fmtDist(d)}${s.address ? ' — ' + esc(s.address) : ''}`;
   });
+  // The line on a real map, from wherever they are in the round — no need to
+  // re-run /route to get their bearings.
+  const mapIds = (routeIds.length ? routeIds : near.map(({ s }) => s.id)).join(',');
   await say(env, chatId,
     '2️⃣ Який це магазин? Надішліть номер · Which store? Reply with the number:\n' + lines.join('\n') +
+    `\n\n🗺️ <a href="${APP_URL}?route=${mapIds}">${routeIds.length ? 'Маршрут на карті · Route on the map' : 'Ці магазини на карті · These stores on the map'}</a>` +
     '\n\nНемає у списку — надішліть назву, або <code>new Назва</code>.\nNot listed — send a name, or <code>new Name</code>.',
     near.map((_, i) => [String(i + 1)]));
 }
@@ -1152,10 +1156,12 @@ async function handleVisit(env, c, msg, ctx) {
       + `&origin=${from.lat},${from.lng}`
       + `&destination=${ordered[ordered.length - 1].lat},${ordered[ordered.length - 1].lng}`
       + (ordered.length > 1 ? '&waypoints=' + ordered.slice(0, -1).slice(0, 9).map((s) => `${s.lat},${s.lng}`).join('|') : '');
+    const routeUrl = `${APP_URL}?route=${ordered.map((s) => s.id).join(',')}`;
     await say(env, chatId,
       `🧭 <b>Маршрут · Route</b> — ${ordered.length} магазинів, ~${fmtDist(total)} пішки\n\n` +
       lines.join('\n') +
-      `\n\n🗺️ <a href="${mapsUrl}">Відкрити в Google Maps · Open in Google Maps</a>\n\n` +
+      `\n\n🗺️ <a href="${routeUrl}">Показати на карті · See it on the map</a>` +
+      `\n🧭 <a href="${mapsUrl}">Навігація в Google Maps · Turn-by-turn in Google Maps</a>\n\n` +
       'Далі — /visit біля першого магазину. · Then /visit at the first store.');
     return true;
   }
