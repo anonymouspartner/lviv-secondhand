@@ -188,7 +188,7 @@
   "cycle": 35,
   "lat": 49.840059,
   "lng": 24.032867,
-  "note": "Central Lviv. 5-week cycle. Luxury section separate. Weekly promos."
+  "note": "Central Lviv. 5-week cycle. Luxury section separate. Weekly promos. Next restock 17.08.2026"
  },
  {
   "id": "s2",
@@ -556,7 +556,7 @@
   "cycle": 7,
   "lat": 49.835161,
   "lng": 24.005551,
-  "note": ""
+  "note": "50% off"
  },
  {
   "id": "c11",
@@ -1466,29 +1466,6 @@
   "note": "By weight."
  },
  {
-  "id": "c52",
-  "name": "Секонд-хенд Люкс",
-  "brand": "Independent",
-  "address": "вул. Федьковича, 18",
-  "addressEn": "Fedkovycha St, 18",
-  "phone": "",
-  "type": "other",
-  "pricing": "item",
-  "hours": {
-   "mon": "?",
-   "tue": "?",
-   "wed": "?",
-   "thu": "?",
-   "fri": "?",
-   "sat": "?",
-   "sun": "?"
-  },
-  "cycle": 7,
-  "lat": 49.835373,
-  "lng": 24.002616,
-  "note": "From locator.lviv.ua listing."
- },
- {
   "id": "c53",
   "name": "Світ секонд-хенду — Патона 2",
   "brand": "Світ секонд-хенду",
@@ -1674,7 +1651,7 @@
  },
  {
   "id": "c61",
-  "name": "Еврошоп",
+  "name": "Євро секонд хенд",
   "brand": "Independent",
   "address": "вул. Базарна, 1",
   "addressEn": "Bazarna St, 1",
@@ -1772,7 +1749,7 @@
   "addressEn": "Lypneva Sq, 6",
   "phone": "",
   "type": "other",
-  "pricing": "item",
+  "pricing": "kg",
   "hours": {
    "mon": "?",
    "tue": "?",
@@ -2085,5 +2062,97 @@
   "lat": 49.868508,
   "lng": 23.9523548,
   "note": "By weight. Part of the Світ секонд-хенду chain."
+ },
+ {
+  "id": "c79",
+  "name": "Супер секонд-хенд",
+  "brand": "Independent",
+  "address": "",
+  "addressEn": "",
+  "phone": "",
+  "type": "other",
+  "pricing": "item",
+  "cycle": 7,
+  "lat": 49.845533,
+  "lng": 24.01953,
+  "note": "",
+  "hours": {
+   "mon": "?",
+   "tue": "?",
+   "wed": "?",
+   "thu": "?",
+   "fri": "?",
+   "sat": "?",
+   "sun": "?"
+  }
+ },
+ {
+  "id": "c80",
+  "name": "Євро секонд-хенд",
+  "brand": "Independent",
+  "address": "",
+  "addressEn": "",
+  "phone": "",
+  "type": "other",
+  "pricing": "kg",
+  "cycle": 7,
+  "lat": 49.783495,
+  "lng": 23.641634,
+  "note": "",
+  "hours": {
+   "mon": "?",
+   "tue": "?",
+   "wed": "?",
+   "thu": "?",
+   "fri": "?",
+   "sat": "?",
+   "sun": "?"
+  }
+ },
+ {
+  "id": "c81",
+  "name": "Economic Class",
+  "brand": "Independent",
+  "address": "",
+  "addressEn": "",
+  "phone": "",
+  "type": "other",
+  "pricing": "kg",
+  "cycle": 7,
+  "lat": 49.783715,
+  "lng": 23.642052,
+  "note": "",
+  "hours": {
+   "mon": "?",
+   "tue": "?",
+   "wed": "?",
+   "thu": "?",
+   "fri": "?",
+   "sat": "?",
+   "sun": "?"
+  }
+ },
+ {
+  "id": "c82",
+  "name": "Family shop",
+  "brand": "Independent",
+  "address": "",
+  "addressEn": "",
+  "phone": "",
+  "type": "other",
+  "pricing": "kg",
+  "cycle": 7,
+  "lat": 49.782477,
+  "lng": 23.64264,
+  "note": "",
+  "hours": {
+   "mon": "?",
+   "tue": "?",
+   "wed": "?",
+   "thu": "?",
+   "fri": "?",
+   "sat": "?",
+   "sun": "?"
+  }
  }
 ]
