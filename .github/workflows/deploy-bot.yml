@@ -1,8 +1,9 @@
 name: Deploy Telegram bot
 
 # Deploys the Cloudflare Worker in telegram-bot/ (the @Secondhandlvivbot bot,
-# including the /visit field-agent subsystem). Run it from the Actions tab
-# whenever you want to push the current `main` to Cloudflare — no terminal needed.
+# including the /visit field-agent subsystem). Runs automatically whenever
+# telegram-bot/** changes on main — mirrors deploy-worker.yml. Can also be
+# run by hand from the Actions tab (no terminal needed).
 #
 # ── One-time setup: three repo secrets ──
 # GitHub → repo Settings → Secrets and variables → Actions → New repository secret:
@@ -22,6 +23,11 @@ name: Deploy Telegram bot
 # sets the BOT_TOKEN secret on it. WEBHOOK_SECRET (already set on the worker) and
 # any other existing secrets are preserved — `wrangler deploy` never deletes them.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'telegram-bot/**'
+      - '.github/workflows/deploy-bot.yml'
   workflow_dispatch:
 
 permissions:
