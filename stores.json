@@ -50,7 +50,8 @@
    "expiresAt": "2026-08-12T23:20:16.029Z",
    "startsAt": "2026-08-12T20:20:16.029Z",
    "text": "30% off next week. All summer clothes"
-  }
+  },
+  "restock_date": "2026-08-07"
  },
  {
   "id": "h2",
@@ -165,7 +166,8 @@
   "cycle": 35,
   "lat": 49.840313,
   "lng": 24.02733,
-  "note": "City centre. 5-week cycle. Luxury items in separate section."
+  "note": "City centre. 5-week cycle. Luxury items in separate section.",
+  "restock_date": "2026-07-13"
  },
  {
   "id": "h7",
@@ -188,7 +190,8 @@
   "cycle": 35,
   "lat": 49.840059,
   "lng": 24.032867,
-  "note": "Central Lviv. 5-week cycle. Luxury section separate. Weekly promos. Next restock 17.08.2026"
+  "note": "Central Lviv. 5-week cycle. Luxury section separate. Weekly promos. Next restock 17.08.2026",
+  "restock_date": "2026-07-17"
  },
  {
   "id": "s2",
@@ -395,7 +398,8 @@
   "cycle": 7,
   "lat": 49.838766,
   "lng": 24.035492,
-  "note": ""
+  "note": "",
+  "restock_date": "2026-08-03"
  },
  {
   "id": "c3",
@@ -441,7 +445,8 @@
   "cycle": 7,
   "lat": 49.839572,
   "lng": 24.026161,
-  "note": ""
+  "note": "",
+  "restock_date": "2026-08-08"
  },
  {
   "id": "c5",
@@ -464,7 +469,8 @@
   "cycle": 7,
   "lat": 49.838513,
   "lng": 24.023277,
-  "note": ""
+  "note": "",
+  "restock_date": "2026-08-08"
  },
  {
   "id": "c7",
@@ -487,7 +493,8 @@
   "cycle": 7,
   "lat": 49.837062,
   "lng": 24.003367,
-  "note": ""
+  "note": "",
+  "restock_date": "2026-08-10"
  },
  {
   "id": "c8",
@@ -1555,7 +1562,8 @@
   "cycle": 7,
   "lat": 49.845374,
   "lng": 24.020345,
-  "note": "From locator.lviv.ua listing."
+  "note": "From locator.lviv.ua listing.",
+  "restock_date": "2026-08-10"
  },
  {
   "id": "c57",
@@ -1670,7 +1678,8 @@
   "cycle": 7,
   "lat": 49.845383,
   "lng": 24.019442,
-  "note": "From locator.lviv.ua listing."
+  "note": "From locator.lviv.ua listing.",
+  "restock_date": "2026-08-10"
  },
  {
   "id": "c62",
@@ -1762,7 +1771,8 @@
   "cycle": 7,
   "lat": 49.834083,
   "lng": 24.002436,
-  "note": "From locator.lviv.ua listing."
+  "note": "From locator.lviv.ua listing.",
+  "restock_date": "2026-08-06"
  },
  {
   "id": "c66",
@@ -2084,7 +2094,8 @@
    "fri": "?",
    "sat": "?",
    "sun": "?"
-  }
+  },
+  "restock_date": "2026-08-10"
  },
  {
   "id": "c80",
@@ -2107,7 +2118,8 @@
    "thu": "08:00–18:00",
    "fri": "08:00–18:00",
    "sat": "08:00–18:00"
-  }
+  },
+  "restock_date": "2026-08-12"
  },
  {
   "id": "c81",
@@ -2130,7 +2142,8 @@
    "thu": "09:00–19:00",
    "fri": "09:00–19:00",
    "sat": "09:00–19:00"
-  }
+  },
+  "restock_date": "2026-07-15"
  },
  {
   "id": "c82",
@@ -2153,6 +2166,7 @@
    "fri": "?",
    "sat": "?",
    "sun": "?"
-  }
+  },
+  "restock_date": "2026-08-12"
  }
 ]
