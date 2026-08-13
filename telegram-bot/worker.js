@@ -548,6 +548,30 @@ async function handleAgentCallback(env, c, cq) {
   const kind = i === -1 ? data : data.slice(0, i);
   const val = i === -1 ? '' : data.slice(i + 1);
 
+  // Taps on the /agent and /admin submenus (see cmdAgentMenu/cmdAdminMenu) —
+  // route straight into the same handlers the equivalent typed command uses.
+  if (kind === 'ag' || kind === 'ad') {
+    const isOwner2 = c.ownerId && String(uid) === c.ownerId;
+    const isAgent2 = c.agentIds.includes(String(uid));
+    if (kind === 'ag') {
+      if (!(isAgent2 || isOwner2)) return;
+      if (val === 'route' || val === 'visit') {
+        if (!isAgent2) { await say(env, chatId, notAgentMsg(uid)); return; }
+        await (val === 'route' ? cmdRoute(env, uid, chatId) : cmdVisit(env, uid, chatId));
+        return;
+      }
+      if (val === 'myvisits') { if (!isAgent2) return; await cmdMyVisits(env, uid, chatId); return; }
+      if (val === 'pay') { await cmdPay(env, c, chatId); return; }
+      if (val === 'job') { await cmdJob(env, chatId); return; }
+      if (val === 'cancel') { await cmdCancel(env, uid, chatId); return; }
+      return;
+    }
+    if (!isOwner2) return;
+    if (val === 'report') { await ownerReport(env, c, chatId); return; }
+    if (val === 'export') { await ownerExport(env, chatId); return; }
+    return;
+  }
+
   // Moderator tapping ✅/❌ on an edit-suggestion message (Feature 6). Gated
   // on isOwner/isAgent — defense in depth in case the moderator channel is
   // ever forwarded or shared beyond its intended audience. No parse_mode on
@@ -632,11 +656,12 @@ async function handleAgentCallback(env, c, cq) {
   }
 }
 
-// Telegram command menus. Everyone gets PUBLIC_CMDS; the owner & agents get an
-// extended per-chat menu that also lists /visit — so only they see it in the menu
-// (it's already functionally gated regardless). Bump CMD_VER to force a re-sync
-// after editing the lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v4';
+// Telegram command menus. Everyone gets PUBLIC_CMDS; agents additionally get a
+// single /agent entry (opens an inline submenu — see cmdAgentMenu) and the
+// owner also gets /admin (see cmdAdminMenu), instead of every task getting its
+// own top-level command. Bump CMD_VER to force a re-sync after editing the
+// lists. Self-managing → no BotFather /setcommands needed.
+const CMD_VER = 'v5';
 const PUBLIC_CMDS = [
   { command: 'today', description: 'Магазини із завезенням сьогодні' },
   { command: 'cheap', description: 'Найкращі ціни на вагу зараз' },
@@ -653,18 +678,8 @@ async function syncBotCommands(env, userId, isOwner, isAgent) {
   // Extended menu — only for owner/agents, scoped to their own chat, once each.
   if (!(isOwner || isAgent)) return;
   if ((await env.VISITS.get('cmds:' + userId)) === CMD_VER) return;
-  const cmds = PUBLIC_CMDS.concat([
-    { command: 'route', description: '🧭 Маршрут по найближчих магазинах' },
-    { command: 'visit', description: '📝 Записати візит у магазин' },
-    { command: 'myvisits', description: 'Мої візити' },
-    { command: 'pay', description: '💰 Схема оплати' },
-    { command: 'job', description: '📋 Опис вакансії' },
-    { command: 'cancel', description: 'Скасувати поточний візит' },
-  ]);
-  if (isOwner) cmds.push(
-    { command: 'report', description: 'Звіт і оплата' },
-    { command: 'export', description: 'Експорт візитів (CSV)' },
-  );
+  const cmds = PUBLIC_CMDS.concat([{ command: 'agent', description: '🧭 Меню агента · Agent menu' }]);
+  if (isOwner) cmds.push({ command: 'admin', description: '⚙️ Адмін-меню · Admin menu' });
   await tg(env, 'setMyCommands', { commands: cmds, scope: { type: 'chat', chat_id: userId } });
   await env.VISITS.put('cmds:' + userId, CMD_VER);
 }
@@ -1051,6 +1066,70 @@ function payText(c) {
   ].join('\n');
 }
 
+// Individual agent/admin actions -- shared between typed commands and taps on
+// the /agent and /admin inline submenus (see cmdAgentMenu/cmdAdminMenu below
+// and the 'ag'/'ad' callback_data handling in handleAgentCallback).
+async function cmdCancel(env, userId, chatId) {
+  const session = await getSession(env, userId);
+  if (!session) return false;
+  await clearSession(env, userId);
+  await say(env, chatId, 'Скасовано. · Cancelled. /visit щоб почати знову.');
+  return true;
+}
+async function cmdMyVisits(env, userId, chatId) {
+  const n = Number((await env.VISITS.get('count:agent:' + userId)) || 0);
+  await say(env, chatId, `📊 Ваших візитів усього · Your total visits: <b>${n}</b>`);
+}
+async function cmdPay(env, c, chatId) {
+  await say(env, chatId, payText(c));
+}
+async function cmdJob(env, chatId) {
+  await say(env, chatId, jobText());
+}
+async function cmdRoute(env, userId, chatId) {
+  await putSession(env, userId, { step: 'route_loc', qi: 0, data: {} });
+  await say(env, chatId,
+    '🧭 <b>Маршрут на сьогодні · Today\u2019s route</b>\n' +
+    'Надішліть свою <b>геолокацію</b> — складу маршрут по найближчих магазинах.\n' +
+    'Share your <b>location</b> and I\u2019ll plan a walking route through the nearest stores.\n\n' +
+    '/cancel щоб вийти · to abort');
+}
+async function cmdVisit(env, userId, chatId, session) {
+  if (session === undefined) session = await getSession(env, userId);
+  // Don't silently discard a half-finished survey -- losing a photo and six
+  // answers to a mistyped command is the worst thing this flow can do.
+  if (session && session.step !== 'route_loc' && session.step !== 'done') {
+    session.step = 'resume_ask';
+    await putSession(env, userId, session);
+    await say(env, chatId,
+      '⚠️ У вас є незавершений візит' + (session.data.store ? ` — <b>${esc(session.data.store.name)}</b>` : '') + '.\n' +
+      'You have a survey in progress. Continue it, or start over?',
+      [['▶️ Продовжити / Continue', '🔄 Почати заново / Restart']]);
+    return;
+  }
+  await startVisit(env, userId, chatId);
+}
+async function cmdAgentMenu(env, chatId, isAgent) {
+  const rows = [];
+  if (isAgent) {
+    rows.push([{ text: '🧭 Маршрут · Route', callback_data: 'ag:route' }]);
+    rows.push([{ text: '📝 Візит · Visit', callback_data: 'ag:visit' }]);
+    rows.push([{ text: '📊 Мої візити · My visits', callback_data: 'ag:myvisits' }]);
+  }
+  rows.push([{ text: '💰 Оплата · Pay', callback_data: 'ag:pay' }]);
+  rows.push([{ text: '📋 Вакансія · Job', callback_data: 'ag:job' }]);
+  rows.push([{ text: '❌ Скасувати активну дію · Cancel', callback_data: 'ag:cancel' }]);
+  await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML',
+    text: '🧭 <b>Меню агента · Agent menu</b>', reply_markup: { inline_keyboard: rows } });
+}
+async function cmdAdminMenu(env, chatId) {
+  await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML',
+    text: '⚙️ <b>Адмін-меню · Admin menu</b>', reply_markup: { inline_keyboard: [
+      [{ text: '📈 Звіт · Report', callback_data: 'ad:report' }],
+      [{ text: '📤 Експорт · Export', callback_data: 'ad:export' }],
+    ] } });
+}
+
 // Handle an update for the visit subsystem. Returns true if it consumed the update.
 async function handleVisit(env, c, msg, ctx) {
   const { userId, chatId, text, from } = ctx;
@@ -1059,59 +1138,50 @@ async function handleVisit(env, c, msg, ctx) {
   const command = text ? (/^\/([a-z]+)(?:@\w+)?/i.exec(text.trim()) || [])[1]?.toLowerCase() : null;
 
   // Keep each person's Telegram command menu in sync (public menu for everyone;
-  // the extended /visit menu only for the owner & agents).
+  // the extended /agent + /admin menu only for the owner & agents).
   if (command) await syncBotCommands(env, userId, isOwner, isAgent);
+
+  if (command === 'agent') {
+    if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    await cmdAgentMenu(env, chatId, isAgent);
+    return true;
+  }
+  if (command === 'admin') {
+    if (!isOwner) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    await cmdAdminMenu(env, chatId);
+    return true;
+  }
 
   if (isOwner && (command === 'report' || command === 'visits')) { await ownerReport(env, c, chatId); return true; }
   if (isOwner && command === 'export') { await ownerExport(env, chatId); return true; }
 
   const session = await getSession(env, userId);
 
-  if (command === 'cancel') {
-    if (session) { await clearSession(env, userId); await say(env, chatId, 'Скасовано. · Cancelled. /visit щоб почати знову.'); return true; }
-    return false;
-  }
+  if (command === 'cancel') return await cmdCancel(env, userId, chatId);
   if (command === 'myvisits') {
     if (!isAgent) return false;
-    const n = Number((await env.VISITS.get('count:agent:' + userId)) || 0);
-    await say(env, chatId, `📊 Ваших візитів усього · Your total visits: <b>${n}</b>`);
+    await cmdMyVisits(env, userId, chatId);
     return true;
   }
   if (command === 'pay') {
     if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
-    await say(env, chatId, payText(c));
+    await cmdPay(env, c, chatId);
     return true;
   }
   if (command === 'job' || command === 'brief') {
     if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
-    await say(env, chatId, jobText());
+    await cmdJob(env, chatId);
     return true;
   }
   if (command === 'route') {
     if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
-    await putSession(env, userId, { step: 'route_loc', qi: 0, data: {} });
-    await say(env, chatId,
-      '🧭 <b>Маршрут на сьогодні · Today\u2019s route</b>\n' +
-      'Надішліть свою <b>геолокацію</b> — складу маршрут по найближчих магазинах.\n' +
-      'Share your <b>location</b> and I\u2019ll plan a walking route through the nearest stores.\n\n' +
-      '/cancel щоб вийти · to abort');
+    await cmdRoute(env, userId, chatId);
     return true;
   }
 
   if (command === 'visit') {
     if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
-    // Don't silently discard a half-finished survey — losing a photo and six
-    // answers to a mistyped command is the worst thing this flow can do.
-    if (session && session.step !== 'route_loc' && session.step !== 'done') {
-      session.step = 'resume_ask';
-      await putSession(env, userId, session);
-      await say(env, chatId,
-        '⚠️ У вас є незавершений візит' + (session.data.store ? ` — <b>${esc(session.data.store.name)}</b>` : '') + '.\n' +
-        'You have a survey in progress. Continue it, or start over?',
-        [['▶️ Продовжити / Continue', '🔄 Почати заново / Restart']]);
-      return true;
-    }
-    await startVisit(env, userId, chatId);
+    await cmdVisit(env, userId, chatId, session);
     return true;
   }
 
