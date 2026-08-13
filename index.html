@@ -2444,7 +2444,8 @@ function contributeGitHub(){
   if(c.edited){
     lines.push('### ✏️ Corrections to existing stores (' + c.edited + ')');
     (b.overrideList||[]).forEach(o => {
-      const fields = Object.keys(o.changes||{}).map(k => k + ': ' + o.changes[k]).join('; ');
+      const fmt = v => (v && typeof v === 'object') ? Object.keys(v).map(d => d + ' ' + v[d]).join(', ') : v;
+      const fields = Object.keys(o.changes||{}).map(k => k + ': ' + fmt(o.changes[k])).join('; ');
       lines.push('- **' + o.name + '** (`' + o.id + '`) → ' + fields);
     });
     lines.push('');
@@ -2821,7 +2822,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-12.6';
+const APP_VERSION = '2026-08-13.1';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
