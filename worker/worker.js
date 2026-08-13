@@ -101,6 +101,18 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS pending_broadcasts (id TEXT PRIMARY KEY, chat_id TEXT NOT NULL, text TEXT NOT NULL, send_at TEXT NOT NULL, sent INTEGER NOT NULL DEFAULT 0)"
   ).run();
+  // Crowdsourced restock confirmations. `fp` is a salted hash of
+  // (store, date, client IP) — see reportFingerprint(): it makes one report
+  // per person per store per day idempotent without storing an IP or handing
+  // the browser a device id it would otherwise have to keep.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS restock_reports (fp TEXT PRIMARY KEY, store_id TEXT NOT NULL, report_date TEXT NOT NULL, created TEXT NOT NULL DEFAULT (datetime('now')))"
+  ).run();
+  // Which (store, date) pairs already went to the map, so the 3rd and 50th
+  // report don't re-dispatch what the 2nd already published.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS restock_published (store_id TEXT NOT NULL, report_date TEXT NOT NULL, created TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (store_id, report_date))"
+  ).run();
   _schemaReady = true;
 }
 
@@ -538,6 +550,45 @@ const EDIT_POINTS = 10;
 const EARLY_BIRD_DELAY_MIN = 15;
 const UPDATES_MAX_JSON = 4000; // bytes — generous for a store's editable fields
 
+// ── Crowdsourced restock confirmations ───────────────────────────────────────
+// The cycle tracker is what the app is for, but it needs a delivery date per
+// store and almost none have one — historically they arrived only when the
+// owner hand-carried them through a GitHub issue. Anyone opening a store page
+// is standing in or near that store, so one tap ("fresh stock today?") is the
+// cheapest possible way to collect it.
+//
+// Two independent reports for the same (store, date) publish it to the live
+// map through the same dispatch path the flash-deal and edit flows use. One
+// report is not enough — the app has no login, so a single tap would let one
+// person rewrite public data — but the owner is pinged on the first one and
+// can publish it by hand from Telegram if they trust it.
+const RESTOCK_CONFIRM_THRESHOLD = 2;
+const RESTOCK_MAX_DAYS_OFF = 2;   // reject reports dated far from today
+
+// Identifies a reporter well enough to stop double-counting, without keeping
+// anything that identifies them afterwards. The IP is hashed, never stored, and
+// salted so the digests can't be reversed by trying candidate IPs. Deliberately
+// not a client-side id: the privacy policy promises the app sends no device
+// identifier, and this keeps that true.
+async function reportFingerprint(env, storeId, date, ip) {
+  const salt = env.ADMIN_KEY || env.BOUNTY_SECRET || 'lviv-restock';
+  const raw = `${storeId}|${date}|${ip}|${salt}`;
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Publishes a confirmed date to the map. Guarded by restock_published so it
+// runs at most once per (store, date) no matter how many reports arrive.
+async function publishRestockDate(env, storeId, date) {
+  const already = await env.DB.prepare('SELECT 1 FROM restock_published WHERE store_id = ? AND report_date = ?')
+    .bind(storeId, date).first();
+  if (already) return false;
+  await dispatchMapPatch(env, storeId, { restock_date: date });
+  await env.DB.prepare('INSERT INTO restock_published (store_id, report_date) VALUES (?, ?) ON CONFLICT DO NOTHING')
+    .bind(storeId, date).run();
+  return true;
+}
+
 async function awardPoints(env, chatId, name, points) {
   if (name) {
     await env.DB.prepare(
@@ -823,6 +874,24 @@ export default {
         if (row.alert) await broadcastFlashDeal(env, ctx, row.store_id, row.text, row.expires_at);
         return new Response(`✅ Flash deal approved and published for ${row.store_id}.`, { status: 200 });
       }
+      // Owner taps this from the "1 of 2" restock notification to publish a
+      // single report without waiting for a second one. Same GET-so-Telegram-
+      // linkifies-it and same ADMIN_KEY gate as /flash-deal/approve above.
+      if (url.pathname === '/restock/approve') {
+        if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) return new Response('unauthorized', { status: 401 });
+        const store = url.searchParams.get('store') || '';
+        const date = url.searchParams.get('date') || '';
+        if (!/^[a-z0-9]{1,12}$/i.test(store) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return new Response('bad request', { status: 400 });
+        await ensureSchema(env);
+        try {
+          const published = await publishRestockDate(env, store, date);
+          return new Response(published
+            ? `✅ Restock date ${date} published for ${store}.`
+            : `Already published for ${store} on ${date}.`, { status: 200 });
+        } catch (e) {
+          return new Response('dispatch failed — check GH_PAT and the map-update workflow logs', { status: 502 });
+        }
+      }
       // À la carte one-off: /order?store=<id>&item=deal|poster|push. Unlike /promote
       // this buys a service the owner delivers by hand, so the webhook records an order
       // rather than a placement. Nothing in the app changes when one is bought.
@@ -1017,6 +1086,56 @@ export default {
       await ensureSchema(env);
       await env.DB.prepare('DELETE FROM store_subs WHERE chat_id = ?').bind(String(chatId)).run();
       return new Response(null, { status: 204, headers: cors(origin) });
+    }
+
+    // ── Crowdsourced restock confirmation ──
+    // One tap from the store page: "fresh stock today?". Deliberately carries
+    // no identity — dedup happens server-side on a salted hash of the client
+    // IP (see reportFingerprint), which is never stored.
+    if (url.pathname === '/api/restock/report') {
+      const storeId = body && body.storeId;
+      const date = body && body.date;
+      if (!/^[a-z0-9]{1,12}$/i.test(String(storeId || '')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      // A date far from today is either a bug or someone trying to shift a
+      // store's cycle; either way it has no business reaching the map.
+      const parsed = Date.parse(date + 'T00:00:00Z');
+      if (isNaN(parsed) || Math.abs(Date.now() - parsed) > RESTOCK_MAX_DAYS_OFF * 86400000) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      await ensureSchema(env);
+      const ip = request.headers.get('CF-Connecting-IP') || 'anon';
+      const fp = await reportFingerprint(env, storeId, date, ip);
+      await env.DB.prepare('INSERT INTO restock_reports (fp, store_id, report_date) VALUES (?, ?, ?) ON CONFLICT DO NOTHING')
+        .bind(fp, storeId, date).run();
+      const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM restock_reports WHERE store_id = ? AND report_date = ?')
+        .bind(storeId, date).first();
+      const count = (row && row.n) || 0;
+      if (count >= RESTOCK_CONFIRM_THRESHOLD) {
+        try {
+          const published = await publishRestockDate(env, storeId, date);
+          if (published) {
+            tgNotify(env, ctx, `📦 Restock confirmed by ${count} people — published\n\nStore: ${storeId}\nDate:  ${date}\n\n${storeLink(storeId)}`);
+          }
+        } catch (e) {
+          tgNotify(env, ctx, `⚠️ Restock for ${storeId} (${date}) hit ${count} reports but failed to dispatch — check GH_PAT and the map-update workflow logs.`);
+          return json({ ok: true, count, published: false }, 200, origin);
+        }
+        return json({ ok: true, count, published: true }, 200, origin);
+      }
+      // First sighting: tell the owner, with a link to publish it themselves
+      // rather than wait for a second person to walk past the same shop.
+      if (count === 1) {
+        const link = env.ADMIN_KEY
+          ? `${WORKER_URL}/restock/approve?store=${encodeURIComponent(storeId)}&date=${encodeURIComponent(date)}&key=${encodeURIComponent(env.ADMIN_KEY)}`
+          : null;
+        tgNotify(env, ctx,
+          `📦 Restock reported (1 of ${RESTOCK_CONFIRM_THRESHOLD})\n\nStore: ${storeId}\nDate:  ${date}\n\n` +
+          (link ? `Publish now without waiting for a second report:\n${link}\n\n` : '') +
+          `${storeLink(storeId)}`);
+      }
+      return json({ ok: true, count, published: false }, 200, origin);
     }
 
     // ── Crowdsourced moderation (Feature 6) ──
