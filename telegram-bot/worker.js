@@ -284,7 +284,7 @@ function say(env, chatId, text, keyboard) {
 // same VISITS KV as /visit, under a distinct bounty-session: prefix so the two
 // flows can't collide for one user. Needs BOT_TOKEN + VISITS (like /visit) plus
 // BOUNTY_SECRET (must match the metrics Worker's BOUNTY_SECRET — it verifies
-// the token that Worker signed) and GITHUB_PAT (to dispatch the resulting
+// the token that Worker signed) and GH_PAT (to dispatch the resulting
 // patch — see scripts/patch-store.js and .github/workflows/update-map.yml).
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -326,11 +326,11 @@ async function verifyBountyToken(env, token) {
 // here rather than imported — that script uses node:fs to resolve paths and
 // isn't portable to the Workers runtime.
 async function dispatchMapPatch(env, storeId, updates) {
-  if (!env.GITHUB_PAT) throw new Error('GITHUB_PAT not configured');
+  if (!env.GH_PAT) throw new Error('GH_PAT not configured');
   const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${env.GITHUB_PAT}`,
+      Authorization: `Bearer ${env.GH_PAT}`,
       Accept: 'application/vnd.github+json',
       'Content-Type': 'application/json',
       'X-GitHub-Api-Version': '2022-11-28',

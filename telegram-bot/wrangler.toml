@@ -51,9 +51,9 @@ RATE_BONUS = "200" # ₴ per bonus event (poster placed / owner contact + consen
 #                  same value as the metrics Worker's BOUNTY_SECRET (worker/),
 #                  which signs it — set both with the same random string:
 #                    printf '%s' "<random>" | npx wrangler@3 secret put BOUNTY_SECRET
-#   GITHUB_PAT    — classic PAT with the `repo` scope, used to dispatch the
+#   GH_PAT        — classic PAT with the `repo` scope, used to dispatch the
 #                  confirmed patch to .github/workflows/update-map.yml:
-#                    printf '%s' "<pat>" | npx wrangler@3 secret put GITHUB_PAT
+#                    printf '%s' "<pat>" | npx wrangler@3 secret put GH_PAT
 #
 # ── Crowdsourced moderation (opt-in) ────────────────────────────────────────
 # Adds /start edit_<id> (claims a web-submitted correction — see
