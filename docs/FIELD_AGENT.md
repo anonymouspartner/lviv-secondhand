@@ -11,18 +11,16 @@ each visit, and gets paid. Sections that the agent uses day-to-day are bilingual
 
 ---
 
-## 1. The two bots · Два боти
+## 1. The bot · Бот
 
-| Bot | Purpose | Who |
-|---|---|---|
-| **@Secondhandlvivbot** | Log each store visit: `/visit` walks through GPS → store → photo → questionnaire. This is the record that pay is calculated from. | Agent |
-| **capybara-bot** (private) | Day-to-day communication & notes between owner and agent. It translates English ↔ Ukrainian both ways, handles voice notes, and keeps a searchable memory (`/remember`, `/pin`, `/recap`). | Owner ↔ Agent |
+**@Secondhandlvivbot** — log each store visit: `/visit` walks through GPS →
+store → photo → questionnaire. This is the record that pay is calculated
+from.
 
-**Rule of thumb:** *work* (each store) is recorded in **@Secondhandlvivbot**;
-*talking* (questions, coordination, daily plan) happens in **capybara-bot**.
+Questions, coordination, and the daily plan — message the owner directly on
+Telegram.
 
-**Правило:** *робота* (кожен магазин) — у **@Secondhandlvivbot**; *спілкування*
-(питання, координація, план на день) — у **capybara-bot**.
+*Питання, координація та план на день — пишіть власнику напряму в Telegram.*
 
 ---
 
@@ -57,7 +55,7 @@ uses the same numbers.
   before it's sent.
 - **Pay cadence:** weekly. The owner runs `/report` (totals + estimated pay) and
   `/export` (full CSV), reconciles against poster photos / form submissions, and
-  pays by the agreed method (cash or bank transfer, ₴ UAH).
+  pays by bank transfer (₴ UAH) to the card the agent has set with `/card`.
 
 *Оплата: **₴80** за перевірений візит (GPS + фото + анкета) + **₴200** бонус за
 результат (плакат розміщено або власник зареєструвався). Ціль: 8–12 магазинів/день.
@@ -78,9 +76,9 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
 ## 3. Standard operating procedure · Порядок роботи
 
 **Before the day / Перед виходом**
-1. Owner sends the day's target area/list in **capybara-bot**.
-2. Agent brings a charged phone with location on, and printed **QR posters**
-   (`marketing/qr-poster.pdf`).
+1. Owner sends the day's target area/list directly on Telegram.
+2. Agent brings a charged phone with location on, and printed **QR posters** —
+   pick these up from the owner in the city center.
 3. In **@Secondhandlvivbot** send **/route** (or **/agent → 🧭 Route**), share
    your location, and get a walking order through the nearest stores — with a
    map link and turn-by-turn Google Maps directions. Optional, but it plans
@@ -101,7 +99,7 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
    in-app **owner form** (or `/submit` in the bot) → that's a **bonus**.
 
 **End of day / Наприкінці дня**
-- Agent: quick summary in **capybara-bot** (areas done, issues, stores to revisit).
+- Agent: quick summary message to the owner directly (areas done, issues, stores to revisit).
 - Owner: `/report` to see the running total; `/export` weekly for the CSV.
 
 ---
@@ -132,8 +130,8 @@ same way (Telegram approval → auto-filed GitHub issue):
 
 **Photos, communication & live location → Telegram.** The app can't take photos,
 chat, or share live position — Telegram does. Storefront photos and the GPS check-in
-go through **/visit** in @Secondhandlvivbot; day-to-day questions, translation, voice
-notes, and live-location sharing go through **capybara-bot**.
+go through **/visit** in @Secondhandlvivbot; day-to-day questions and coordination
+go directly to the owner on Telegram.
 
 *Дані магазину (завезення, години, назва, адреса, GPS, нотатки) редагуються у
 застосунку → **🤝 → 🗺️ Додати до офіційної карти** → власник отримує сповіщення в
@@ -179,8 +177,8 @@ app step below so the store actually appears for shoppers.
 
 ## The sales pipeline (why Phase 1 matters) · Воронка продажів
 
-Every survey is quietly building a sales funnel. Track each store's stage in
-**capybara-bot** (`/remember`, `/pin`):
+Every survey is quietly building a sales funnel. The owner tracks each store's
+stage from the `/visit` notes and `/export` CSV:
 
 `Prospected → Surveyed → Advertised (poster) → Interested (lead) → [owner closes] → Paying → Renewing/Churned`
 
@@ -255,6 +253,7 @@ works typed directly — the menus are just a shortcut.
 | `/route` | agent | plan a walking route through the nearest stores (map link + Google Maps directions) |
 | `/visit` | agent | start a survey |
 | `/myvisits` | agent | their running visit count |
+| `/card` | agent | set/view the payout card or IBAN `/report` pays out to |
 | `/pay` | agent · owner | show the pay scheme (live rates from `RATE_VISIT`/`RATE_BONUS`) |
 | `/job` | agent · owner | this handbook, as a link |
 | `/cancel` | agent | abort the current survey |
