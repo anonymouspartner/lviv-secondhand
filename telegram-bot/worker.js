@@ -57,6 +57,16 @@ function kyivWeekday() {
   return DAYS.includes(wd) ? wd : 'mon';
 }
 
+// ISO date (YYYY-MM-DD) `offsetDays` from today, in Lviv (Europe/Kyiv) — not
+// the server's UTC date. Kyiv runs UTC+2/+3, so for a few hours every night
+// Kyiv has already crossed into a new calendar day while UTC hasn't; a naive
+// `new Date().toISOString()` would record the wrong day during that window.
+// en-CA formats as YYYY-MM-DD directly, so no manual reassembly needed.
+function isoDay(offsetDays) {
+  const d = new Date(Date.now() + (offsetDays || 0) * 86400000);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(d);
+}
+
 // Escape text for Telegram HTML parse mode.
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -135,7 +145,12 @@ function materialsText() {
 
 function todayText() {
   const wd = kyivWeekday();
-  const todays = STORES.filter((s) => s.restockDay === wd);
+  const today = isoDay(0);
+  // A store restocking today shows up either way: a fixed weekly day, or a
+  // dated restock (from /visit or a shopper's one-tap confirmation) that
+  // happens to land on today. The two fields never overlap in practice, but
+  // checking both means neither source of "today" data goes unseen.
+  const todays = STORES.filter((s) => s.restockDay === wd || s.restockDate === today);
   if (!todays.length) {
     return featuredBlock() + [
       `📦 <b>No scheduled restocks today (${DAY_NAMES[wd]}).</b>`,
@@ -155,9 +170,19 @@ function todayText() {
 
 function cheapText() {
   const idx = DAYS.indexOf(kyivWeekday());
+  const today = isoDay(0);
+  // A dated restock is the more precise signal when a store has one — it
+  // beats the weekday fallback, which only ever encodes 0–6 days.
   const scored = STORES
-    .filter((s) => s.restockDay)
-    .map((s) => ({ s, days: (idx - DAYS.indexOf(s.restockDay) + 7) % 7 }))
+    .map((s) => {
+      if (s.restockDate) {
+        const days = Math.round((Date.parse(today) - Date.parse(s.restockDate)) / 86400000);
+        return days >= 0 ? { s, days } : null;
+      }
+      if (s.restockDay) return { s, days: (idx - DAYS.indexOf(s.restockDay) + 7) % 7 };
+      return null;
+    })
+    .filter(Boolean)
     .sort((a, b) => b.days - a.days)
     .slice(0, 6);
   if (!scored.length) return cheapEmpty();
@@ -610,7 +635,10 @@ async function handleAgentCallback(env, c, cq) {
 
   if (kind === 'cyc') {
     session.cycle = val;
-    if (val === '7' || val === '14' || val === '35') {
+    // A restock weekday only pins down a store's position in a 7-day cycle
+    // (see getDayInfo() in index.html) — asking it for a 14- or 35-day cycle
+    // would collect an answer the map can never use.
+    if (val === '7') {
       session.step = 'day';
       await putBountySession(env, uid, session);
       await edit(title + 'День завезення? · Restock day?', getDayOfWeekKeyboard());
@@ -748,11 +776,6 @@ function normalizeHours(v) {
     .slice(0, 40);
 }
 
-const isoDay = (offsetDays) => {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + (offsetDays || 0));
-  return d.toISOString().slice(0, 10);
-};
 // Free-typed "13.08" / "13.08.2026" / "2026-08-13" -> ISO, else null.
 function readDate(t) {
   const s = String(t || '').trim();
@@ -785,24 +808,42 @@ const getSession = (env, uid) => env.VISITS.get(sessionKey(uid), { type: 'json' 
 const putSession = (env, uid, s) => env.VISITS.put(sessionKey(uid), JSON.stringify(s), { expirationTtl: SESSION_TTL });
 const clearSession = (env, uid) => env.VISITS.delete(sessionKey(uid));
 
-// Interpret bilingual button text into stored values.
+// Interpret bilingual button text into stored values. These back a fixed
+// reply keyboard, so a tap always matches — but Telegram lets someone type
+// instead of tapping, so unrecognised text returns null rather than a silent
+// guess; the question-step handler below reprompts on null instead of
+// recording e.g. an accidental typo as "no".
 function readPricing(t) {
   const n = norm(t);
   if (n.includes('вага') || n.includes('weight')) return 'kg';
   if (n.includes('штук') || n.includes('itemi')) return 'item';
   if (n.includes('обид') || n.includes('both')) return 'both';
-  return 'unknown';
+  if (n.includes('не знаю') || n.includes('unknown')) return 'unknown';
+  return null;
 }
 function readSize(t) {
   const n = norm(t);
   if (n.includes('s ') || n.includes('мал') || n.includes('small')) return 'S';
+  if (n.includes('m ') || n.includes('серед') || n.includes('medium')) return 'M';
   if (n.includes('l ') || n.includes('вел') || n.includes('large')) return 'L';
-  return 'M';
+  return null;
 }
+// Loose yes-detection for the free-text /visit confirm step (any phrasing
+// containing an affirmative reads as yes; unmatched text falls through to
+// that step's own reprompt, so no ambiguity there).
 const readYes = (t) => /так|yes|✅/i.test(String(t));
+// Strict yes/no for the poster/contact questions — unlike readYes() above,
+// this returns null for anything that doesn't clearly match either option,
+// so the caller reprompts instead of defaulting an unrecognised answer to "no".
+function readYesNo(t) {
+  const s = String(t || '');
+  if (/так|yes|✅/i.test(s)) return true;
+  if (/ні|no|❌/i.test(s)) return false;
+  return null;
+}
 
 const ROUTE_SIZE = 12;        // a day's zone, matching the handbook's 10–15
-const DUP_WINDOW_DAYS = 30;   // re-surveying inside this warns before submit
+const DUP_WINDOW_DAYS = 30;   // fallback when a store's own cycle is unknown
 
 async function startVisit(env, uid, chatId) {
   await putSession(env, uid, { step: 'location', qi: 0, data: {} });
@@ -823,7 +864,7 @@ async function promptStorePick(env, uid, chatId, session) {
     const r = await env.VISITS.get(routeKey(uid), { type: 'json' });
     if (r && Array.isArray(r.ids)) routeIds = r.ids;
   } catch (e) {}
-  session.data.nearby = near.map(({ s }) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng }));
+  session.data.nearby = near.map(({ s }) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng, cycle: s.cycle }));
   session.step = 'store';
   await putSession(env, uid, session);
   const lines = near.map(({ s, d }, i) => {
@@ -853,7 +894,11 @@ async function pickStore(env, uid, chatId, session, store) {
       const last = await env.VISITS.get(lastVisitKey(store.id));
       if (last) {
         const days = Math.floor((Date.now() - Date.parse(last)) / 86400000);
-        if (days >= 0 && days < DUP_WINDOW_DAYS) session.data.dupDays = days;
+        // A store's own cycle length, when known, is the true "same survey
+        // cycle" window — a fixed 30 days under-warns a 35-day-cycle store
+        // and over-warns a 7-day one.
+        const window = (store.cycle && store.cycle > 0) ? store.cycle : DUP_WINDOW_DAYS;
+        if (days >= 0 && days < window) session.data.dupDays = days;
       }
     } catch (e) {}
   }
@@ -863,7 +908,7 @@ async function pickStore(env, uid, chatId, session, store) {
     ? `\n⚠️ ~${session.data.distM} м від точки на карті — переконайтесь, що ви біля магазину. · ~${session.data.distM} m from the map pin.`
     : '';
   const dup = session.data.dupDays != null
-    ? `\n⚠️ Цей магазин уже обстежували <b>${session.data.dupDays} дн. тому</b> — база за візит нараховується раз на цикл. · Already surveyed ${session.data.dupDays} day(s) ago.`
+    ? `\n⚠️ Цей магазин уже обстежували <b>${session.data.dupDays} дн. тому</b> — база за візит НЕ буде нарахована (бонус — можна). · Already surveyed ${session.data.dupDays} day(s) ago — the visit base won't be paid (a new bonus still can be).`
     : '';
   await say(env, chatId, `✅ ${esc(store.name)}${store.isNew ? ' <i>(новий · new)</i>' : ''}${warn}${dup}\n\n📷 Надішліть <b>одне фото</b> вітрини/входу. · Send <b>one photo</b> of the storefront.`);
 }
@@ -959,27 +1004,44 @@ async function finishVisit(env, c, uid, chatId, session, from) {
     } catch (e) {}
   }
   const bonusUnits = (rec.poster ? 1 : 0) + (rec.contact ? 1 : 0);
-  await bump(env, 'total');
-  await bump(env, 'agent:' + uid);
+  // "No double-pay" (FIELD_AGENT.md §2): a re-survey inside the store's own
+  // cycle (see pickStore()'s dupDays) doesn't earn a second visit base — it
+  // can still earn a bonus for a genuinely new poster/sign-up.
+  const isDup = d.dupDays != null;
+  if (!isDup) {
+    await bump(env, 'total');
+    await bump(env, 'agent:' + uid);
+  }
   if (bonusUnits) await bump(env, 'bonus', bonusUnits);
   await clearSession(env, uid);
 
-  const earned = c.rateVisit + bonusUnits * c.rateBonus;
+  const earned = (isDup ? 0 : c.rateVisit) + bonusUnits * c.rateBonus;
+  const fragments = [];
+  if (!isDup) fragments.push(`+₴${c.rateVisit}`);
+  if (bonusUnits) fragments.push(`+₴${bonusUnits * c.rateBonus} бонус/bonus`);
+  const payLine = fragments.length
+    ? `💵 ${fragments.join(' ')} = <b>₴${earned}</b>`
+    : '⏭️ Нічого не нараховано — цей магазин уже обстежували цього циклу, нового бонусу немає. · Nothing earned — already surveyed this cycle, no new bonus.';
   const mine = Number((await env.VISITS.get('count:agent:' + uid)) || 0);
   await say(env, chatId,
     `✅ <b>Візит записано! · Visit logged!</b>\n` +
-    `💵 +₴${c.rateVisit}${bonusUnits ? ` +₴${bonusUnits * c.rateBonus} бонус/bonus` : ''} = <b>₴${earned}</b>\n` +
+    `${payLine}\n` +
     `📊 Ваших візитів усього · Your total visits: <b>${mine}</b>\n\n` +
     `Наступний магазин — /visit · Next store — /visit`);
 
   // Real-time push to the owner (photo + summary) for verification, if configured.
   if (c.ownerId) {
-    const caption = summary(session).replace('🧾 <b>Перевірте візит · Review visit</b>', `🆕 <b>Візит · Visit</b> — ${esc(rec.agentName)}`);
+    const isNewStore = !(rec.store && rec.store.id);
+    let caption = summary(session).replace('🧾 <b>Перевірте візит · Review visit</b>', `🆕 <b>Візит · Visit</b> — ${esc(rec.agentName)}`);
+    if (isNewStore) {
+      caption += '\n\n🆕 Новий магазин — ще немає в stores.json, потрібно додати вручну. · New store — not in stores.json yet, needs adding by hand.';
+    }
     // A survey collects exactly the fields stores.json holds, so offer to put
     // them on the map right here rather than leaving the owner to retype a CSV.
-    // Only for stores that already exist — a brand-new one has no id to patch.
+    // Only for stores that already exist — dispatchMapPatch() can only patch
+    // an existing entry, not create one, hence the note above for a new store.
     const patch = visitToUpdates(rec);
-    const kb = (rec.store && rec.store.id && Object.keys(patch).length)
+    const kb = (!isNewStore && Object.keys(patch).length)
       ? { inline_keyboard: [[
           { text: '✅ Опублікувати · Publish', callback_data: `vpub:${rec.ts}:${uid}` },
           { text: '❌ Пропустити · Skip', callback_data: 'vskip' },
@@ -993,14 +1055,20 @@ async function finishVisit(env, c, uid, chatId, session, from) {
 async function ownerReport(env, c, chatId) {
   const total = Number((await env.VISITS.get('count:total')) || 0);
   const bonus = Number((await env.VISITS.get('count:bonus')) || 0);
+  // The owner is often also listed in AGENT_IDS (to smoke-test /visit) — their
+  // own visits shouldn't inflate the payroll total below.
+  const ownerVisits = (c.ownerId && c.agentIds.includes(c.ownerId))
+    ? Number((await env.VISITS.get('count:agent:' + c.ownerId)) || 0) : 0;
   const lines = ['📊 <b>Field report · Звіт</b>', `Visits logged: <b>${total}</b>`, `Bonus events: <b>${bonus}</b>`];
   // Per-agent counts.
   for (const id of c.agentIds) {
     const n = Number((await env.VISITS.get('count:agent:' + id)) || 0);
-    if (n) lines.push(`• agent <code>${id}</code>: ${n} visits`);
+    if (n) lines.push(`• agent <code>${id}</code>${id === c.ownerId ? ' (owner — excluded from pay below)' : ''}: ${n} visits`);
   }
-  const pay = total * c.rateVisit + bonus * c.rateBonus;
-  lines.push('', `💵 Estimated pay: <b>₴${pay}</b>  (₴${c.rateVisit}/visit + ₴${c.rateBonus}/bonus)`);
+  const payableVisits = total - ownerVisits;
+  const pay = payableVisits * c.rateVisit + bonus * c.rateBonus;
+  lines.push('', `💵 Estimated pay: <b>₴${pay}</b>  (₴${c.rateVisit}/visit × ${payableVisits}${ownerVisits ? `, excludes ${ownerVisits} owner visit(s)` : ''} + ₴${c.rateBonus}/bonus × ${bonus})`);
+  lines.push('Note: bonus events aren’t tracked per-agent, so an owner smoke-test bonus (if any) is still included above.');
   lines.push('Use /export for the full CSV.');
   await say(env, chatId, lines.join('\n'));
 }
@@ -1265,14 +1333,16 @@ async function handleVisit(env, c, msg, ctx) {
     if (!hits.length) { await say(env, chatId, '🤷 Не знайдено. Оберіть номер, спробуйте іншу назву, або <code>new Назва</code>.\nNo match — pick a number, try another name, or <code>new Name</code>.'); return true; }
     if (hits.length === 1) {
       const s = hits[0];
-      await pickStore(env, userId, chatId, session, { id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng });
+      await pickStore(env, userId, chatId, session, { id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng, cycle: s.cycle });
       return true;
     }
     session.step = 'store_pick';
-    session.data.candidates = hits.slice(0, MATCH_LIMIT).map((s) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng }));
+    session.data.candidates = hits.slice(0, MATCH_LIMIT).map((s) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng, cycle: s.cycle }));
     await putSession(env, userId, session);
     const list = session.data.candidates.map((s, i) => `${i + 1}. ${esc(s.name)}${s.address ? ' — ' + esc(s.address) : ''}`).join('\n');
-    await say(env, chatId, 'Кілька збігів — надішліть номер · Several matches — reply with the number:\n' + list,
+    // searchStores() over-fetches by one precisely to detect this case.
+    const more = hits.length > MATCH_LIMIT ? '\n…і ще — уточніть назву. · …and more — try a more specific name.' : '';
+    await say(env, chatId, 'Кілька збігів — надішліть номер · Several matches — reply with the number:\n' + list + more,
       session.data.candidates.map((_, i) => [String(i + 1)]));
     return true;
   }
@@ -1298,13 +1368,39 @@ async function handleVisit(env, c, msg, ctx) {
     const question = QUESTIONS[session.qi];
     const val = (text || '').trim();
     if (!val && question.key !== 'notes') { await say(env, chatId, 'Оберіть варіант або надішліть відповідь. · Pick an option or send an answer.'); return true; }
+    // A tap on the reply keyboard always matches; this only catches someone
+    // typing instead — reprompt rather than silently recording a guess.
+    const reprompt = async () => {
+      await say(env, chatId, 'Не розпізнав відповідь — оберіть варіант нижче. · Didn’t recognise that — pick an option below.', question.kb);
+      return true;
+    };
     switch (question.key) {
-      case 'pricing': session.data.pricing = readPricing(val); break;
+      case 'pricing': {
+        const v = readPricing(val);
+        if (v == null) return reprompt();
+        session.data.pricing = v;
+        break;
+      }
       case 'lastdel': session.data.lastDelivery = readLastDelivery(val); break;
       case 'hours': session.data.hours = normalizeHours(val); break;
-      case 'size': session.data.size = readSize(val); break;
-      case 'poster': session.data.poster = readYes(val); break;
-      case 'contact': session.data.contact = readYes(val); break;
+      case 'size': {
+        const v = readSize(val);
+        if (v == null) return reprompt();
+        session.data.size = v;
+        break;
+      }
+      case 'poster': {
+        const v = readYesNo(val);
+        if (v == null) return reprompt();
+        session.data.poster = v;
+        break;
+      }
+      case 'contact': {
+        const v = readYesNo(val);
+        if (v == null) return reprompt();
+        session.data.contact = v;
+        break;
+      }
       case 'notes': session.data.notes = val || '-'; break;
     }
     session.qi++;

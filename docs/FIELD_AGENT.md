@@ -15,7 +15,7 @@ each visit, and gets paid. Sections that the agent uses day-to-day are bilingual
 
 | Bot | Purpose | Who |
 |---|---|---|
-| **@Secondhandlvivbot** | Log each store visit: `/visit` walks through store → GPS → photo → questionnaire. This is the record that pay is calculated from. | Agent |
+| **@Secondhandlvivbot** | Log each store visit: `/visit` walks through GPS → store → photo → questionnaire. This is the record that pay is calculated from. | Agent |
 | **capybara-bot** (private) | Day-to-day communication & notes between owner and agent. It translates English ↔ Ukrainian both ways, handles voice notes, and keeps a searchable memory (`/remember`, `/pin`, `/recap`). | Owner ↔ Agent |
 
 **Rule of thumb:** *work* (each store) is recorded in **@Secondhandlvivbot**;
@@ -51,8 +51,10 @@ uses the same numbers.
   and every question answered. Incomplete submissions don't count.
 - The bot records **distance from the store's map pin**; visits far from the pin
   (or from a plausible new-store location) are flagged for the owner to review.
-- **No double-pay:** re-visiting the same store in the same survey cycle doesn't
-  earn a second base (it can still earn a bonus for a new poster/sign-up).
+- **No double-pay:** the bot enforces this automatically — re-visiting the same
+  store inside its own restock cycle doesn't earn a second base (it can still
+  earn a bonus for a new poster/sign-up). The agent sees this at submit time,
+  before it's sent.
 - **Pay cadence:** weekly. The owner runs `/report` (totals + estimated pay) and
   `/export` (full CSV), reconciles against poster photos / form submissions, and
   pays by the agreed method (cash or bank transfer, ₴ UAH).
@@ -79,6 +81,10 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
 1. Owner sends the day's target area/list in **capybara-bot**.
 2. Agent brings a charged phone with location on, and printed **QR posters**
    (`marketing/qr-poster.pdf`).
+3. In **@Secondhandlvivbot** send **/route** (or **/agent → 🧭 Route**), share
+   your location, and get a walking order through the nearest stores — with a
+   map link and turn-by-turn Google Maps directions. Optional, but it plans
+   the day and avoids backtracking.
 
 **At each store / У кожному магазині**
 1. Look at the storefront, go inside, be polite — you represent the app.
@@ -86,8 +92,11 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
    ось QR, покупці знаходять вас за годинами й цінами.” Offer to place a **QR poster**.
 2. Опишіть коротко застосунок і запропонуйте розмістити **QR-плакат**.
 3. In **@Secondhandlvivbot** send **/visit** and follow the steps:
-   `store name → 📍 location → 📷 storefront photo → questions`. Submit ✅.
-4. If the store isn't on the map yet, type `new <name>` at the first step.
+   `📍 location → store → 📷 storefront photo → questions`. Location comes first —
+   the bot lists the nearest stores by GPS, since typing a name is slower and
+   many stores share a near-identical name. Submit ✅.
+4. If the store isn't on the map yet, type `new <name>` at the store-picking
+   step (right after sharing location).
 5. If the owner/manager is interested, capture their contact and point them at the
    in-app **owner form** (or `/submit` in the bot) → that's a **bonus**.
 
@@ -101,29 +110,25 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
 
 Two channels, split by what each does best.
 
-**Structured store data → edit in the app → submit via GitHub.** Restock days,
+**Structured store data → edit in the app → send for review.** Restock days,
 opening hours, name changes, address, GPS, and notes are edited directly in **Lviv
 Second Hand** (open a store → **Edit**; or add a store that isn't on the map from the
 Map tab). To send the additions & corrections to the official map: **🤝 (top-right)
-→ 🌍 Contribute to the official map → 🚀 Submit on GitHub**. That opens a **pre-filled
-GitHub issue** on the repo; the owner reviews it and merges it into the map everyone
-downloads.
+→ 🗺️ Add to the official map**. That posts it to the owner, who gets a **Telegram
+notification with ✅/❌ buttons**; approving it creates a GitHub issue automatically,
+which the owner then merges into the map everyone downloads. **No GitHub account
+needed** — the agent never touches GitHub directly.
 
-> **The agent needs a free GitHub account** to post that issue (one-time signup at
-> github.com — no coding, just a login). Map updates flow through **GitHub issues on
-> the repo**, not by editing files. If a contribution is too large to fit in the
-> issue, the app tells you to also **💾 Download file** and attach the
-> `lviv-secondhand-stores.json` to the same issue.
-
-**Which submission path?** Two buttons in the app both open a GitHub issue:
-- **🌍 Contribute to the official map → 🚀 Submit on GitHub** — the agent's normal
-  path. It carries the whole bundle of stores she **added or corrected** while
-  surveying. Use this for survey data.
-- **🏪 Own a store? → Submit your store** — a single-store form that asks for the
-  submitter's **role + a contact to verify**. Use this only when signing up a real
-  store **owner** (the ₴200 bonus): fill it *with* the owner so their role and contact
-  are captured — that contact is the sign-up evidence. The owner can post it from
-  their own phone (their GitHub account), or the agent posts it from hers.
+**Which submission path?** Two different buttons in the app, both reviewed the
+same way (Telegram approval → auto-filed GitHub issue):
+- **🤝 → 🗺️ Add to the official map** — the agent's normal path. It carries the
+  whole bundle of stores she **added or corrected** while surveying. Use this for
+  survey data.
+- **🏪 Own a store? → Submit your store** (from the share sheet) or **🔑 I own this
+  store** (on an existing store's page, for claiming one already on the map) —
+  use these only when signing up a real store **owner** (the ₴200 bonus): fill it
+  *with* the owner so their role and contact are captured — that contact is the
+  sign-up evidence.
 
 **Photos, communication & live location → Telegram.** The app can't take photos,
 chat, or share live position — Telegram does. Storefront photos and the GPS check-in
@@ -131,24 +136,31 @@ go through **/visit** in @Secondhandlvivbot; day-to-day questions, translation, 
 notes, and live-location sharing go through **capybara-bot**.
 
 *Дані магазину (завезення, години, назва, адреса, GPS, нотатки) редагуються у
-застосунку → **🚀 Submit on GitHub** (потрібен безкоштовний акаунт GitHub) → оновлення
-йдуть через **GitHub issues** репозиторію. Фото, спілкування та жива геолокація — у
-Telegram.*
+застосунку → **🤝 → 🗺️ Додати до офіційної карти** → власник отримує сповіщення в
+Telegram і тисне ✅/❌ → після схвалення система сама створює GitHub issue. Акаунт
+GitHub агенту не потрібен. Фото, спілкування та жива геолокація — у Telegram.*
 
 ### Found a store that isn't on the map yet? · Знайшли новий магазин?
 
-Add it in the app, then submit it — it goes on the map for everyone once the owner
-merges it.
+Two ways to add it — pick whichever is faster in the moment.
 
+**From the bot, while surveying (fastest):** in **/visit**, at the store-picking
+step, type `new <name>` instead of a number. The survey still logs GPS + photo +
+questionnaire as usual, and it's flagged **🆕 new** on the owner's push — but note
+that this only records the *survey*; it does **not** put a pin on the map by
+itself (the bot has no way to create a brand-new map entry). Follow up with the
+app step below so the store actually appears for shoppers.
+
+**From the app, to actually add the map pin:**
 1. App → **Map** tab → **Add store (＋)**.
 2. Enter the **store name**.
 3. **Tap the store's exact spot on the map** (or paste GPS coordinates) — pin it right
    on the storefront; do this **standing at the door** so the location is accurate.
 4. Fill in what you know: **address, pricing type** (by-weight / itemized), **opening
-   hours, restock day, notes**.
+   hours, last delivery date, notes**.
 5. **Save** → "Store added!" (saved on your device).
-6. Submit to the official map: **🤝 (top-right) → 🌍 Contribute to the official map →
-   🚀 Submit on GitHub**. The owner reviews the GitHub issue and merges it.
+6. Submit to the official map: **🤝 (top-right) → 🗺️ Add to the official map**. The
+   owner gets a Telegram approval prompt; approving it files the GitHub issue.
 
 - **Check first** that it's really not already on the map (search the name) so you
   don't add a duplicate.
@@ -156,10 +168,12 @@ merges it.
 - You still **log the visit** in `/visit` as usual (that's what pays); adding the map
   pin is a separate step so shoppers can find the store.
 
-*Новий магазин: застосунок → **Карта → Додати магазин (＋)** → назва → **торкніться
-точного місця на карті** (стоячи біля входу) → адреса, тип цін, години, день завезення,
-нотатки → **Зберегти** → **🤝 → 🌍 Submit on GitHub**. Спочатку перевірте, що його ще
-немає на карті. Візит усе одно фіксуйте через /visit.*
+*Новий магазин: найшвидше — у `/visit` на кроці вибору магазину напишіть `new
+<назва>` (це фіксує візит, але НЕ додає пін на карту). Щоб додати пін: застосунок →
+**Карта → Додати магазин (＋)** → назва → **торкніться точного місця на карті**
+(стоячи біля входу) → адреса, тип цін, години, дата завезення, нотатки → **Зберегти**
+→ **🤝 → 🗺️ Додати до офіційної карти**. Спочатку перевірте, що його ще немає на
+карті. Візит усе одно фіксуйте через /visit.*
 
 ---
 
@@ -198,11 +212,11 @@ and `QUESTIONS` in `telegram-bot/worker.js` in sync.
 
 | # | Field | Answer |
 |---|---|---|
-| 1 | **Store** · Магазин | pick from the map, or `new <name>` |
-| 2 | **Location** · Геолокація | share current GPS at the store |
+| 1 | **Location** · Геолокація | share current GPS — the bot lists nearby stores by distance |
+| 2 | **Store** · Магазин | pick a number from the nearby list, search by name, or `new <name>` |
 | — | **Photo** · Фото | one clear storefront/entrance photo |
 | 3 | **Pricing** · Тип цін | by weight / itemized / both / unknown |
-| 4 | **Restock day** · День завезення | Mon–Sun / none / unknown *(by-weight only)* |
+| 4 | **Last delivery** · Останній завіз | Today / Yesterday / a date (e.g. `13.08`) / unknown — asked at **every** store, not just by-weight, since a date (unlike a weekday) works for any restock cycle |
 | 5 | **Hours** · Години роботи | e.g. `10:00–20:00`, or “closed …” |
 | 6 | **Size** · Розмір | S / M / L |
 | 7 | **Poster placed?** · Плакат розміщено? | yes / no  → 💰 bonus |
@@ -232,11 +246,17 @@ One-time enablement of the `/visit` subsystem is documented in
 `telegram-bot/wrangler.toml` (create the `VISITS` KV namespace, set `BOT_TOKEN`,
 `OWNER_ID`, `AGENT_IDS`, and the rates). After that:
 
+`/agent` (agent · owner) opens a one-tap menu for the commands below; `/admin`
+(owner only) opens one for `/report`/`/export`. Each command below also still
+works typed directly — the menus are just a shortcut.
+
 | Command | Who | Does |
 |---|---|---|
+| `/route` | agent | plan a walking route through the nearest stores (map link + Google Maps directions) |
 | `/visit` | agent | start a survey |
 | `/myvisits` | agent | their running visit count |
 | `/pay` | agent · owner | show the pay scheme (live rates from `RATE_VISIT`/`RATE_BONUS`) |
+| `/job` | agent · owner | this handbook, as a link |
 | `/cancel` | agent | abort the current survey |
 | `/report` | owner | totals, per-agent counts, **estimated pay** |
 | `/export` | owner | CSV of every logged visit |

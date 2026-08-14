@@ -19,7 +19,7 @@ name: Deploy Telegram bot
 #     also accepted (BOT_TOKEN wins if both are set).
 #
 # The KV binding, OWNER_ID/AGENT_IDS and pay rates already live in wrangler.toml.
-# This workflow regenerates stores.gen.js from index.html, deploys the worker, and
+# This workflow regenerates stores.gen.js from stores.json, deploys the worker, and
 # sets the BOT_TOKEN secret on it. WEBHOOK_SECRET (already set on the worker) and
 # any other existing secrets are preserved — `wrangler deploy` never deletes them.
 on:

@@ -3,8 +3,10 @@
 // a deep link from the map (?store=id&agent_mode=true → /api/bounty/stash →
 // t.me/…?start=bounty_{token}).
 //
-// State machine: cycle → (weekday, only for a numeric cycle) → open time →
-// close time → confirm. Each step is a callback_query on an inline keyboard;
+// State machine: cycle → (weekday, only on a 7-day cycle — a weekday alone
+// can't place a store in a 14- or 35-day cycle, see getDayInfo() in
+// index.html) → open time → close time → confirm. Each step is a
+// callback_query on an inline keyboard;
 // "✏️ Інший" on either time step drops to a plain-text prompt instead
 // (handled by handleBountyText() in worker.js, not here).
 //
