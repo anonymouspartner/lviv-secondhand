@@ -22,9 +22,15 @@
 //   /leaderboard     — top contributors by points
 //   ✅/❌ buttons on a moderator-channel edit message — isOwner/isAgent only
 //
-// Field-agent commands (stateful — require BOT_TOKEN + the VISITS KV binding):
-//   /visit        — guided store-survey flow (store → GPS → photo → questionnaire)
+// Field-agent commands (stateful — require BOT_TOKEN + the VISITS KV binding).
+// /agent (agents + owner) and /admin (owner only) group these into a one-tap
+// menu; every command below also still works typed directly:
+//   /route        — plan a walking route through the nearest stores
+//   /visit        — guided store-survey flow (GPS → store → photo → questionnaire)
 //   /myvisits     — an agent's own running visit count
+//   /card         — set/view the payout card or IBAN /report pays out to
+//   /pay          — the live pay scheme (rates from RATE_VISIT/RATE_BONUS)
+//   /job          — link to the job brief
 //   /cancel       — abort an in-progress /visit
 //   /report       — OWNER only: totals, per-agent counts, estimated pay
 //   /export       — OWNER only: CSV of all logged visits
@@ -586,6 +592,7 @@ async function handleAgentCallback(env, c, cq) {
         return;
       }
       if (val === 'myvisits') { if (!isAgent2) return; await cmdMyVisits(env, uid, chatId); return; }
+      if (val === 'card') { if (!isAgent2) return; await cmdCard(env, uid, chatId); return; }
       if (val === 'pay') { await cmdPay(env, c, chatId); return; }
       if (val === 'job') { await cmdJob(env, chatId); return; }
       if (val === 'cancel') { await cmdCancel(env, uid, chatId); return; }
@@ -841,6 +848,16 @@ function readYesNo(t) {
   if (/ні|no|❌/i.test(s)) return false;
   return null;
 }
+// A payout card number (16 digits, spaces/dashes stripped) or a Ukrainian
+// IBAN. Only shape-checked, not a Luhn/bank check — this is a destination the
+// owner pays to by hand, not a card processed by this app.
+function readCardNumber(t) {
+  const raw = String(t || '').trim().replace(/[\s-]/g, '');
+  if (/^\d{13,19}$/.test(raw)) return raw;
+  if (/^UA\d{27}$/i.test(raw)) return raw.toUpperCase();
+  return null;
+}
+const cardKey = (uid) => `card:${uid}`;
 
 const ROUTE_SIZE = 12;        // a day's zone, matching the handbook's 10–15
 const DUP_WINDOW_DAYS = 30;   // fallback when a store's own cycle is unknown
@@ -1060,10 +1077,13 @@ async function ownerReport(env, c, chatId) {
   const ownerVisits = (c.ownerId && c.agentIds.includes(c.ownerId))
     ? Number((await env.VISITS.get('count:agent:' + c.ownerId)) || 0) : 0;
   const lines = ['📊 <b>Field report · Звіт</b>', `Visits logged: <b>${total}</b>`, `Bonus events: <b>${bonus}</b>`];
-  // Per-agent counts.
+  // Per-agent counts, with their payout card if they've set one.
   for (const id of c.agentIds) {
     const n = Number((await env.VISITS.get('count:agent:' + id)) || 0);
-    if (n) lines.push(`• agent <code>${id}</code>${id === c.ownerId ? ' (owner — excluded from pay below)' : ''}: ${n} visits`);
+    if (!n) continue;
+    const card = await env.VISITS.get(cardKey(id));
+    const cardNote = id === c.ownerId ? ' (owner — excluded from pay below)' : (card ? ` 💳 <code>${esc(card)}</code>` : ' ⚠️ no payout card');
+    lines.push(`• agent <code>${id}</code>${cardNote}: ${n} visits`);
   }
   const payableVisits = total - ownerVisits;
   const pay = payableVisits * c.rateVisit + bonus * c.rateBonus;
@@ -1105,7 +1125,7 @@ function jobText() {
     '',
     `👉 <a href="${JOB_BRIEF_URL}">Відкрити опис вакансії · Open the job brief</a>`,
     '',
-    'Питання? Пишіть власнику у capybara-bot. · Questions? Message the owner in capybara-bot.',
+    'Питання? Пишіть власнику напряму. · Questions? Message the owner directly.',
   ].join('\n');
 }
 
@@ -1151,6 +1171,26 @@ async function cmdMyVisits(env, userId, chatId) {
 async function cmdPay(env, c, chatId) {
   await say(env, chatId, payText(c));
 }
+// `arg` is whatever followed "/card " (undefined from the /agent menu button
+// — that variant just shows the current status/instructions).
+async function cmdCard(env, userId, chatId, arg) {
+  const typed = String(arg || '').trim();
+  if (!typed) {
+    const cur = await env.VISITS.get(cardKey(userId));
+    await say(env, chatId, cur
+      ? `💳 Картка для виплат · Payout card: <code>${esc(cur)}</code>\nЩоб змінити · To change: <code>/card 0000000000000000</code>`
+      : '💳 Картку для виплат ще не вказано. · No payout card on file yet.\n' +
+        'Надішліть номер картки (16 цифр) або IBAN · Send your card number (16 digits) or IBAN:\n<code>/card 0000000000000000</code>');
+    return;
+  }
+  const card = readCardNumber(typed);
+  if (!card) {
+    await say(env, chatId, '⚠️ Не розпізнав номер картки. Введіть 16 цифр картки або IBAN (UA...). · Didn’t recognise that — enter a 16-digit card number or a UA IBAN.');
+    return;
+  }
+  await env.VISITS.put(cardKey(userId), card);
+  await say(env, chatId, `✅ Збережено картку для виплат · Payout card saved: <code>${esc(card)}</code>`);
+}
 async function cmdJob(env, chatId) {
   await say(env, chatId, jobText());
 }
@@ -1183,6 +1223,7 @@ async function cmdAgentMenu(env, chatId, isAgent) {
     rows.push([{ text: '🧭 Маршрут · Route', callback_data: 'ag:route' }]);
     rows.push([{ text: '📝 Візит · Visit', callback_data: 'ag:visit' }]);
     rows.push([{ text: '📊 Мої візити · My visits', callback_data: 'ag:myvisits' }]);
+    rows.push([{ text: '💳 Картка для виплат · Payout card', callback_data: 'ag:card' }]);
   }
   rows.push([{ text: '💰 Оплата · Pay', callback_data: 'ag:pay' }]);
   rows.push([{ text: '📋 Вакансія · Job', callback_data: 'ag:job' }]);
@@ -1234,6 +1275,12 @@ async function handleVisit(env, c, msg, ctx) {
   if (command === 'pay') {
     if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
     await cmdPay(env, c, chatId);
+    return true;
+  }
+  if (command === 'card') {
+    if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    const arg = (text || '').replace(/^\/card(?:@\w+)?\s*/i, '');
+    await cmdCard(env, userId, chatId, arg);
     return true;
   }
   if (command === 'job' || command === 'brief') {
