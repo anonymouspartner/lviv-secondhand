@@ -1096,7 +1096,7 @@ function notAgentMsg(uid) {
 }
 
 // Job brief for a prospective/onboarding agent to read and review.
-const JOB_BRIEF_URL = 'https://claude.ai/code/artifact/8707b32b-6c47-4df0-9176-7ddccfbe7264';
+const JOB_BRIEF_URL = 'https://www.lvivsecondhand.com/jobs/';
 function jobText() {
   return [
     '📋 <b>Опис вакансії · Job brief</b>',
