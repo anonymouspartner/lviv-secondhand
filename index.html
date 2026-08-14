@@ -598,8 +598,7 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
     </div>
     <div class="help-section">
       <h3>🤝 Share & Contribute</h3>
-      <p>Tap the <strong>🤝</strong> button in the top-right to share the stores you've added or edited. <strong>Copy share link</strong> gives you a link — anyone who opens it gets your stores merged onto their map. You can also download a file, or paste in a link/file someone sent you to import theirs. Duplicates are skipped automatically.</p>
-      <p style="margin-top:8px;">To help everyone, tap <strong>🌍 Contribute to the official map</strong> — it opens a pre-filled GitHub form with your additions and corrections so they can be merged into the map that ships with the app.</p>
+      <p>Tap the <strong>🤝</strong> button in the top-right to share the app with a link or QR code, submit your additions and corrections to the official map, register your store if you own one, or save a backup of everything you've recorded on this device.</p>
     </div>
     <div class="help-section">
       <h3>📍 Open in Maps.me / Google Maps</h3>
@@ -2871,7 +2870,7 @@ const HELP = {
     ['✅ Visited','Tap the big green <strong>"Mark as Visited"</strong> button inside any store. It turns into a checkmark and the card gets a green border in the list.'],
     ['✏️ Edit or remove a store','Open any store and tap <strong>Edit Store</strong> to fix its details, or <strong>🗑️ Remove this store</strong> at the bottom. Stores <em>you</em> added are deleted; built-in stores are just hidden on your device — a <strong>"Restore all"</strong> link at the bottom of the list brings them back anytime.'],
     ['⚖️ KG vs Itemized','<strong>By KG</strong> stores charge by weight — you fill a bag and pay per kilogram, and prices drop every day. <strong>Itemized</strong> stores price each item individually.'],
-    ['🤝 Share & Contribute','Tap <strong>🤝</strong> to share the stores you\'ve added or edited via a link, file, or code — anyone who opens it merges them onto their map (duplicates are skipped). Tap <strong>🌍 Contribute to the official map</strong> to open a pre-filled GitHub form so your changes can ship with the app.'],
+    ['🤝 Share & Contribute','Tap <strong>🤝</strong> to share the app with a link or QR code, submit your additions and corrections to the official map, register your store if you own one, or save a backup of everything you\'ve recorded on this device.'],
     ['📍 Directions','Inside any store, tap <strong>📍 Maps.me</strong> or <strong>🗺️ Google Maps</strong> to jump straight to it for directions.'],
     ['💬 Telegram bot','Prefer chat? Message <strong><a href="https://t.me/Secondhandlvivbot" target="_blank" rel="noopener" style="color:var(--green);">@Secondhandlvivbot</a></strong> and send <strong>/today</strong> for stores restocking today, or <strong>/cheap</strong> for the best by-weight deals right now — each result links back here.'] ] },
   ua: { title:'Як користуватися додатком', got:'Зрозуміло!', sections:[
@@ -2881,7 +2880,7 @@ const HELP = {
     ['✅ Відвідані','Натисніть велику зелену кнопку <strong>«Відмітити як відвідане»</strong> у магазині. Вона стане галочкою, а картка отримає зелену рамку у списку.'],
     ['✏️ Редагувати чи видалити','Відкрийте магазин і натисніть <strong>«Редагувати»</strong>, щоб змінити деталі, або <strong>🗑️ Видалити магазин</strong> внизу. Магазини, <em>додані вами</em>, видаляються; вбудовані просто ховаються на вашому пристрої — посилання <strong>«Відновити всі»</strong> внизу списку поверне їх будь-коли.'],
     ['⚖️ На вагу чи поштучно','Магазини <strong>на вагу</strong> рахують за кілограм — наповнюєте пакет і платите за кг, ціни падають щодня. <strong>Поштучні</strong> оцінюють кожну річ окремо.'],
-    ['🤝 Обмін і внесок','Натисніть <strong>🤝</strong>, щоб поділитися доданими чи зміненими магазинами через посилання, файл або код — хто відкриє, додасть їх на свою карту (дублікати пропускаються). Натисніть <strong>🌍 Внести до офіційної карти</strong>, щоб відкрити заповнену форму GitHub і додати зміни до додатка.'],
+    ['🤝 Обмін і внесок','Натисніть <strong>🤝</strong>, щоб поділитися застосунком через посилання чи QR-код, надіслати доповнення й виправлення до офіційної карти, зареєструвати свій магазин або зберегти резервну копію всього записаного на цьому пристрої.'],
     ['📍 Маршрут','У магазині натисніть <strong>📍 Maps.me</strong> або <strong>🗺️ Google Maps</strong>, щоб одразу прокласти маршрут.'],
     ['💬 Телеграм-бот','Надаєте перевагу чату? Напишіть <strong><a href="https://t.me/Secondhandlvivbot" target="_blank" rel="noopener" style="color:var(--green);">@Secondhandlvivbot</a></strong> і надішліть <strong>/today</strong> — магазини із завезенням сьогодні, або <strong>/cheap</strong> — найкращі ціни на вагу зараз. Кожен результат посилається сюди.'] ] }
 };
@@ -2985,7 +2984,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-14.1';
+const APP_VERSION = '2026-08-14.2';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys

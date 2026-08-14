@@ -1482,7 +1482,7 @@ async function handleQuestionsStart(env, uid, chatId, session) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     // Health check.
     if (request.method === 'GET') {
       return ok('Lviv Second Hand Telegram bot is running.');
@@ -1507,8 +1507,13 @@ export default {
     const c = cfg(env);
 
     // Inline-keyboard taps (bounty flow) arrive as callback_query, not message.
+    // Ack Telegram immediately and finish in the background: dispatchMapPatch
+    // (GitHub) inside handleAgentCallback can be slow, and a slow webhook
+    // response makes Telegram redeliver the same tap — that double-processed
+    // an edit-review approval, fixed in #135. ctx.waitUntil keeps the Worker
+    // alive to finish the call after the response is already sent.
     if (update.callback_query) {
-      try { await handleAgentCallback(env, c, update.callback_query); } catch (e) {}
+      ctx.waitUntil(handleAgentCallback(env, c, update.callback_query).catch(() => {}));
       return ok();
     }
 
@@ -1517,26 +1522,26 @@ export default {
     const from = msg.from || {};
     const chatId = msg.chat.id;
     const text = typeof msg.text === 'string' ? msg.text : null;
-    const ctx = { userId: from.id, chatId, text, from };
+    const mctx = { userId: from.id, chatId, text, from };
 
     // Flash-deal subscribe/unsubscribe (Feature 5). Only needs BOT_TOKEN.
     try {
-      if (await handleFlashSubStart(env, ctx)) return ok();
-      if (await handleStopCommand(env, ctx)) return ok();
+      if (await handleFlashSubStart(env, mctx)) return ok();
+      if (await handleStopCommand(env, mctx)) return ok();
     } catch (e) {}
 
     // Crowdsourced moderation (Feature 6). Only needs BOT_TOKEN.
     try {
-      if (await handleEditStart(env, ctx)) return ok();
-      if (await handleLeaderboardCommand(env, ctx)) return ok();
+      if (await handleEditStart(env, mctx)) return ok();
+      if (await handleLeaderboardCommand(env, mctx)) return ok();
     } catch (e) {}
 
     // Field-agent subsystems (stateful). Only when BOT_TOKEN + VISITS are set.
     if (c.enabled) {
       try {
-        if (await handleBountyStart(env, c, ctx)) return ok();
-        if (await handleBountyText(env, c, ctx)) return ok();
-        const consumed = await handleVisit(env, c, msg, ctx);
+        if (await handleBountyStart(env, c, mctx)) return ok();
+        if (await handleBountyText(env, c, mctx)) return ok();
+        const consumed = await handleVisit(env, c, msg, mctx);
         if (consumed) return ok();
       } catch (e) {
         // Never let the field flow break the public bot; ack and move on.
