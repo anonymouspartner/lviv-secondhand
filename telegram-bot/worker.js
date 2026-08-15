@@ -34,6 +34,10 @@
 //   /cancel       — abort an in-progress /visit
 //   /report       — OWNER only: totals, per-agent counts, estimated pay
 //   /export       — OWNER only: CSV of all logged visits
+//   /admin agents — OWNER only: every agent's tally/card/status + fire/rehire buttons
+//   /admin fire <id>, /admin rehire <id> — OWNER only: revoke/restore an
+//                    agent's access instantly (KV-backed, no redeploy — see
+//                    docs/FIELD_AGENT.md §7)
 //
 // The survey the agent fills in is the field questionnaire from
 // docs/FIELD_AGENT.md — that doc is the single source of truth for the process,
@@ -283,11 +287,29 @@ const QUESTIONS = [
   { key: 'notes', q: '9️⃣ Нотатки? (або «-») · Notes? (or "-")', kb: null },
 ];
 
-function cfg(env) {
+// Firing an agent doesn't touch AGENT_IDS (that's a Worker secret — editing it
+// needs a redeploy). Instead a fired id is recorded in KV and subtracted from
+// agentIds below, so /admin fire takes effect immediately and /admin rehire
+// reverses it just as fast, no redeploy either way.
+const FIRED_KEY = 'fired_agents';
+async function getFiredIds(env) {
+  if (!env.VISITS) return [];
+  try { return (await env.VISITS.get(FIRED_KEY, { type: 'json' })) || []; } catch { return []; }
+}
+async function setFiredIds(env, ids) {
+  await env.VISITS.put(FIRED_KEY, JSON.stringify(ids));
+}
+
+async function cfg(env) {
+  const allAgentIds = String(env.AGENT_IDS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const firedIds = await getFiredIds(env);
+  const firedSet = new Set(firedIds.map(String));
   return {
     enabled: Boolean(env.BOT_TOKEN && env.VISITS),
     ownerId: String(env.OWNER_ID || ''),
-    agentIds: String(env.AGENT_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
+    agentIds: allAgentIds.filter((id) => !firedSet.has(id)),
+    allAgentIds, // unfiltered — /admin agents needs to show fired ones too
+    firedIds,
     rateVisit: Number(env.RATE_VISIT || 80),
     rateBonus: Number(env.RATE_BONUS || 200),
   };
@@ -601,6 +623,11 @@ async function handleAgentCallback(env, c, cq) {
     if (!isOwner2) return;
     if (val === 'report') { await ownerReport(env, c, chatId); return; }
     if (val === 'export') { await ownerExport(env, chatId); return; }
+    if (val === 'agents') { await cmdAdminAgents(env, c, chatId); return; }
+    if (val === 'fireabort') { await tg(env, 'sendMessage', { chat_id: chatId, text: 'Скасовано. · Cancelled.' }); return; }
+    if (val.startsWith('firereq:')) { await cmdFireRequest(env, c, chatId, val.slice(8)); return; }
+    if (val.startsWith('firedo:')) { await cmdFireDo(env, c, chatId, val.slice(7)); return; }
+    if (val.startsWith('rehire:')) { await cmdRehire(env, c, chatId, val.slice(7)); return; }
     return;
   }
 
@@ -1236,7 +1263,100 @@ async function cmdAdminMenu(env, chatId) {
     text: '⚙️ <b>Адмін-меню · Admin menu</b>', reply_markup: { inline_keyboard: [
       [{ text: '📈 Звіт · Report', callback_data: 'ad:report' }],
       [{ text: '📤 Експорт · Export', callback_data: 'ad:export' }],
+      [{ text: '👥 Агенти · Agents', callback_data: 'ad:agents' }],
     ] } });
+}
+
+// Lists every id in AGENT_IDS (owner included, marked separately) with their
+// running tally, payout card, and active/fired status — plus a one-tap
+// fire/rehire button per agent. This is the "who has access" view an owner
+// checks before firing someone, so the final tally is right there.
+async function cmdAdminAgents(env, c, chatId) {
+  if (!c.allAgentIds.length) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: 'Немає налаштованих агентів (AGENT_IDS порожній). · No agents configured (AGENT_IDS is empty).' });
+    return;
+  }
+  const firedSet = new Set(c.firedIds.map(String));
+  const lines = ['👥 <b>Агенти · Agents</b>'];
+  const rows = [];
+  for (const id of c.allAgentIds) {
+    const isOwnerId = Boolean(c.ownerId) && id === c.ownerId;
+    const fired = firedSet.has(id);
+    const n = Number((await env.VISITS.get('count:agent:' + id)) || 0);
+    const card = await env.VISITS.get(cardKey(id));
+    const status = isOwnerId ? '👑 owner' : fired ? '🔴 fired' : '🟢 active';
+    lines.push(`• <code>${id}</code> ${status} — ${n} visits${card ? ` · 💳 <code>${esc(card)}</code>` : ' · ⚠️ no card'}`);
+    if (!isOwnerId) {
+      rows.push([fired
+        ? { text: `♻️ Rehire ${id}`, callback_data: `ad:rehire:${id}` }
+        : { text: `🔥 Fire ${id}`, callback_data: `ad:firereq:${id}` }]);
+    }
+  }
+  await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML', text: lines.join('\n'),
+    reply_markup: rows.length ? { inline_keyboard: rows } : undefined });
+}
+
+// 🔥 Fire tap → a confirm step (firing is consequential and hard to notice if
+// mistapped). The typed /admin fire <id> command skips straight to
+// cmdFireDo — typing the exact id out is itself the deliberate act.
+async function cmdFireRequest(env, c, chatId, targetId) {
+  if (!c.allAgentIds.includes(targetId) || targetId === c.ownerId) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Invalid agent id.' });
+    return;
+  }
+  const n = Number((await env.VISITS.get('count:agent:' + targetId)) || 0);
+  const card = await env.VISITS.get(cardKey(targetId));
+  await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML',
+    text: `⚠️ Fire agent <code>${targetId}</code>?\nThey lose bot access immediately.\n` +
+      `Final tally: <b>${n} visits</b>${card ? ` · payout card <code>${esc(card)}</code>` : ' · no payout card on file'}.\n` +
+      `Settle any unpaid balance before/with this.`,
+    reply_markup: { inline_keyboard: [[
+      { text: '✅ Confirm fire', callback_data: `ad:firedo:${targetId}` },
+      { text: '❌ Cancel', callback_data: 'ad:fireabort' },
+    ]] } });
+}
+async function cmdFireDo(env, c, chatId, targetId) {
+  if (!c.allAgentIds.includes(targetId) || targetId === c.ownerId) {
+    await say(env, chatId, '⚠️ Invalid agent id.');
+    return;
+  }
+  const fired = new Set((await getFiredIds(env)).map(String));
+  fired.add(targetId);
+  await setFiredIds(env, [...fired]);
+  const n = Number((await env.VISITS.get('count:agent:' + targetId)) || 0);
+  await say(env, chatId,
+    `🔥 Звільнено · Fired <code>${targetId}</code>. Доступ скасовано негайно · Bot access revoked immediately.\n` +
+    `Останній непроплачений підсумок · Final unpaid tally: <b>${n} visits</b> — settle before closing the books.\n` +
+    `Заберіть невикористані QR-плакати · Reclaim any unused QR posters.\n` +
+    `Можна скасувати будь-коли · Reversible anytime: ♻️ Rehire, or <code>/admin rehire ${targetId}</code>.`);
+  // A failed DM (blocked the bot, chat never started) shouldn't hide the
+  // owner's confirmation above — the firing itself already took effect.
+  try {
+    await say(env, targetId,
+      '🔒 Ваш доступ до бота польового агента скасовано власником. Дякуємо за роботу. · ' +
+      'Your field-agent bot access has been revoked by the owner. Thanks for the work.');
+    // Drop /agent from their command list right away; without this it lingers
+    // in the Telegram UI (harmlessly — tapping it still hits notAgentMsg) until
+    // the next CMD_VER bump. Clear the sync cache too so a later rehire re-adds it.
+    await tg(env, 'setMyCommands', { commands: PUBLIC_CMDS, scope: { type: 'chat', chat_id: targetId } });
+    await env.VISITS.delete('cmds:' + targetId);
+  } catch (e) {}
+}
+async function cmdRehire(env, c, chatId, targetId) {
+  if (!c.allAgentIds.includes(targetId)) {
+    await say(env, chatId, '⚠️ Invalid agent id.');
+    return;
+  }
+  const fired = (await getFiredIds(env)).map(String).filter((id) => id !== targetId);
+  await setFiredIds(env, fired);
+  await say(env, chatId, `♻️ Rehired <code>${targetId}</code>. Access restored.`);
+  try {
+    await say(env, targetId,
+      '✅ Ваш доступ до бота польового агента відновлено. Ласкаво просимо назад! · ' +
+      'Your field-agent bot access has been restored. Welcome back!');
+    // Force a re-sync so /agent reappears in their command list next message.
+    await env.VISITS.delete('cmds:' + targetId);
+  } catch (e) {}
 }
 
 // Handle an update for the visit subsystem. Returns true if it consumed the update.
@@ -1257,6 +1377,19 @@ async function handleVisit(env, c, msg, ctx) {
   }
   if (command === 'admin') {
     if (!isOwner) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    // Subcommands typed directly, e.g. "/admin fire 123456" — the menu button
+    // path (ad:agents → ad:firereq: → confirm) is for browsing/one-tap use;
+    // typing the exact id out is itself the deliberate act, so this skips
+    // the confirm step and fires/rehires immediately.
+    const rest = (text || '').replace(/^\/admin(?:@\w+)?\s*/i, '').trim();
+    const m = /^(fire|rehire)\s+(\S+)/i.exec(rest);
+    if (m) {
+      const targetId = m[2].replace(/\D/g, '');
+      if (m[1].toLowerCase() === 'fire') await cmdFireDo(env, c, chatId, targetId);
+      else await cmdRehire(env, c, chatId, targetId);
+      return true;
+    }
+    if (/^agents$/i.test(rest)) { await cmdAdminAgents(env, c, chatId); return true; }
     await cmdAdminMenu(env, chatId);
     return true;
   }
@@ -1504,7 +1637,7 @@ export default {
       return ok(); // Malformed body — ack so Telegram doesn't retry forever.
     }
 
-    const c = cfg(env);
+    const c = await cfg(env);
 
     // Inline-keyboard taps (bounty flow) arrive as callback_query, not message.
     // Ack Telegram immediately and finish in the background: dispatchMapPatch

@@ -245,8 +245,8 @@ One-time enablement of the `/visit` subsystem is documented in
 `OWNER_ID`, `AGENT_IDS`, and the rates). After that:
 
 `/agent` (agent · owner) opens a one-tap menu for the commands below; `/admin`
-(owner only) opens one for `/report`/`/export`. Each command below also still
-works typed directly — the menus are just a shortcut.
+(owner only) opens one for `/report`/`/export`/`/admin agents`. Each command
+below also still works typed directly — the menus are just a shortcut.
 
 | Command | Who | Does |
 |---|---|---|
@@ -259,7 +259,47 @@ works typed directly — the menus are just a shortcut.
 | `/cancel` | agent | abort the current survey |
 | `/report` | owner | totals, per-agent counts, **estimated pay** |
 | `/export` | owner | CSV of every logged visit |
+| `/admin agents` | owner | every configured agent, their tally, payout card, and active/fired status — with a one-tap 🔥 Fire / ♻️ Rehire button per agent |
+| `/admin fire <id>` | owner | revoke an agent's bot access immediately (see §7) |
+| `/admin rehire <id>` | owner | restore a fired agent's access immediately |
 
 Each submitted visit is also **pushed to the owner in real time** (photo +
 summary) for spot-checking. Reconcile `/export` against poster photos and form
 submissions before paying.
+
+---
+
+## 7. Offboarding · Звільнення
+
+Firing someone takes effect immediately — no redeploy, no waiting for a new
+Worker build. It doesn't touch `AGENT_IDS` at all (that's a deployment secret);
+instead a fired id is recorded separately, so it's just as instant to reverse.
+
+**To fire an agent:**
+1. `/admin` → **👥 Агенти · Agents** (or type `/admin agents`) — shows every
+   configured id with their running visit tally, payout card on file, and
+   current status. Use this to get the id and check what you'll still owe
+   *before* firing.
+2. Tap **🔥 Fire** next to their id. The bot shows a confirmation with their
+   final unpaid tally and payout card, so nothing gets missed. Tap **✅ Confirm
+   fire** — or use the direct `/admin fire <id>` if you already know the id and
+   want to skip the confirm step.
+3. That's it. The agent:
+   - immediately loses access to every field-agent command (`/visit`, `/route`,
+     `/card`, …) — they get the same "not a registered agent" message as
+     anyone who was never hired;
+   - is notified automatically by the bot that access was revoked;
+   - keeps their historical visit count in the system (still visible in
+     `/admin agents` and included in `/export`) so the final payout is never lost.
+4. **Settle the final balance** — pay out whatever `/admin agents` showed as
+   their unpaid tally, same as any weekly `/report`/`/export` reconciliation.
+5. **Reclaim materials** — any unused printed QR posters.
+
+**To reverse it:** tap **♻️ Rehire** next to their id in `/admin agents`, or
+`/admin rehire <id>`. Access is restored immediately and they're notified.
+
+*Звільнення діє миттєво. `/admin → 👥 Агенти` показує підсумок і картку кожного
+агента з кнопкою 🔥 Звільнити / ♻️ Відновити. Після звільнення агент одразу
+втрачає доступ до команд і отримує повідомлення від бота; історія його візитів
+зберігається для остаточного розрахунку. Відновлення — кнопкою ♻️ або
+`/admin rehire <id>`, теж миттєво.*
