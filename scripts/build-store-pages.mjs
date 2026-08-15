@@ -2,7 +2,7 @@
 // Generate a static, crawlable page per store from stores.json, plus the
 // /store/ index and the site sitemap.
 //
-// Why this exists: the app renders all 93 stores client-side on one URL, so
+// Why this exists: the app renders every store client-side on one URL, so
 // search engines had a single page to rank for a site that is really about ~92
 // distinct places. Someone googling a shop by name or street had nothing to
 // match. These pages give each store its own URL, its own title/description,
