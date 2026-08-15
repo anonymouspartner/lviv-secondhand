@@ -262,6 +262,7 @@ below also still works typed directly — the menus are just a shortcut.
 | `/admin agents` | owner | every configured agent, their tally, payout card, and active/fired status — with a one-tap 🔥 Fire / ♻️ Rehire button per agent |
 | `/admin fire <id>` | owner | revoke an agent's bot access immediately (see §7) |
 | `/admin rehire <id>` | owner | restore a fired agent's access immediately |
+| `/admin purge <id>` | owner | delete that id's logged visits and correct the counters — for clearing your own smoke-test visits (asks to confirm first) |
 
 Each submitted visit is also **pushed to the owner in real time** (photo +
 summary) for spot-checking. Reconcile `/export` against poster photos and form
