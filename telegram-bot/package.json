@@ -11,6 +11,6 @@
     "deploy": "node build-data.mjs && wrangler deploy"
   },
   "devDependencies": {
-    "wrangler": "^3.90.0"
+    "wrangler": "^4.120.1"
   }
 }
