@@ -49,6 +49,13 @@ jobs:
       - name: Validate schema
         run: node scripts/validate-stores.mjs
 
+      # Step 2b — regenerate the static per-store pages and the sitemap from
+      # the patched data. These are committed files served straight to search
+      # engines, so skipping this would leave a store's public page showing the
+      # hours or restock date the patch just corrected.
+      - name: Rebuild store pages
+        run: node scripts/build-store-pages.mjs
+
       # Step 3 — commit & deploy. GitHub Pages for this repo serves straight
       # from `main` (no separate build/deploy workflow), so pushing here IS
       # the deploy. Skips cleanly if the patch was a no-op (e.g. updates
@@ -57,7 +64,7 @@ jobs:
         run: |
           git config user.name "lviv-secondhand-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add stores.json
+          git add stores.json store sitemap.xml
           if git diff --cached --quiet; then
             echo "No changes after patch — nothing to commit."
             exit 0
