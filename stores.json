@@ -82,22 +82,10 @@
       "sat": "10:00–20:00",
       "sun": "10:00–20:00"
     },
-    "cycle": 35,
+    "cycle": 14,
     "lat": 49.822719,
     "lng": 23.973377,
-    "note": "2nd floor entrance. New collections follow the chain’s 5-week calendar.",
-    "restockDates": [
-      "2026-01-12",
-      "2026-02-16",
-      "2026-03-23",
-      "2026-04-27",
-      "2026-06-01",
-      "2026-07-06",
-      "2026-08-17",
-      "2026-09-21",
-      "2026-10-26",
-      "2026-11-30"
-    ]
+    "note": "2nd floor entrance. 2-week inventory cycle."
   },
   {
     "id": "h3",
@@ -152,22 +140,10 @@
       "sat": "10:00–20:00",
       "sun": "10:00–20:00"
     },
-    "cycle": 35,
+    "cycle": 14,
     "lat": 49.794862,
     "lng": 24.063585,
-    "note": "Sykhiv district. New collections follow the chain’s 5-week calendar.",
-    "restockDates": [
-      "2026-01-12",
-      "2026-02-16",
-      "2026-03-23",
-      "2026-04-27",
-      "2026-06-01",
-      "2026-07-06",
-      "2026-08-17",
-      "2026-09-21",
-      "2026-10-26",
-      "2026-11-30"
-    ]
+    "note": "Sykhiv district. 2-week inventory cycle."
   },
   {
     "id": "h5",
@@ -187,22 +163,10 @@
       "sat": "10:00–20:00",
       "sun": "10:00–20:00"
     },
-    "cycle": 35,
+    "cycle": 14,
     "lat": 49.841221,
     "lng": 23.96754,
-    "note": "New collections follow the chain’s 5-week calendar.",
-    "restockDates": [
-      "2026-01-12",
-      "2026-02-16",
-      "2026-03-23",
-      "2026-04-27",
-      "2026-06-01",
-      "2026-07-06",
-      "2026-08-17",
-      "2026-09-21",
-      "2026-10-26",
-      "2026-11-30"
-    ]
+    "note": "2-week inventory cycle."
   },
   {
     "id": "h6",
