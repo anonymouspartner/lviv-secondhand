@@ -23,6 +23,7 @@ const slim = STORES
     pricing: s.pricing || 'item',
     restockDay: s.restockDay || null, // 'mon'..'fri' fallback — only meaningful on a 7-day cycle
     restockDate: s.restock_date || null, // concrete last-delivery date — works for any cycle length
+    restockDates: Array.isArray(s.restockDates) && s.restockDates.length ? s.restockDates : null, // chain's published calendar; beats both fields above
     cycle: s.cycle || 7, // days per restock cycle, for cycle-aware duplicate-visit detection
     lat: s.lat,
     lng: s.lng,

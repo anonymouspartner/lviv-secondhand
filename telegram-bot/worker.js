@@ -170,7 +170,11 @@ function todayText() {
   // dated restock (from /visit or a shopper's one-tap confirmation) that
   // happens to land on today. The two fields never overlap in practice, but
   // checking both means neither source of "today" data goes unseen.
-  const todays = STORES.filter((s) => s.restockDay === wd || s.restockDate === today);
+  // A published calendar (restockDates) is checked too — a chain that states
+  // its drop dates outright is the most reliable "today" signal there is.
+  const todays = STORES.filter((s) =>
+    s.restockDay === wd || s.restockDate === today
+    || (Array.isArray(s.restockDates) && s.restockDates.includes(today)));
   if (!todays.length) {
     return featuredBlock() + [
       `📦 <b>No scheduled restocks today (${DAY_NAMES[wd]}).</b>`,
@@ -188,6 +192,16 @@ function todayText() {
   ].join('\n');
 }
 
+// Latest published restock date that is not in the future, or null. The list
+// is validated sorted ascending, so a reverse scan finds it on the first hit.
+function lastCalendarDate(s, todayIso) {
+  if (!Array.isArray(s.restockDates)) return null;
+  for (let i = s.restockDates.length - 1; i >= 0; i--) {
+    if (s.restockDates[i] <= todayIso) return s.restockDates[i];
+  }
+  return null;
+}
+
 function cheapText() {
   const idx = DAYS.indexOf(kyivWeekday());
   const today = isoDay(0);
@@ -195,6 +209,13 @@ function cheapText() {
   // beats the weekday fallback, which only ever encodes 0–6 days.
   const scored = STORES
     .map((s) => {
+      // A published calendar wins: it gives the exact last drop, so "days since
+      // restock" stays right even across an irregular gap (HUMANA's 2026
+      // schedule has a 42-day summer break among otherwise 35-day cycles).
+      const last = lastCalendarDate(s, today);
+      if (last) {
+        return { s, days: Math.round((Date.parse(today) - Date.parse(last)) / 86400000) };
+      }
       if (s.restockDate) {
         const days = Math.round((Date.parse(today) - Date.parse(s.restockDate)) / 86400000);
         return days >= 0 ? { s, days } : null;
