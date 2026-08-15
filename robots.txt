@@ -14,5 +14,8 @@ Disallow: /worker/
 Disallow: /telegram-bot/
 Disallow: /native/
 Disallow: /marketing/
+# Printable QR posters — internal print material for the owner and field
+# agents, not pages a shopper should land on from search.
+Disallow: /qr/
 
 Sitemap: https://www.lvivsecondhand.com/sitemap.xml

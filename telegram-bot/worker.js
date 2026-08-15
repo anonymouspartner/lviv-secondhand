@@ -150,6 +150,12 @@ function materialsText() {
     `🖼️ <a href="${M}qr-poster.pdf">Плакат · Poster</a> — A4 на вітрину/стіну · in-store`,
     `💼 <a href="${M}sell-sheet.pdf">Прайс для власників · Sell-sheet</a> — пропозиція реклами · owner pitch`,
     '',
+    '🎯 <b>Персональні QR для магазинів · Per-store QR</b>',
+    'Кожен QR веде на сторінку саме цього магазину — не на загальну карту.',
+    'Each QR opens that one store in the app, not the general map.',
+    `🖨️ <a href="${APP_URL}qr/">Плакати по магазинах · Per-store posters</a> — A5, по одному`,
+    `📋 <a href="${APP_URL}qr/sheet/">Усі наліпки одним аркушем · All on A4 sheets</a> — друк і розріж`,
+    '',
     'Друкуй наліпки на самоклейному папері A4. · Print stickers on A4 label paper.',
     `🗺️ ${APP_URL}`,
   ].join('\n');

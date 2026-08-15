@@ -79,6 +79,11 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
 1. Owner sends the day's target area/list directly on Telegram.
 2. Agent brings a charged phone with location on, and printed **QR posters** —
    pick these up from the owner in the city center.
+   *Per-store posters:* every store has its own QR that opens **that store** in
+   the app rather than the general map, so a shopper who scans it lands on the
+   hours and restock cycle for the shop they're standing in. The owner prints
+   them from **/materials** in the bot → *Плакати по магазинах* (one A5 poster
+   each) or *Усі наліпки одним аркушем* (every store on A4, print once and cut).
 3. In **@Secondhandlvivbot** send **/route** (or **/agent → 🧭 Route**), share
    your location, and get a walking order through the nearest stores — with a
    map link and turn-by-turn Google Maps directions. Optional, but it plans

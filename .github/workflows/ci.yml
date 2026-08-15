@@ -44,12 +44,29 @@ jobs:
       # deploy). Regenerate and fail if the committed output differs — that
       # means someone edited stores.json without re-running the generator, and
       # the live pages would be advertising stale hours or restock dates.
+      # `git status --porcelain`, not `git diff` — a store ADDED to stores.json
+      # produces a brand-new untracked directory, which `git diff` reports as
+      # clean. That would let a new store ship with no page and no poster while
+      # the check passed.
       - name: Check store pages are in sync with stores.json
         run: |
           node scripts/build-store-pages.mjs
-          if ! git diff --quiet -- store sitemap.xml; then
+          if [ -n "$(git status --porcelain -- store sitemap.xml)" ]; then
             echo "::error::store/ or sitemap.xml is stale. Run: node scripts/build-store-pages.mjs"
-            git diff --stat -- store sitemap.xml
+            git status --porcelain -- store sitemap.xml
             exit 1
           fi
           echo "Store pages are in sync."
+
+      # Same contract for the printable QR posters: a renamed or re-addressed
+      # store has to reach the poster, or an agent prints one that names the
+      # wrong shop.
+      - name: Check QR posters are in sync with stores.json
+        run: |
+          node scripts/build-qr-posters.mjs
+          if [ -n "$(git status --porcelain -- qr)" ]; then
+            echo "::error::qr/ is stale. Run: node scripts/build-qr-posters.mjs"
+            git status --porcelain -- qr
+            exit 1
+          fi
+          echo "QR posters are in sync."
