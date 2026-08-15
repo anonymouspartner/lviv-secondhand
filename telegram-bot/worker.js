@@ -38,6 +38,8 @@
 //   /admin fire <id>, /admin rehire <id> — OWNER only: revoke/restore an
 //                    agent's access instantly (KV-backed, no redeploy — see
 //                    docs/FIELD_AGENT.md §7)
+//   /admin purge <id> — OWNER only: delete an id's logged visits and unwind
+//                    the counters (for clearing owner smoke-test visits)
 //
 // The survey the agent fills in is the field questionnaire from
 // docs/FIELD_AGENT.md — that doc is the single source of truth for the process,
@@ -628,6 +630,7 @@ async function handleAgentCallback(env, c, cq) {
     if (val.startsWith('firereq:')) { await cmdFireRequest(env, c, chatId, val.slice(8)); return; }
     if (val.startsWith('firedo:')) { await cmdFireDo(env, c, chatId, val.slice(7)); return; }
     if (val.startsWith('rehire:')) { await cmdRehire(env, c, chatId, val.slice(7)); return; }
+    if (val.startsWith('purgedo:')) { await cmdPurgeDo(env, c, chatId, val.slice(8)); return; }
     return;
   }
 
@@ -1296,6 +1299,92 @@ async function cmdAdminAgents(env, c, chatId) {
     reply_markup: rows.length ? { inline_keyboard: rows } : undefined });
 }
 
+// Collect every stored visit belonging to one agent. Keys are
+// `visit:<ts>:<uid>`, so the uid is the segment after the (colon-bearing)
+// ISO timestamp — match on the last segment, not a plain `includes`, or an
+// agent id that happens to appear inside a timestamp would false-positive.
+async function visitsByAgent(env, agentId) {
+  const list = await env.VISITS.list({ prefix: 'visit:', limit: 1000 });
+  const out = [];
+  for (const k of list.keys) {
+    if (k.name.slice(k.name.lastIndexOf(':') + 1) !== String(agentId)) continue;
+    const rec = await env.VISITS.get(k.name, { type: 'json' });
+    if (rec) out.push({ key: k.name, rec });
+  }
+  return out;
+}
+
+// Erase an agent's logged visits and unwind every counter they touched.
+// Used to clear owner smoke-test visits so they stop inflating /report.
+async function cmdPurgeRequest(env, c, chatId, targetId) {
+  const found = await visitsByAgent(env, targetId);
+  if (!found.length) {
+    await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML',
+      text: `Немає збережених візитів для <code>${targetId}</code>. · No stored visits for that id.` });
+    return;
+  }
+  const lines = [`⚠️ Delete <b>${found.length}</b> visit(s) by <code>${targetId}</code>?`, ''];
+  for (const { rec } of found.slice(0, 10)) {
+    lines.push(`• ${esc(rec.ts)} — ${esc(rec.store?.name || 'new store')}`);
+  }
+  if (found.length > 10) lines.push(`…and ${found.length - 10} more`);
+  lines.push('', 'Counters and duplicate-detection stamps are corrected too. This cannot be undone.');
+  await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML', text: lines.join('\n'),
+    reply_markup: { inline_keyboard: [[
+      { text: '🗑️ Confirm delete', callback_data: `ad:purgedo:${targetId}` },
+      { text: '❌ Cancel', callback_data: 'ad:fireabort' },
+    ]] } });
+}
+
+async function cmdPurgeDo(env, c, chatId, targetId) {
+  const found = await visitsByAgent(env, targetId);
+  if (!found.length) {
+    await say(env, chatId, `Немає збережених візитів для <code>${targetId}</code>. · No stored visits for that id.`);
+    return;
+  }
+  // count:total and count:agent:<uid> are only ever bumped together (both sit
+  // under finishVisit's `if (!isDup)`), so the agent's own tally is exactly how
+  // much of count:total belongs to them — no need to know which visits were dups.
+  const agentCount = Number((await env.VISITS.get('count:agent:' + targetId)) || 0);
+  // count:bonus is bumped per poster/contact on every visit, dup or not, so it
+  // is recomputed straight from the records instead.
+  let bonusUnits = 0;
+  const touchedStores = new Set();
+  for (const { rec } of found) {
+    bonusUnits += (rec.poster ? 1 : 0) + (rec.contact ? 1 : 0);
+    if (rec.store && rec.store.id) touchedStores.add(rec.store.id);
+  }
+
+  for (const { key } of found) await env.VISITS.delete(key);
+  await env.VISITS.put('count:agent:' + targetId, '0');
+  const total = Number((await env.VISITS.get('count:total')) || 0);
+  await env.VISITS.put('count:total', String(Math.max(0, total - agentCount)));
+  if (bonusUnits) {
+    const bonus = Number((await env.VISITS.get('count:bonus')) || 0);
+    await env.VISITS.put('count:bonus', String(Math.max(0, bonus - bonusUnits)));
+  }
+
+  // A stale lastvisit: stamp would make the next agent to survey that store look
+  // like a repeat visit and silently cost them the base pay — so rebuild each
+  // touched store's stamp from whatever visits actually remain.
+  for (const storeId of touchedStores) {
+    const all = await env.VISITS.list({ prefix: 'visit:', limit: 1000 });
+    let newest = null;
+    for (const k of all.keys) {
+      const r = await env.VISITS.get(k.name, { type: 'json' });
+      if (r && r.store && r.store.id === storeId && (!newest || r.ts > newest)) newest = r.ts;
+    }
+    if (newest) await env.VISITS.put(lastVisitKey(storeId), newest);
+    else await env.VISITS.delete(lastVisitKey(storeId));
+  }
+
+  await say(env, chatId,
+    `🗑️ Видалено · Deleted <b>${found.length}</b> visit(s) by <code>${targetId}</code>.\n` +
+    `Лічильники виправлено · Counters corrected: total −${agentCount}` +
+    (bonusUnits ? `, bonus −${bonusUnits}` : '') + `, agent tally reset to 0.\n` +
+    `Перевірте · Check /report.`);
+}
+
 // 🔥 Fire tap → a confirm step (firing is consequential and hard to notice if
 // mistapped). The typed /admin fire <id> command skips straight to
 // cmdFireDo — typing the exact id out is itself the deliberate act.
@@ -1382,10 +1471,14 @@ async function handleVisit(env, c, msg, ctx) {
     // typing the exact id out is itself the deliberate act, so this skips
     // the confirm step and fires/rehires immediately.
     const rest = (text || '').replace(/^\/admin(?:@\w+)?\s*/i, '').trim();
-    const m = /^(fire|rehire)\s+(\S+)/i.exec(rest);
+    const m = /^(fire|rehire|purge)\s+(\S+)/i.exec(rest);
     if (m) {
       const targetId = m[2].replace(/\D/g, '');
-      if (m[1].toLowerCase() === 'fire') await cmdFireDo(env, c, chatId, targetId);
+      const sub = m[1].toLowerCase();
+      // purge deletes data outright, so it always goes through the confirm
+      // step — unlike fire/rehire, which are reversible in one tap.
+      if (sub === 'purge') await cmdPurgeRequest(env, c, chatId, targetId);
+      else if (sub === 'fire') await cmdFireDo(env, c, chatId, targetId);
       else await cmdRehire(env, c, chatId, targetId);
       return true;
     }
