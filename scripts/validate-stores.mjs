@@ -88,6 +88,41 @@ function main() {
           errors.push(`${where}: field "${field}" = "${value}" is not ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ.`);
         }
       }
+
+      // restockDates — a chain's published calendar of new-collection dates.
+      // The app reads it by scanning for the first entry after today and
+      // measuring the gap to the one before it, so ascending order and no
+      // duplicates are load-bearing, not cosmetic: an out-of-order entry makes
+      // it compute a negative cycle and mis-place every shopper in it.
+      if (s.restockDates !== undefined) {
+        if (!Array.isArray(s.restockDates)) {
+          errors.push(`${where}: restockDates must be an array of YYYY-MM-DD strings.`);
+        } else if (!s.restockDates.length) {
+          errors.push(`${where}: restockDates is empty — omit the field instead.`);
+        } else {
+          const plain = /^\d{4}-\d{2}-\d{2}$/;
+          let prev = null;
+          s.restockDates.forEach((d, i) => {
+            if (typeof d !== 'string' || !plain.test(d)) {
+              errors.push(`${where}: restockDates[${i}] = ${JSON.stringify(d)} must be a YYYY-MM-DD string.`);
+              return;
+            }
+            // Round-trip, not just Date.parse: JS rolls impossible days over
+            // silently ("2026-02-31" parses fine and becomes 2026-03-03), so a
+            // typo would shift the whole calendar and mis-place every shopper
+            // in the cycle rather than failing loudly here.
+            const parsed = new Date(d + 'T00:00:00Z');
+            if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== d) {
+              errors.push(`${where}: restockDates[${i}] = "${d}" is not a real calendar date.`);
+              return;
+            }
+            if (prev !== null && d <= prev) {
+              errors.push(`${where}: restockDates must be sorted ascending with no duplicates — "${d}" follows "${prev}".`);
+            }
+            prev = d;
+          });
+        }
+      }
     });
   }
 

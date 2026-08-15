@@ -78,7 +78,20 @@ function hoursSchema(rows) {
     }));
 }
 
-function restockLine(s) {
+// Latest published date not in the future, from a chain's own calendar.
+function lastPublished(s, todayIso) {
+  if (!Array.isArray(s.restockDates)) return null;
+  for (let i = s.restockDates.length - 1; i >= 0; i--) {
+    if (s.restockDates[i] <= todayIso) return s.restockDates[i];
+  }
+  return null;
+}
+function restockLine(s, todayIso) {
+  const last = lastPublished(s, todayIso);
+  if (last) return { ua: `Останнє завезення: ${last} (за офіційним календарем)`, has: true };
+  if (Array.isArray(s.restockDates) && s.restockDates.length) {
+    return { ua: `Наступне завезення: ${s.restockDates[0]} (за офіційним календарем)`, has: true };
+  }
   if (s.restock_date) {
     return { ua: `Останнє завезення: ${s.restock_date}`, has: true };
   }
@@ -89,11 +102,11 @@ function restockLine(s) {
   return { has: false };
 }
 
-function storePage(s) {
+function storePage(s, todayIso) {
   const { rows } = parseHours(s.hours);
   const price = pricingLabel(s.pricing);
   const addr = s.address || '';
-  const restock = restockLine(s);
+  const restock = restockLine(s, todayIso);
   const cycleTxt = s.cycle > 0 ? `${s.cycle} дн.` : null;
 
   const title = `${s.name}${addr ? ` — ${addr}` : ''} · Секонд-хенд Львів`;
@@ -212,7 +225,15 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-si
 ${hoursTable}
     </tbody>
   </table>
-${s.note ? `
+${Array.isArray(s.restockDates) && s.restockDates.length ? `
+  <h2>Календар завезень ${esc(s.restockDates[0].slice(0, 4))}</h2>
+  <p class="dim" style="font-size:14px;margin:-4px 0 10px;">Офіційний графік нових колекцій мережі.</p>
+  <table>
+    <tbody>
+${s.restockDates.map((d) => `      <tr><th scope="row">${esc(d)}</th><td${d <= todayIso ? ' class="dim"' : ''}>${d <= todayIso ? 'вже було' : 'заплановано'}</td></tr>`).join('\n')}
+    </tbody>
+  </table>
+` : ''}${s.note ? `
   <h2>Примітки</h2>
   <p class="note">${esc(s.note)}</p>
 ` : ''}
@@ -331,6 +352,7 @@ ${body}
 }
 
 // ── main ────────────────────────────────────────────────────────────────────
+const TODAY = new Date().toISOString().slice(0, 10);
 const all = JSON.parse(readFileSync(join(ROOT, 'stores.json'), 'utf8'));
 // Skip the dataset watermark exactly as the app's allStores() does. Publishing
 // it would both expose the copyright trap and assert a store that isn't real.
@@ -346,7 +368,7 @@ mkdirSync(OUT_DIR, { recursive: true });
 for (const s of stores) {
   const dir = join(OUT_DIR, s.id);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'index.html'), storePage(s));
+  writeFileSync(join(dir, 'index.html'), storePage(s, TODAY));
 }
 writeFileSync(join(OUT_DIR, 'index.html'), indexPage(stores));
 writeFileSync(join(ROOT, 'sitemap.xml'), sitemap(stores));
