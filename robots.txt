@@ -1,0 +1,18 @@
+# Lviv Second Hand — https://www.lvivsecondhand.com/
+# The app is a single page; store data is fetched from stores.json and rendered
+# client-side. Crawlers are welcome on everything a visitor can reach.
+
+User-agent: *
+Allow: /
+
+# Nothing user-facing lives here — build tooling, the printable marketing pack,
+# and the Worker sources. Excluded to keep the crawl focused on real pages.
+Disallow: /scripts/
+Disallow: /tools/
+Disallow: /vendor/
+Disallow: /worker/
+Disallow: /telegram-bot/
+Disallow: /native/
+Disallow: /marketing/
+
+Sitemap: https://www.lvivsecondhand.com/sitemap.xml
