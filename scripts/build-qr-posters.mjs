@@ -84,8 +84,11 @@ body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;backgrou
   box-shadow:0 6px 28px rgba(0,0,0,.16);overflow:hidden}
 .band{background:var(--bright);color:#fff;padding:13mm 10mm 9mm;text-align:center}
 .kicker{font-size:11pt;letter-spacing:.14em;text-transform:uppercase;opacity:.92;font-weight:700}
-.store{font-size:22pt;font-weight:800;line-height:1.15;margin-top:3mm;word-wrap:break-word}
-.addr{font-size:11pt;opacity:.92;margin-top:2mm}
+.store{font-size:26pt;font-weight:800;line-height:1.12;margin-top:3mm;letter-spacing:-.01em}
+/* The store id, not its name — the poster stays generic, and this is what the
+   owner matches against the print index when handing posters to an agent. */
+.code{display:inline-block;margin-top:5mm;padding:1.6mm 4.5mm;border:0.6mm solid rgba(255,255,255,.75);
+  border-radius:99px;font-size:11pt;font-weight:800;letter-spacing:.12em;font-family:ui-monospace,"SFMono-Regular",Menlo,monospace}
 .mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8mm}
 .qr{border:2mm solid var(--dark);border-radius:3mm;line-height:0;background:#fff}
 .qr svg{display:block;width:74mm;height:74mm}
@@ -113,16 +116,18 @@ function poster(s) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>QR-плакат — ${esc(s.name)}</title>
+<!-- Title carries the id, not the store name: browsers print the page title in
+     the sheet header by default, so a name here would end up on the poster. -->
+<title>QR ${esc(s.id.toUpperCase())}</title>
 <style>${CSS(dark, bright)}</style>
 </head>
 <body>
 <div class="noprint">Ctrl/⌘+P → друк A5 · <a href="${ORIGIN}/qr/">усі плакати</a></div>
 <div class="card">
   <div class="band">
-    <div class="kicker">Секонд-хенди Львова</div>
-    <div class="store">${esc(s.name)}</div>
-    ${s.address ? `<div class="addr">${esc(s.address)}</div>` : ''}
+    <div class="kicker">Безкоштовна карта</div>
+    <div class="store">Секонд-хенди<br>Львова</div>
+    <div class="code">${esc(s.id.toUpperCase())}</div>
   </div>
   <div class="mid">
     <div class="qr">${svg}</div>
@@ -142,13 +147,14 @@ function sheet(stores) {
   const cells = stores.map((s) => {
     const [dark, bright] = paletteFor(s.id);
     const link = `${ORIGIN}/?store=${encodeURIComponent(s.id)}`;
-    // Name alone is not enough to tell these apart once the sheet is cut up —
-    // several shops share a name ("Євро секонд хенд" ×3). The address, and the
-    // store id as a last resort, are what let the agent match sticker to door.
+    // Store id only — no name, no address. It is also the thing that actually
+    // disambiguates: several shops share a name ("Євро секонд хенд" ×3), so the
+    // id is what lets the agent match a cut-out sticker back to a door via the
+    // print index.
     return `  <div class="cell" style="--dark:${dark};--bright:${bright}">
     <div class="ct">
-      <div class="ch">${esc(s.name)}</div>
-      <div class="ca">${esc(s.address || '—')} <span class="cid">${esc(s.id)}</span></div>
+      <div class="ch">Секонд-хенди Львова</div>
+      <div class="ca">${esc(s.id.toUpperCase())}</div>
     </div>
     <div class="cq">${qrSvg(link, dark, 150)}</div>
     <div class="cf">www.lvivsecondhand.com</div>
@@ -168,10 +174,10 @@ body{font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;backgro
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0;max-width:210mm;margin:0 auto;background:#fff}
 .cell{border:1px dashed #bdb8ae;padding:5mm 4mm;text-align:center;display:flex;flex-direction:column;
   align-items:center;justify-content:space-between;height:70mm;break-inside:avoid}
-.ct{min-height:13mm}
-.ch{font-size:9.5pt;font-weight:800;color:var(--dark);line-height:1.2;max-height:2.4em;overflow:hidden}
-.ca{font-size:7pt;color:#5d6b63;line-height:1.25;margin-top:1mm;max-height:2.5em;overflow:hidden}
-.cid{color:#a9a49b;font-weight:700}
+.ct{min-height:13mm;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ch{font-size:9.5pt;font-weight:800;color:var(--dark);line-height:1.2}
+.ca{font-size:9pt;font-weight:800;color:#5d6b63;letter-spacing:.1em;margin-top:1.5mm;
+  font-family:ui-monospace,"SFMono-Regular",Menlo,monospace}
 .cq{line-height:0;border:1.2mm solid var(--dark);border-radius:2mm;background:#fff}
 .cq svg{display:block;width:33mm;height:33mm}
 .cf{font-size:7pt;color:#5d6b63;font-weight:600}
