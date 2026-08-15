@@ -2956,7 +2956,8 @@ function renderHelp(){
         ? `<p style="text-align:center;margin-top:16px;font-size:13px;color:var(--muted);">${escHtml(t('donateSub'))}</p>`
           + `<button class="sheet-btn" style="background:#ff5a5f;margin-top:8px;" onclick="openDonate()">${escHtml(t('donateBtn'))}</button>`
         : '')
-    + `<p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);"><a href="privacy.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">🔒 Privacy Policy · Політика конфіденційності</a></p>`
+    + `<p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);"><a href="store/" style="color:var(--muted);text-decoration:underline;">📄 Усі магазини списком · All stores as a list</a></p>`
+    + `<p style="text-align:center;margin-top:4px;font-size:13px;color:var(--muted);"><a href="privacy.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">🔒 Privacy Policy · Політика конфіденційності</a></p>`
     + `<p style="text-align:center;margin-top:4px;font-size:11px;color:var(--muted);"><a href="jobs/" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">💼 Careers · Вакансії</a></p>`
     + `<p style="text-align:center;margin-top:6px;font-size:11px;color:var(--muted);">v${escHtml(APP_VERSION)}</p>`
     + `<p style="text-align:center;margin-top:2px;font-size:11px;color:var(--muted);">© 2026 Lviv Second Hand · All rights reserved</p>`;
@@ -3046,7 +3047,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-15.1';
+const APP_VERSION = '2026-08-15.2';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys

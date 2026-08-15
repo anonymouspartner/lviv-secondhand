@@ -38,3 +38,18 @@ jobs:
       - name: Generate the bot's dataset (stores.json → stores.gen.js)
         run: node build-data.mjs
         working-directory: telegram-bot
+
+      # The per-store pages and sitemap are generated from stores.json but
+      # committed (GitHub Pages serves the repo root, so the files ARE the
+      # deploy). Regenerate and fail if the committed output differs — that
+      # means someone edited stores.json without re-running the generator, and
+      # the live pages would be advertising stale hours or restock dates.
+      - name: Check store pages are in sync with stores.json
+        run: |
+          node scripts/build-store-pages.mjs
+          if ! git diff --quiet -- store sitemap.xml; then
+            echo "::error::store/ or sitemap.xml is stale. Run: node scripts/build-store-pages.mjs"
+            git diff --stat -- store sitemap.xml
+            exit 1
+          fi
+          echo "Store pages are in sync."
