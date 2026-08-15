@@ -150,11 +150,13 @@ function materialsText() {
     `🖼️ <a href="${M}qr-poster.pdf">Плакат · Poster</a> — A4 на вітрину/стіну · in-store`,
     `💼 <a href="${M}sell-sheet.pdf">Прайс для власників · Sell-sheet</a> — пропозиція реклами · owner pitch`,
     '',
-    '🎯 <b>Персональні QR для магазинів · Per-store QR</b>',
-    'Кожен QR веде на сторінку саме цього магазину — не на загальну карту.',
-    'Each QR opens that one store in the app, not the general map.',
-    `🖨️ <a href="${APP_URL}qr/">Плакати по магазинах · Per-store posters</a> — A5, по одному`,
-    `📋 <a href="${APP_URL}qr/sheet/">Усі наліпки одним аркушем · All on A4 sheets</a> — друк і розріж`,
+    '🎯 <b>QR окремого магазину · One store’s QR</b>',
+    'Надішліть код магазину — пришлю його QR сюди, у чат.',
+    'Send a store code and I’ll post that store’s QR right here.',
+    '👉 <code>c12</code>   (або · or <code>/materials c12</code>)',
+    'Кожен QR веде саме на цей магазин, не на загальну карту.',
+    'Each QR opens that one store, not the general map.',
+    `🗂️ <a href="${APP_URL}qr/">Список усіх кодів · All store codes</a>`,
     '',
     'Друкуй наліпки на самоклейному папері A4. · Print stickers on A4 label paper.',
     `🗺️ ${APP_URL}`,
@@ -1230,6 +1232,45 @@ async function cmdCard(env, userId, chatId, arg) {
 async function cmdJob(env, chatId) {
   await say(env, chatId, jobText());
 }
+
+// "Waiting for a store id" flag, armed by a bare /materials. Short TTL: this
+// exists to make one follow-up message work, not to hold state for the day.
+const qrWaitKey = (uid) => `qrwait:${uid}`;
+const QR_WAIT_TTL = 300; // 5 min
+
+// Send one store's QR as a photo, plus the link to its printable A5 poster.
+// The image is a static file built by scripts/build-qr-posters.mjs — Telegram
+// fetches it by URL, so nothing is rendered at request time.
+async function cmdStoreQr(env, chatId, rawId) {
+  const id = String(rawId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const store = STORES.find((s) => s.id.toLowerCase() === id);
+  if (!store) {
+    await say(env, chatId,
+      `🤷 Не знайшов магазин <code>${esc(rawId)}</code>. · No store with that id.\n` +
+      `Формат — літера + число, напр. <code>c12</code>, <code>h5</code>. · Format is letter+number.\n` +
+      `Усі коди · All ids: ${APP_URL}qr/`);
+    return;
+  }
+  const code = store.id.toUpperCase();
+  const photo = `${APP_URL}qr/${store.id}/qr.png`;
+  const res = await tg(env, 'sendPhoto', {
+    chat_id: chatId,
+    photo,
+    parse_mode: 'HTML',
+    caption:
+      `🎯 <b>${esc(code)}</b> — QR цього магазину · this store's QR\n` +
+      `Веде на · Opens: ${APP_URL}?store=${encodeURIComponent(store.id)}\n\n` +
+      `🖨️ <a href="${APP_URL}qr/${store.id}/">Плакат A5 для друку · Printable A5 poster</a>`,
+  });
+  // Telegram refuses a photo it cannot fetch (e.g. Pages still deploying).
+  // Fall back to links rather than leaving the agent with silence.
+  if (res && res.ok === false) {
+    await say(env, chatId,
+      `🎯 <b>${esc(code)}</b>\n` +
+      `🖨️ <a href="${APP_URL}qr/${store.id}/">Плакат A5 · A5 poster</a>\n` +
+      `🖼️ <a href="${photo}">QR (PNG)</a>`);
+  }
+}
 async function cmdRoute(env, userId, chatId) {
   await putSession(env, userId, { step: 'route_loc', qi: 0, data: {} });
   await say(env, chatId,
@@ -1520,6 +1561,16 @@ async function handleVisit(env, c, msg, ctx) {
     await cmdJob(env, chatId);
     return true;
   }
+  // "/materials c12" → that one store's QR as a photo. Bare "/materials" falls
+  // through (return false) to the public text reply, but first arms a
+  // short-lived flag so the next message can be just the id — the flow the
+  // owner asked for: /materials → c12 → QR.
+  if (command === 'materials' || command === 'print' || command === 'flyers') {
+    const arg = (text || '').replace(/^\/(materials|print|flyers)(?:@\w+)?\s*/i, '').trim();
+    if (arg) { await cmdStoreQr(env, chatId, arg); return true; }
+    await env.VISITS.put(qrWaitKey(userId), '1', { expirationTtl: QR_WAIT_TTL });
+    return false;
+  }
   if (command === 'route') {
     if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
     await cmdRoute(env, userId, chatId);
@@ -1530,6 +1581,19 @@ async function handleVisit(env, c, msg, ctx) {
     if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
     await cmdVisit(env, userId, chatId, session);
     return true;
+  }
+
+  // A bare store id right after /materials. Guarded on !session so it can never
+  // swallow an answer to an in-progress /visit questionnaire, and on the armed
+  // flag so a stray "c12" at any other time still falls through to /help.
+  if (!session && text && !command) {
+    let waiting = null;
+    try { waiting = await env.VISITS.get(qrWaitKey(userId)); } catch (e) {}
+    if (waiting && /^[a-z]{1,3}\d{1,3}$/i.test(text.trim())) {
+      await env.VISITS.delete(qrWaitKey(userId));
+      await cmdStoreQr(env, chatId, text.trim());
+      return true;
+    }
   }
 
   // No active session and not one of our commands → let the public handler reply.

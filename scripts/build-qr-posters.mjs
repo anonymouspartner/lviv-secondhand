@@ -22,6 +22,7 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { deflateSync } from 'node:zlib';
 
 const require = createRequire(import.meta.url);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -73,6 +74,78 @@ function qrSvg(text, dark, px) {
     + `width="${px}" height="${px}" shape-rendering="crispEdges" role="img" `
     + `aria-label="QR"><rect width="${total}" height="${total}" fill="#fff"/>`
     + `<path d="${d}" fill="${dark}"/></svg>`;
+}
+
+// ── Minimal PNG writer ──────────────────────────────────────────────────────
+// Telegram's sendPhoto needs a real raster image, not the SVG the posters use,
+// and this repo deliberately has no npm dependencies. PNG is simple enough to
+// emit directly: signature + IHDR + IDAT (zlib, which Node ships) + IEND.
+const CRC_TABLE = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c;
+  }
+  return t;
+})();
+function crc32(buf) {
+  let c = -1;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+function chunk(type, data) {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([len, body, crc]);
+}
+function encodePng(width, height, rgb) {
+  // rgb: Buffer of width*height*3. Prefix each scanline with filter type 0.
+  const stride = width * 3;
+  const raw = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; y++) {
+    raw[y * (stride + 1)] = 0;
+    rgb.copy(raw, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;    // bit depth
+  ihdr[9] = 2;    // colour type 2 = truecolour RGB
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw, { level: 9 })),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+const hexRgb = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+
+// The image Telegram sends to an agent. Same colour and quiet zone as the
+// printed poster, so what arrives in chat is the poster's code, not a variant.
+function qrPng(text, dark, scale = 16) {
+  const q = qrcode(0, 'M');
+  q.addData(text);
+  q.make();
+  const n = q.getModuleCount();
+  const quiet = 4;
+  const side = (n + quiet * 2) * scale;
+  const [dr, dg, db] = hexRgb(dark);
+  const rgb = Buffer.alloc(side * side * 3, 0xff);   // white ground
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (!q.isDark(r, c)) continue;
+      const x0 = (c + quiet) * scale, y0 = (r + quiet) * scale;
+      for (let y = y0; y < y0 + scale; y++) {
+        let p = (y * side + x0) * 3;
+        for (let x = 0; x < scale; x++) { rgb[p++] = dr; rgb[p++] = dg; rgb[p++] = db; }
+      }
+    }
+  }
+  return encodePng(side, side, rgb);
 }
 
 const CSS = (dark, bright) => `
@@ -257,9 +330,13 @@ mkdirSync(OUT_DIR, { recursive: true });
 for (const s of stores) {
   mkdirSync(join(OUT_DIR, s.id), { recursive: true });
   writeFileSync(join(OUT_DIR, s.id, 'index.html'), poster(s));
+  // qr.png is what the Telegram bot sends for `/materials <id>` — sendPhoto
+  // takes a URL, so the image has to exist as a static file.
+  const [dark] = paletteFor(s.id);
+  writeFileSync(join(OUT_DIR, s.id, 'qr.png'), qrPng(`${ORIGIN}/?store=${encodeURIComponent(s.id)}`, dark));
 }
 mkdirSync(join(OUT_DIR, 'sheet'), { recursive: true });
 writeFileSync(join(OUT_DIR, 'sheet', 'index.html'), sheet(stores));
 writeFileSync(join(OUT_DIR, 'index.html'), index(stores));
 
-console.log(`Generated ${stores.length} QR posters + bulk sheet + index.`);
+console.log(`Generated ${stores.length} QR posters (+ qr.png each) + bulk sheet + index.`);

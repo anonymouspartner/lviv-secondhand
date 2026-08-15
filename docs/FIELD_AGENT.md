@@ -81,9 +81,13 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
    pick these up from the owner in the city center.
    *Per-store posters:* every store has its own QR that opens **that store** in
    the app rather than the general map, so a shopper who scans it lands on the
-   hours and restock cycle for the shop they're standing in. The owner prints
-   them from **/materials** in the bot → *Плакати по магазинах* (one A5 poster
-   each) or *Усі наліпки одним аркушем* (every store on A4, print once and cut).
+   hours and restock cycle for the shop they're standing in.
+   Request one at a time in the bot: **/materials** → send the store code
+   (e.g. `c12`) → the bot posts that store's QR as a photo, plus a link to its
+   printable A5 poster. `/materials c12` does the same in one message.
+   The posters carry **only the store code**, never the shop's name or address —
+   so the code is what ties a printed poster to a shop. The full code list is at
+   [lvivsecondhand.com/qr/](https://www.lvivsecondhand.com/qr/).
 3. In **@Secondhandlvivbot** send **/route** (or **/agent → 🧭 Route**), share
    your location, and get a walking order through the nearest stores — with a
    map link and turn-by-turn Google Maps directions. Optional, but it plans
