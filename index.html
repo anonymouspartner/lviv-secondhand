@@ -41,6 +41,68 @@
 <meta name="twitter:title" content="Секонд-хенди Львова — карта, ціни та завезення">
 <meta name="twitter:description" content="Усі секонд-хенди Львова на одній карті: години, ціни та дні завезення. Безкоштовно, працює офлайн.">
 <meta name="twitter:image" content="https://www.lvivsecondhand.com/og-image.png">
+<!-- Structured data (schema.org / JSON-LD). Describes the app itself; per-store
+     LocalBusiness entries belong with per-store URLs, which don't exist yet —
+     stores are rendered client-side on this one page. Everything here is
+     verifiable from the page: no ratings or review counts, since there is no
+     rating system to source them from. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://www.lvivsecondhand.com/#website",
+      "url": "https://www.lvivsecondhand.com/",
+      "name": "Секонд-хенди Львова · Lviv Second Hand",
+      "description": "Усі секонд-хенди Львова на одній карті: години роботи, ціни на вагу та поштучно, дні завезення і коли найдешевше.",
+      "inLanguage": ["uk-UA", "en"],
+      "publisher": { "@id": "https://www.lvivsecondhand.com/#org" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://www.lvivsecondhand.com/#org",
+      "name": "Lviv Second Hand",
+      "url": "https://www.lvivsecondhand.com/",
+      "logo": "https://www.lvivsecondhand.com/icon-512.png",
+      "sameAs": ["https://t.me/Secondhandlvivbot"]
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://www.lvivsecondhand.com/#app",
+      "name": "Секонд-хенди Львова · Lviv Second Hand",
+      "url": "https://www.lvivsecondhand.com/",
+      "description": "Карта секонд-хенд магазинів Львова з годинами роботи, типом цін, датами завезення та трекером циклу знижок. Працює офлайн, без реєстрації.",
+      "applicationCategory": "TravelApplication",
+      "operatingSystem": "Any (web browser)",
+      "browserRequirements": "Requires JavaScript.",
+      "inLanguage": ["uk-UA", "en"],
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "UAH" },
+      "featureList": [
+        "Карта секонд-хендів Львова",
+        "Години роботи та адреси",
+        "Ціни на вагу та поштучно",
+        "Дні завезення нового товару",
+        "Трекер циклу знижок",
+        "Працює офлайн"
+      ],
+      "screenshot": "https://www.lvivsecondhand.com/og-image.png",
+      "publisher": { "@id": "https://www.lvivsecondhand.com/#org" },
+      "about": {
+        "@type": "Place",
+        "name": "Львів",
+        "alternateName": "Lviv",
+        "address": {
+          "@type": "PostalAddress",
+          "addressLocality": "Львів",
+          "addressCountry": "UA"
+        }
+      }
+    }
+  ]
+}
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
@@ -2984,7 +3046,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-14.2';
+const APP_VERSION = '2026-08-15.1';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
