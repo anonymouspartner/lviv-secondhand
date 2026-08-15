@@ -56,6 +56,11 @@ jobs:
       - name: Rebuild store pages
         run: node scripts/build-store-pages.mjs
 
+      # Same reason: a renamed or re-addressed store must reach its printable
+      # QR poster, otherwise the next print run names the wrong shop.
+      - name: Rebuild QR posters
+        run: node scripts/build-qr-posters.mjs
+
       # Step 3 — commit & deploy. GitHub Pages for this repo serves straight
       # from `main` (no separate build/deploy workflow), so pushing here IS
       # the deploy. Skips cleanly if the patch was a no-op (e.g. updates
@@ -64,7 +69,7 @@ jobs:
         run: |
           git config user.name "lviv-secondhand-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add stores.json store sitemap.xml
+          git add stores.json store sitemap.xml qr
           if git diff --cached --quiet; then
             echo "No changes after patch — nothing to commit."
             exit 0
