@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
 
       # Step 1 — apply the patch. Reads store_id/updates from the event
       # payload (GITHUB_EVENT_PATH), not a workflow-expression env var, so
