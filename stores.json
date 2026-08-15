@@ -44,7 +44,7 @@
     "cycle": 35,
     "lat": 49.822992,
     "lng": 24.008012,
-    "note": "Large store. 5-week inventory cycle. Prices drop every day after delivery. Lucky hours: 30% off all items.",
+    "note": "Large store. 5-week inventory cycle. Prices drop every day after delivery. Lucky hours: 30% off all items. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "flashDeal": {
       "text": "НД 16.08: 10:00–14:00 · ВСЕ ПО 24 ₴ · Sun 16.08: 10:00–14:00, everything ₴24",
       "alert": false,
@@ -85,7 +85,7 @@
     "cycle": 14,
     "lat": 49.822719,
     "lng": 23.973377,
-    "note": "2nd floor entrance. 2-week inventory cycle.",
+    "note": "2nd floor entrance. 2-week inventory cycle. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "flashDeal": {
       "text": "НД 16.08 зачинено · нова колекція в понеділок 17.08 · Closed Sun 16.08, new collection Mon 17.08",
       "alert": false,
@@ -114,7 +114,7 @@
     "cycle": 35,
     "lat": 49.86345,
     "lng": 24.016631,
-    "note": "5-week inventory cycle. Prices decrease daily.",
+    "note": "5-week inventory cycle. Prices decrease daily. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "restockDates": [
       "2026-01-12",
       "2026-02-16",
@@ -155,7 +155,7 @@
     "cycle": 14,
     "lat": 49.794862,
     "lng": 24.063585,
-    "note": "Sykhiv district. 2-week inventory cycle.",
+    "note": "Sykhiv district. 2-week inventory cycle. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "flashDeal": {
       "text": "НД 16.08 зачинено · нова колекція в понеділок 17.08 · Closed Sun 16.08, new collection Mon 17.08",
       "alert": false,
@@ -184,7 +184,7 @@
     "cycle": 14,
     "lat": 49.841221,
     "lng": 23.96754,
-    "note": "2-week inventory cycle.",
+    "note": "2-week inventory cycle. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "flashDeal": {
       "text": "НД 16.08 зачинено · нова колекція в понеділок 17.08 · Closed Sun 16.08, new collection Mon 17.08",
       "alert": false,
@@ -213,7 +213,7 @@
     "cycle": 35,
     "lat": 49.840313,
     "lng": 24.02733,
-    "note": "City centre. 5-week cycle. Luxury items in separate section.",
+    "note": "City centre. 5-week cycle. Luxury items in separate section. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "restockDates": [
       "2026-01-12",
       "2026-02-16",
@@ -254,7 +254,7 @@
     "cycle": 35,
     "lat": 49.840059,
     "lng": 24.032867,
-    "note": "Central Lviv. 5-week cycle. Luxury section separate. Weekly promos. Next restock 17.08.2026",
+    "note": "Central Lviv. 5-week cycle. Luxury section separate. Weekly promos. Next restock 17.08.2026 Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "restockDates": [
       "2026-01-12",
       "2026-02-16",
@@ -269,6 +269,47 @@
     ],
     "flashDeal": {
       "text": "НД 16.08 зачинено · нова колекція в понеділок 17.08 · Closed Sun 16.08, new collection Mon 17.08",
+      "alert": false,
+      "startsAt": "2026-08-15T16:20:00.000Z",
+      "expiresAt": "2026-08-16T21:00:00.000Z"
+    }
+  },
+  {
+    "id": "h8",
+    "name": "HUMANA — Shevchenka",
+    "brand": "HUMANA",
+    "address": "вул. Тараса Шевченка, 31",
+    "addressEn": "Shevchenka St, 31",
+    "phone": "",
+    "type": "humana",
+    "pricing": "item",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "10:00–20:00",
+      "sun": "?"
+    },
+    "cycle": 35,
+    "lat": 49.845559,
+    "lng": 24.007059,
+    "note": "Додано з оголошення HUMANA — пін і години потребують перевірки на місці. · Added from HUMANA’s own announcement; pin and hours need field verification. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
+    "restockDates": [
+      "2026-01-12",
+      "2026-02-16",
+      "2026-03-23",
+      "2026-04-27",
+      "2026-06-01",
+      "2026-07-06",
+      "2026-08-17",
+      "2026-09-21",
+      "2026-10-26",
+      "2026-11-30"
+    ],
+    "flashDeal": {
+      "text": "НД 16.08: 10:00–14:00 · ВСЕ ПО 24 ₴ · Sun 16.08: 10:00–14:00, everything ₴24",
       "alert": false,
       "startsAt": "2026-08-15T16:20:00.000Z",
       "expiresAt": "2026-08-16T21:00:00.000Z"
