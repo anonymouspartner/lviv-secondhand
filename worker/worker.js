@@ -122,6 +122,13 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS submissions (id TEXT PRIMARY KEY, kind TEXT NOT NULL, store_id TEXT, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', issue_url TEXT, pin TEXT, created TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
+  // Daily unique visitors. One row per (day, visitor) — see visitorId() for why
+  // the id is a day-scoped hash and not a cookie. The events table cannot answer
+  // "how many people", only "how many taps", because it stores no identity at
+  // all; this is the smallest addition that makes the difference countable.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS visits (day TEXT NOT NULL, vid TEXT NOT NULL, PRIMARY KEY (day, vid))"
+  ).run();
   _schemaReady = true;
 }
 
@@ -583,6 +590,23 @@ async function reportFingerprint(env, storeId, date, ip) {
   const salt = env.ADMIN_KEY || env.BOUNTY_SECRET || 'lviv-restock';
   const raw = `${storeId}|${date}|${ip}|${salt}`;
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Day-scoped visitor id, same construction as reportFingerprint above and for
+// the same reason: we need to tell two people apart *within one day* without
+// keeping anything that identifies either of them.
+//
+// The IP and user-agent go into a SHA-256 with the day and a server-side salt,
+// and only the digest is stored. The raw IP is never written anywhere. Because
+// the day is inside the hash, the same person browsing on two days produces two
+// unrelated ids — so this counts daily uniques and cannot be turned into a
+// profile, a history, or a cross-day identity. There is deliberately no cookie
+// and no client-generated id, which would outlive the day and would contradict
+// the "no device identifier" promise in privacy.html §2.
+async function visitorId(env, day, ip, ua) {
+  const salt = env.ADMIN_KEY || env.BOUNTY_SECRET || 'lviv-visits';
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${day}|${ip}|${ua}|${salt}`));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -1114,6 +1138,45 @@ export default {
       }
       // Owner's queue of à la carte orders to fulfil. Private: these carry buyer
       // emails, so it is gated on the same ADMIN_KEY as the broadcast test.
+      // ── Unique-visitor stats for the bot's /admin → Visitors view ──
+      // Accepts the key as a query parameter as well as the header, because the
+      // caller is a Worker-to-Worker fetch rather than a browser, and the bot
+      // already passes ADMIN_KEY that way elsewhere.
+      if (url.pathname === '/api/stats') {
+        const key = request.headers.get('X-Admin-Key') || url.searchParams.get('key') || '';
+        if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+        try {
+          await ensureSchema(env);
+          const today = new Date().toISOString().slice(0, 10);
+          const ago = (n) => { const d = new Date(); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
+          const uniq = async (from) => {
+            const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM visits WHERE day >= ?').bind(from).first();
+            return (r && r.n) || 0;
+          };
+          // Distinct visitors over a range is NOT the sum of daily uniques — the
+          // same person on two days is two rows. Counting distinct vid across the
+          // window would under-report instead, since the id is day-scoped by
+          // design. So these are visits-days, and the response labels them so the
+          // bot can say what the number actually means.
+          const [d1, d7, d30, dAll] = await Promise.all([uniq(today), uniq(ago(6)), uniq(ago(29)), uniq('0000-00-00')]);
+          const daily = await env.DB.prepare(
+            'SELECT day, COUNT(*) AS n FROM visits WHERE day >= ? GROUP BY day ORDER BY day DESC'
+          ).bind(ago(13)).all();
+          const first = await env.DB.prepare('SELECT MIN(day) AS d FROM visits').first();
+          const ev = await env.DB.prepare(
+            'SELECT COUNT(*) AS n FROM events WHERE day >= ?'
+          ).bind(ago(29)).first();
+          return json({
+            ok: true,
+            today: d1, last7: d7, last30: d30, allTime: dAll,
+            since: (first && first.d) || null,
+            events30: (ev && ev.n) || 0,
+            daily: (daily && daily.results) || [],
+          }, 200, origin);
+        } catch (e) {
+          return json({ ok: false, reason: 'db error' }, 500, origin);
+        }
+      }
       if (url.pathname === '/orders') {
         if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) {
           return json({ ok: false, reason: 'unauthorized' }, 401, origin);
@@ -1519,6 +1582,18 @@ export default {
     } catch {
       return new Response('db error', { status: 500, headers: cors(origin) });
     }
+    // Count the visitor behind this beacon, once per day. Deliberately after the
+    // events insert and wrapped on its own: a schema hiccup here must not turn a
+    // working metrics write into a 500 the app would see.
+    try {
+      await ensureSchema(env);
+      const vid = await visitorId(
+        env, day,
+        request.headers.get('CF-Connecting-IP') || 'anon',
+        clean(request.headers.get('User-Agent') || '', 200),
+      );
+      await env.DB.prepare('INSERT INTO visits (day, vid) VALUES (?, ?) ON CONFLICT DO NOTHING').bind(day, vid).run();
+    } catch { /* visitor counting is best-effort — never break the beacon */ }
     return new Response(null, { status: 204, headers: cors(origin) });
   },
 
