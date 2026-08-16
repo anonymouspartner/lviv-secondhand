@@ -2193,6 +2193,29 @@
     "note": "By weight. Part of the Світ секонд-хенду chain."
   },
   {
+    "id": "c84",
+    "name": "Світ секонд-хенду — Цехова 1",
+    "brand": "Світ секонд-хенду",
+    "address": "вул. Цехова, 1",
+    "addressEn": "1 Tsekhova St",
+    "phone": "",
+    "type": "other",
+    "pricing": "item",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    },
+    "cycle": 7,
+    "lat": 49.84924,
+    "lng": 24.024066,
+    "note": "Надіслано користувачем; адресу визначено за координатами — потребує перевірки на місці. · Submitted by a contributor; address derived from the pin — needs a field check."
+  },
+  {
     "id": "c78",
     "name": "Світ секонд-хенду — Шевченка 358",
     "brand": "Світ секонд-хенду",
