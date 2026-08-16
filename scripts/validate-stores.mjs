@@ -128,6 +128,30 @@ function main() {
 
   for (const id of dupIds) errors.push(`Duplicate store id: "${id}".`);
 
+  // Expired flash deals. Nothing prunes them: a sale is written into stores.json
+  // by the Stripe webhook and stays there for good. The app checks expiresAt
+  // before rendering, and no other surface reads flashDeal at all, so a stale
+  // one is dead weight rather than a wrong page — which is exactly why it would
+  // never be noticed. Warn rather than fail: a deal that lapsed an hour ago is
+  // not a broken build, and failing CI on the clock would break unrelated work
+  // at an arbitrary moment.
+  const STALE_DAYS = 30;
+  const now = Date.now();
+  const stale = [];
+  for (const s of stores) {
+    const exp = s && s.flashDeal && s.flashDeal.expiresAt;
+    if (!exp) continue;
+    const t = Date.parse(exp);
+    if (Number.isNaN(t) || t >= now) continue;
+    const days = Math.floor((now - t) / 86400000);
+    if (days >= STALE_DAYS) stale.push(`${s.id} (expired ${days} days ago)`);
+  }
+  if (stale.length) {
+    console.warn(`\n⚠️  ${stale.length} store${stale.length === 1 ? ' has' : 's have'} a flashDeal expired for ${STALE_DAYS}+ days — safe to delete from stores.json:`);
+    for (const s of stale) console.warn(`     ${s}`);
+    console.warn('');
+  }
+
   if (errors.length) {
     console.error(`stores.json failed validation (${errors.length} issue${errors.length === 1 ? '' : 's'}):`);
     for (const e of errors) console.error(`  - ${e}`);
