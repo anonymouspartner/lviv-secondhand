@@ -316,29 +316,6 @@
     }
   },
   {
-    "id": "s2",
-    "name": "Euro Second-Hand",
-    "brand": "Independent",
-    "address": "просп. Червоної Калини, 59",
-    "addressEn": "Chervonoi Kalyny Ave, 59",
-    "phone": "050 917 3559",
-    "type": "other",
-    "pricing": "kg",
-    "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
-    },
-    "cycle": 7,
-    "lat": 49.8622,
-    "lng": 24.038,
-    "note": "By weight. ⭐ 3.4 (138 reviews). Closed Sundays."
-  },
-  {
     "id": "s3",
     "name": "Yevromiks",
     "brand": "Independent",
@@ -973,23 +950,23 @@
     "brand": "Євро Тренд Секонд хенд",
     "address": "проспект Червоної Калини, 59",
     "addressEn": "59 Chervonoi Kalyny Ave",
-    "phone": "",
+    "phone": "050 917 3559",
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
+      "mon": "10:00–19:00",
+      "tue": "10:00–19:00",
+      "wed": "10:00–19:00",
+      "thu": "10:00–19:00",
+      "fri": "10:00–19:00",
+      "sat": "10:00–19:00",
+      "sun": "closed"
     },
     "cycle": 7,
     "restockDay": "wed",
     "lat": 49.796834,
     "lng": 24.054224,
-    "note": "By weight. Restocked Wednesdays."
+    "note": "By weight. ⭐ 3.4 (138 reviews). Closed Sundays."
   },
   {
     "id": "c26",
