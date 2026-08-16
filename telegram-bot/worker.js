@@ -35,6 +35,9 @@
 //   /report       — OWNER only: totals, per-agent counts, estimated pay
 //   /export       — OWNER only: CSV of all logged visits
 //   /admin agents — OWNER only: every agent's tally/card/status + fire/rehire buttons
+//   /admin visitors — OWNER only: unique visitors to the website (today / 7d /
+//                    30d / all time + a 14-day chart), read from the metrics
+//                    Worker's /api/stats. Also /admin stats, /admin analytics.
 //   /admin fire <id>, /admin rehire <id> — OWNER only: revoke/restore an
 //                    agent's access instantly (KV-backed, no redeploy — see
 //                    docs/FIELD_AGENT.md §7)
@@ -655,6 +658,7 @@ async function handleAgentCallback(env, c, cq) {
     if (val === 'report') { await ownerReport(env, c, chatId); return; }
     if (val === 'export') { await ownerExport(env, chatId); return; }
     if (val === 'agents') { await cmdAdminAgents(env, c, chatId); return; }
+    if (val === 'visitors') { await cmdAdminVisitors(env, chatId); return; }
     if (val === 'fireabort') { await tg(env, 'sendMessage', { chat_id: chatId, text: 'Скасовано. · Cancelled.' }); return; }
     if (val.startsWith('firereq:')) { await cmdFireRequest(env, c, chatId, val.slice(8)); return; }
     if (val.startsWith('firedo:')) { await cmdFireDo(env, c, chatId, val.slice(7)); return; }
@@ -1333,9 +1337,70 @@ async function cmdAdminMenu(env, chatId) {
   await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML',
     text: '⚙️ <b>Адмін-меню · Admin menu</b>', reply_markup: { inline_keyboard: [
       [{ text: '📈 Звіт · Report', callback_data: 'ad:report' }],
+      [{ text: '📊 Відвідувачі · Visitors', callback_data: 'ad:visitors' }],
       [{ text: '📤 Експорт · Export', callback_data: 'ad:export' }],
       [{ text: '👥 Агенти · Agents', callback_data: 'ad:agents' }],
     ] } });
+}
+
+// Unique visitors to the website, read from the metrics Worker's /api/stats.
+//
+// "Unique" means one person per day: the Worker stores a day-scoped hash of the
+// visitor's IP and never the IP itself, so the same person on Monday and Tuesday
+// counts once each. That makes the 7- and 30-day figures visit-days rather than
+// distinct people, and the wording below says so — a number labelled "unique
+// visitors" that quietly means something else is worse than no number.
+async function cmdAdminVisitors(env, chatId) {
+  if (!env.ADMIN_KEY) {
+    await tg(env, 'sendMessage', { chat_id: chatId,
+      text: '⚠️ ADMIN_KEY не налаштовано на metrics Worker. · ADMIN_KEY is not set on the metrics Worker.' });
+    return;
+  }
+  let s;
+  try {
+    const res = await fetch(`${METRICS_WORKER_URL}/api/stats?key=${encodeURIComponent(env.ADMIN_KEY)}`, { cf: { cacheTtl: 0 } });
+    s = await res.json();
+  } catch {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Не вдалося зʼєднатися з metrics Worker. · Could not reach the metrics Worker.' });
+    return;
+  }
+  if (!s || !s.ok) {
+    const why = s && s.reason === 'unauthorized'
+      ? 'ADMIN_KEY не збігається між ботом і metrics Worker. · ADMIN_KEY does not match between the bot and the metrics Worker.'
+      : `Помилка: ${esc(String((s && s.reason) || 'unknown'))}`;
+    await tg(env, 'sendMessage', { chat_id: chatId, text: `⚠️ ${why}` });
+    return;
+  }
+
+  // A 14-day bar chart in text. Blocks are scaled to the busiest day in the
+  // window so the shape reads even when the absolute numbers are small, which
+  // they will be early on.
+  const rows = Array.isArray(s.daily) ? s.daily.slice(0, 14) : [];
+  const peak = rows.reduce((m, r) => Math.max(m, r.n || 0), 0);
+  const chart = rows.length
+    ? rows.map((r) => {
+        const bars = peak > 0 ? Math.max(1, Math.round((r.n / peak) * 12)) : 0;
+        return `<code>${esc(r.day.slice(5))} ${'█'.repeat(bars).padEnd(12, '·')} ${String(r.n).padStart(4)}</code>`;
+      }).join('\n')
+    : '<i>Поки що немає даних. · No data yet.</i>';
+
+  const lines = [
+    '📊 <b>Унікальні відвідувачі · Unique visitors</b>',
+    '',
+    `<b>Сьогодні · Today:</b> ${s.today}`,
+    `<b>7 днів · Last 7 days:</b> ${s.last7}`,
+    `<b>30 днів · Last 30 days:</b> ${s.last30}`,
+    `<b>За весь час · All time:</b> ${s.allTime}`,
+    '',
+    chart,
+    '',
+    `<i>Один відвідувач на день. Показники за 7/30 днів — це людино-дні, а не окремі люди.</i>`,
+    `<i>One visitor per day; the 7- and 30-day figures are visit-days, not distinct people.</i>`,
+  ];
+  if (s.since) lines.push('', `<i>Облік ведеться з ${esc(s.since)}. · Counting since ${esc(s.since)}.</i>`);
+  lines.push(`<i>Подій за 30 днів · Events in 30 days: ${s.events30}</i>`);
+
+  await tg(env, 'sendMessage', { chat_id: chatId, parse_mode: 'HTML', text: lines.join('\n') });
 }
 
 // Lists every id in AGENT_IDS (owner included, marked separately) with their
@@ -1551,6 +1616,7 @@ async function handleVisit(env, c, msg, ctx) {
       return true;
     }
     if (/^agents$/i.test(rest)) { await cmdAdminAgents(env, c, chatId); return true; }
+    if (/^(visitors|stats|analytics)$/i.test(rest)) { await cmdAdminVisitors(env, chatId); return true; }
     await cmdAdminMenu(env, chatId);
     return true;
   }

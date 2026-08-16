@@ -3101,7 +3101,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-16.1';
+const APP_VERSION = '2026-08-16.2';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
@@ -3151,6 +3151,20 @@ function track(type, key){
     else fetch(METRICS_URL, { method:'POST', body, keepalive:true }).catch(()=>{});
   } catch(e){ /* metrics must never break the app */ }
 }
+
+// One beacon per app open, so a visitor who looks at the map and leaves without
+// tapping anything is still counted. Every other track() call is tied to an
+// interaction, which would have made the visitor count a count of *engaged*
+// visitors and silently under-reported the quiet majority.
+// Once per tab, not once per render: openings are what we mean by a visit, and
+// re-running this on every re-render would inflate the event table for nothing.
+// The Worker deduplicates by day, so a reload cannot double-count a person.
+try {
+  if (!sessionStorage.getItem('lviv_sh_opened')) {
+    sessionStorage.setItem('lviv_sh_opened', '1');
+    track('action', 'app_open');
+  }
+} catch(e){ /* private mode can refuse sessionStorage — counting is optional */ }
 
 // ─────────────────────────────────────────────
 // PAID PROMOTIONS — live feed. A store that buys a promotion (Stripe checkout,
