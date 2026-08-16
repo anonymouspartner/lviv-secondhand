@@ -60,6 +60,27 @@ import {
 
 const APP_URL = 'https://www.lvivsecondhand.com/';
 const METRICS_WORKER_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
+
+// Every call from this Worker to the metrics Worker goes through here.
+//
+// Cloudflare blocks a Worker subrequest to another Worker on the same zone: the
+// public lviv-metrics.*.workers.dev URL answers HTTP 404 with "error code:
+// 1042" when the caller is itself a Worker. That silently broke flash-deal
+// subscribe/unsubscribe, edit claim and resolve, and the leaderboard — each sat
+// inside an empty catch, so the bot simply behaved as though the metrics Worker
+// had nothing to say.
+//
+// The METRICS service binding (telegram-bot/wrangler.toml) routes the request
+// inside Cloudflare and sidesteps the restriction. The public-URL path is kept
+// as a fallback for any deploy where the binding is absent, so an older
+// wrangler.toml degrades to the previous behaviour instead of throwing.
+function metricsFetch(env, path, init) {
+  if (env.METRICS && typeof env.METRICS.fetch === 'function') {
+    // The hostname is ignored by a service binding but the URL must be absolute.
+    return env.METRICS.fetch(new Request(`https://metrics.internal${path}`, init));
+  }
+  return fetch(`${METRICS_WORKER_URL}${path}`, init);
+}
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_NAMES = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 
@@ -445,7 +466,7 @@ async function handleFlashSubStart(env, ctx) {
   if (!/^[a-z0-9]{1,12}$/i.test(storeId)) return false;
   const store = STORES.find((s) => s.id === storeId);
   try {
-    await fetch(`${METRICS_WORKER_URL}/api/sub`, {
+    await metricsFetch(env, '/api/sub', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ storeId, chatId }),
     });
@@ -465,7 +486,7 @@ async function handleStopCommand(env, ctx) {
   const { chatId, text } = ctx;
   if (!/^\/stop\b/i.test(String(text || '').trim())) return false;
   try {
-    await fetch(`${METRICS_WORKER_URL}/api/unsub-all`, {
+    await metricsFetch(env, '/api/unsub-all', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chatId }),
     });
@@ -486,7 +507,7 @@ async function handleEditStart(env, ctx) {
   const name = (from && (from.first_name || from.username)) || null;
   let out = {};
   try {
-    const res = await fetch(`${METRICS_WORKER_URL}/api/edit/claim`, {
+    const res = await metricsFetch(env, '/api/edit/claim', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: m[1], chatId, name }),
     });
@@ -510,7 +531,7 @@ async function handleLeaderboardCommand(env, ctx) {
   if (!/^\/leaderboard\b/i.test(String(text || '').trim())) return false;
   let rows = [];
   try {
-    const res = await fetch(`${METRICS_WORKER_URL}/api/leaderboard`);
+    const res = await metricsFetch(env, '/api/leaderboard');
     rows = await res.json().catch(() => []);
   } catch (e) {}
   if (!Array.isArray(rows) || !rows.length) {
@@ -683,7 +704,7 @@ async function handleAgentCallback(env, c, cq) {
     if (!env.ADMIN_KEY) { await editPlain(original + '\n\n⚠️ ADMIN_KEY not set on the metrics Worker.'); return; }
     const action = kind === 'editapprove' ? 'approve' : 'reject';
     try {
-      const res = await fetch(`${METRICS_WORKER_URL}/api/edit/resolve`, {
+      const res = await metricsFetch(env, '/api/edit/resolve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: val, action, key: env.ADMIN_KEY }),
       });
@@ -1366,7 +1387,7 @@ async function cmdAdminVisitors(env, chatId) {
   // about whether the request failed, the route is missing, or the key is wrong.
   let s;
   try {
-    const res = await fetch(`${METRICS_WORKER_URL}/api/stats`, {
+    const res = await metricsFetch(env, '/api/stats', {
       headers: { 'X-Admin-Key': env.ADMIN_KEY },
     });
     const raw = await res.text();
