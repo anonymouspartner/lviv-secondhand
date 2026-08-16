@@ -1356,12 +1356,30 @@ async function cmdAdminVisitors(env, chatId) {
       text: '⚠️ ADMIN_KEY не налаштовано на metrics Worker. · ADMIN_KEY is not set on the metrics Worker.' });
     return;
   }
+  // Plain fetch with no `cf` options — the same shape as the /api/edit/resolve
+  // call above, which is the one Worker-to-Worker request in this file already
+  // proven in production. A `cf: { cacheTtl }` here threw outright.
+  //
+  // The body is read as text and parsed by hand so that a non-JSON reply (a
+  // Cloudflare error page, an HTML 5xx) reports its status and first line
+  // instead of collapsing into a generic "could not reach", which says nothing
+  // about whether the request failed, the route is missing, or the key is wrong.
   let s;
   try {
-    const res = await fetch(`${METRICS_WORKER_URL}/api/stats?key=${encodeURIComponent(env.ADMIN_KEY)}`, { cf: { cacheTtl: 0 } });
-    s = await res.json();
-  } catch {
-    await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Не вдалося зʼєднатися з metrics Worker. · Could not reach the metrics Worker.' });
+    const res = await fetch(`${METRICS_WORKER_URL}/api/stats`, {
+      headers: { 'X-Admin-Key': env.ADMIN_KEY },
+    });
+    const raw = await res.text();
+    try {
+      s = JSON.parse(raw);
+    } catch {
+      await tg(env, 'sendMessage', { chat_id: chatId,
+        text: `⚠️ Metrics Worker відповів не-JSON (HTTP ${res.status}). · Non-JSON reply (HTTP ${res.status}):\n${esc(raw.slice(0, 200))}` });
+      return;
+    }
+  } catch (e) {
+    await tg(env, 'sendMessage', { chat_id: chatId,
+      text: `⚠️ Не вдалося зʼєднатися з metrics Worker. · Could not reach the metrics Worker.\n${esc(String((e && e.message) || e).slice(0, 200))}` });
     return;
   }
   if (!s || !s.ok) {
