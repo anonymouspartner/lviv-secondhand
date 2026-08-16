@@ -36,6 +36,20 @@ compatibility_date = "2026-08-01"
 binding = "VISITS"
 id = "69158c00d55a4d3ab750cd916afca445"
 
+# Direct binding to the metrics Worker (worker/), which this one calls for
+# flash-deal subscriptions, edit claim/resolve, the leaderboard and the visitor
+# stats behind /admin.
+#
+# This has to be a service binding, not a plain fetch of the public
+# lviv-metrics.*.workers.dev URL. Cloudflare refuses a Worker subrequest to
+# another Worker on the same zone and answers HTTP 404 with "error code: 1042",
+# so every one of those calls failed — silently, because most were wrapped in
+# an empty catch. A service binding routes the request inside Cloudflare
+# instead: no public hop, no DNS, no 1042, and lower latency.
+[[services]]
+binding = "METRICS"
+service = "lviv-metrics"
+
 [vars]
 OWNER_ID   = "1212541015"    # owner — gets /report, /export, and a live push of each visit
 AGENT_IDS  = "1212541015,5677605074"    # agents allowed to run /visit (comma-separated): owner (smoke-test) + field agent.
