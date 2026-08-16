@@ -81,6 +81,34 @@ function metricsFetch(env, path, init) {
   }
   return fetch(`${METRICS_WORKER_URL}${path}`, init);
 }
+
+// metricsFetch with the failure made impossible to ignore.
+//
+// The callers below each used to wrap the request in an empty catch and then
+// carry on with a default value — {} or [] — which their next branch could not
+// tell apart from a real answer. So a Worker that was unreachable produced
+// "you are now following this store", "unsubscribed from all alerts", "this
+// link is invalid" and "no contributors yet": four confident statements, none
+// of them true. That is worse than an error, because the user acts on it.
+//
+// Returning an explicit ok flag forces the caller to decide what to say when
+// the call did not happen. A 204 with no body is a success with data: null.
+async function metricsCall(env, path, init) {
+  try {
+    const res = await metricsFetch(env, path, init);
+    if (!res.ok) return { ok: false, why: `HTTP ${res.status}` };
+    const raw = await res.text();
+    if (!raw) return { ok: true, data: null };
+    try { return { ok: true, data: JSON.parse(raw) }; }
+    catch { return { ok: false, why: `HTTP ${res.status}, non-JSON` }; }
+  } catch (e) {
+    return { ok: false, why: String((e && e.message) || e).slice(0, 120) };
+  }
+}
+// One wording for "the request did not reach the server", so a user can tell
+// this apart from a refusal and knows retrying is worth it.
+const METRICS_DOWN = '⚠️ Сервіс тимчасово недоступний — спробуйте ще раз за хвилину.\n'
+  + '⚠️ The service is temporarily unavailable — please try again in a minute.';
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_NAMES = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 
@@ -465,12 +493,14 @@ async function handleFlashSubStart(env, ctx) {
   const storeId = m[1];
   if (!/^[a-z0-9]{1,12}$/i.test(storeId)) return false;
   const store = STORES.find((s) => s.id === storeId);
-  try {
-    await metricsFetch(env, '/api/sub', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId, chatId }),
-    });
-  } catch (e) {}
+  const saved = await metricsCall(env, '/api/sub', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeId, chatId }),
+  });
+  if (!saved.ok) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: METRICS_DOWN });
+    return true;
+  }
   await tg(env, 'sendMessage', {
     chat_id: chatId,
     text: `📣 Стежите за акціями <b>${esc(store ? store.name : storeId)}</b>. Напишемо, якщо буде спалах-знижка. Відписатися від усіх — /stop\n\n` +
@@ -485,12 +515,14 @@ async function handleStopCommand(env, ctx) {
   if (!env.BOT_TOKEN) return false;
   const { chatId, text } = ctx;
   if (!/^\/stop\b/i.test(String(text || '').trim())) return false;
-  try {
-    await metricsFetch(env, '/api/unsub-all', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId }),
-    });
-  } catch (e) {}
+  const cleared = await metricsCall(env, '/api/unsub-all', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chatId }),
+  });
+  if (!cleared.ok) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: METRICS_DOWN });
+    return true;
+  }
   await tg(env, 'sendMessage', { chat_id: chatId, text: '🔕 Відписано від усіх акцій. · Unsubscribed from all flash-deal alerts.' });
   return true;
 }
@@ -505,14 +537,17 @@ async function handleEditStart(env, ctx) {
   const m = /^\/start\s+edit_(\S+)/.exec(String(text || '').trim());
   if (!m) return false;
   const name = (from && (from.first_name || from.username)) || null;
-  let out = {};
-  try {
-    const res = await metricsFetch(env, '/api/edit/claim', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: m[1], chatId, name }),
-    });
-    out = await res.json().catch(() => ({}));
-  } catch (e) {}
+  const claim = await metricsCall(env, '/api/edit/claim', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: m[1], chatId, name }),
+  });
+  if (!claim.ok) {
+    // Falling through would have told the contributor their link was invalid,
+    // sending them to check a link that is fine.
+    await tg(env, 'sendMessage', { chat_id: chatId, text: METRICS_DOWN });
+    return true;
+  }
+  const out = claim.data || {};
   if (out.status === 'auto') {
     await tg(env, 'sendMessage', { chat_id: chatId, text: `✅ Дякуємо! Вашу пропозицію одразу опубліковано (довірений редактор). +${EDIT_POINTS_LABEL} балів.\n\n✅ Thanks — published immediately (trusted editor). +${EDIT_POINTS_LABEL} points.` });
   } else if (out.status === 'pending') {
@@ -529,12 +564,13 @@ async function handleLeaderboardCommand(env, ctx) {
   if (!env.BOT_TOKEN) return false;
   const { chatId, text } = ctx;
   if (!/^\/leaderboard\b/i.test(String(text || '').trim())) return false;
-  let rows = [];
-  try {
-    const res = await metricsFetch(env, '/api/leaderboard');
-    rows = await res.json().catch(() => []);
-  } catch (e) {}
-  if (!Array.isArray(rows) || !rows.length) {
+  const board = await metricsCall(env, '/api/leaderboard');
+  if (!board.ok) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: METRICS_DOWN });
+    return true;
+  }
+  const rows = Array.isArray(board.data) ? board.data : [];
+  if (!rows.length) {
     await tg(env, 'sendMessage', { chat_id: chatId, text: '🏆 Поки що немає учасників. · No contributors yet.' });
     return true;
   }
@@ -780,7 +816,7 @@ async function handleAgentCallback(env, c, cq) {
 // owner also gets /admin (see cmdAdminMenu), instead of every task getting its
 // own top-level command. Bump CMD_VER to force a re-sync after editing the
 // lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v6';
+const CMD_VER = 'v7';
 // Everything the router answers for an ordinary user. /stop and /leaderboard
 // are ungated commands that were missing from this list, so they existed and
 // worked but could not be discovered from the menu — only by reading /help.
@@ -812,17 +848,28 @@ const OWNER_CMDS = [
   { command: 'export', description: 'CSV усіх відвідувань' },
 ];
 async function syncBotCommands(env, userId, isOwner, isAgent) {
+  // Record the version ONLY when Telegram accepted the menu.
+  //
+  // tg() returns the API's response body and never throws, so a rejected
+  // setMyCommands — a malformed description, a duplicate command, a rate limit —
+  // used to be followed by the KV write regardless. That marked the version
+  // done, and since the sync is skipped once the version matches, the menu would
+  // stay stale forever while every later run believed it had succeeded. The one
+  // failure mode this function has, it could not report or recover from.
+  const publish = async (key, params) => {
+    const res = await tg(env, 'setMyCommands', params);
+    if (res && res.ok) await env.VISITS.put(key, CMD_VER);
+    return !!(res && res.ok);
+  };
   // Public default menu — set once globally.
   if ((await env.VISITS.get('cmds:default')) !== CMD_VER) {
-    await tg(env, 'setMyCommands', { commands: PUBLIC_CMDS });
-    await env.VISITS.put('cmds:default', CMD_VER);
+    await publish('cmds:default', { commands: PUBLIC_CMDS });
   }
   // Extended menu — only for owner/agents, scoped to their own chat, once each.
   if (!(isOwner || isAgent)) return;
   if ((await env.VISITS.get('cmds:' + userId)) === CMD_VER) return;
   const cmds = PUBLIC_CMDS.concat(AGENT_CMDS, isOwner ? OWNER_CMDS : []);
-  await tg(env, 'setMyCommands', { commands: cmds, scope: { type: 'chat', chat_id: userId } });
-  await env.VISITS.put('cmds:' + userId, CMD_VER);
+  await publish('cmds:' + userId, { commands: cmds, scope: { type: 'chat', chat_id: userId } });
 }
 
 function norm(s) {
