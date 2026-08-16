@@ -1121,18 +1121,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "09:00–19:00",
+      "mon": "08:00–19:00",
       "tue": "09:00–19:00",
       "wed": "09:00–19:00",
       "thu": "09:00–19:00",
       "fri": "09:00–19:00",
       "sat": "09:00–19:00",
-      "sun": "09:00–19:00"
+      "sun": "09:00–15:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.827142,
     "lng": 23.992055,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — вівторок. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Tuesday.",
+    "restockDay": "mon"
   },
   {
     "id": "c32",
@@ -1144,18 +1145,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "09:00–19:00",
-      "tue": "09:00–19:00",
+      "mon": "09:00–15:00",
+      "tue": "08:00–19:00",
       "wed": "09:00–19:00",
       "thu": "09:00–19:00",
       "fri": "09:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.874502,
     "lng": 24.059873,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — середа. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Wednesday.",
+    "restockDay": "tue"
   },
   {
     "id": "c33",
@@ -1167,18 +1169,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "09:00–19:00",
-      "tue": "09:00–19:00",
+      "mon": "09:00–15:00",
+      "tue": "08:00–19:00",
       "wed": "09:00–19:00",
       "thu": "09:00–19:00",
       "fri": "09:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.8155,
     "lng": 24.0495,
-    "note": "By weight. (Approx. location.)"
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — середа. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Wednesday.",
+    "restockDay": "tue"
   },
   {
     "id": "c34",
@@ -1192,16 +1195,17 @@
     "hours": {
       "mon": "09:00–19:00",
       "tue": "09:00–19:00",
-      "wed": "09:00–19:00",
-      "thu": "09:00–19:00",
+      "wed": "09:00–15:00",
+      "thu": "08:00–19:00",
       "fri": "09:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.871284,
     "lng": 24.03208,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — п’ятниця. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Friday.",
+    "restockDay": "thu"
   },
   {
     "id": "c35",
@@ -1216,15 +1220,16 @@
       "mon": "09:00–19:00",
       "tue": "09:00–19:00",
       "wed": "09:00–19:00",
-      "thu": "09:00–19:00",
-      "fri": "09:00–19:00",
+      "thu": "09:00–15:00",
+      "fri": "08:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.836163,
     "lng": 24.071829,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — субота. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Saturday.",
+    "restockDay": "fri"
   },
   {
     "id": "c36",
@@ -1239,15 +1244,16 @@
       "mon": "09:00–19:00",
       "tue": "09:00–19:00",
       "wed": "09:00–19:00",
-      "thu": "09:00–19:00",
-      "fri": "09:00–19:00",
+      "thu": "09:00–15:00",
+      "fri": "08:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.816043,
     "lng": 23.973503,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — субота. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Saturday.",
+    "restockDay": "fri"
   },
   {
     "id": "c37",
@@ -1262,15 +1268,16 @@
       "mon": "09:00–19:00",
       "tue": "09:00–19:00",
       "wed": "09:00–19:00",
-      "thu": "09:00–19:00",
-      "fri": "09:00–19:00",
+      "thu": "09:00–15:00",
+      "fri": "08:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.861428,
     "lng": 24.017172,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — субота. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Saturday.",
+    "restockDay": "fri"
   },
   {
     "id": "c38",
@@ -1286,14 +1293,15 @@
       "tue": "09:00–19:00",
       "wed": "09:00–19:00",
       "thu": "09:00–19:00",
-      "fri": "09:00–19:00",
-      "sat": "09:00–19:00",
+      "fri": "09:00–15:00",
+      "sat": "08:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.785192,
     "lng": 24.05725,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — неділя. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Sunday.",
+    "restockDay": "sat"
   },
   {
     "id": "c39",
@@ -1308,16 +1316,16 @@
       "mon": "09:00–19:00",
       "tue": "09:00–19:00",
       "wed": "09:00–19:00",
-      "thu": "09:00–19:00",
-      "fri": "09:00–19:00",
+      "thu": "09:00–15:00",
+      "fri": "08:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.783715,
     "lng": 23.642052,
-    "note": "By weight. Location and hours verified on site.",
-    "restock_date": "2026-07-15"
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — субота. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Saturday. Розташування та години перевірено на місці. · Location and hours verified on site.",
+    "restockDay": "fri"
   },
   {
     "id": "c40",
@@ -1330,17 +1338,18 @@
     "pricing": "kg",
     "hours": {
       "mon": "09:00–19:00",
-      "tue": "09:00–19:00",
-      "wed": "09:00–19:00",
+      "tue": "09:00–15:00",
+      "wed": "08:00–19:00",
       "thu": "09:00–19:00",
       "fri": "09:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.353021,
     "lng": 23.507125,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — четвер. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Thursday.",
+    "restockDay": "wed"
   },
   {
     "id": "c41",
@@ -1355,15 +1364,40 @@
       "mon": "09:00–19:00",
       "tue": "09:00–19:00",
       "wed": "09:00–19:00",
-      "thu": "09:00–19:00",
-      "fri": "09:00–19:00",
+      "thu": "09:00–15:00",
+      "fri": "08:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.352335,
     "lng": 23.507713,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — субота. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Saturday.",
+    "restockDay": "fri"
+  },
+  {
+    "id": "c83",
+    "name": "EconomClass — Drohobych, Shevchenka 1 (2nd floor)",
+    "brand": "EconomClass",
+    "address": "м. Дрогобич, вул. Шевченка, 1 (2 поверх)",
+    "addressEn": "Drohobych, 1 Shevchenka St (2nd floor)",
+    "phone": "",
+    "type": "other",
+    "pricing": "kg",
+    "hours": {
+      "mon": "08:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00",
+      "sun": "09:00–15:00"
+    },
+    "cycle": 7,
+    "restockDay": "mon",
+    "lat": 49.353021,
+    "lng": 23.507125,
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — вівторок. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Tuesday. Новий магазин, 2 поверх. · New shop, second floor."
   },
   {
     "id": "c42",
@@ -1383,7 +1417,7 @@
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.93135,
     "lng": 23.573224,
     "note": "By weight."
@@ -1406,10 +1440,10 @@
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.939703,
     "lng": 23.380577,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Повне оновлення — понеділок і п’ятниця, «ЛЮКС» — вівторок і субота (за календарем мережі). · Clothing from Europe by weight, daily markdowns. Full restock Monday and Friday, \"Lux\" Tuesday and Saturday, per the chain calendar."
   },
   {
     "id": "c44",
@@ -1429,7 +1463,7 @@
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.515604,
     "lng": 23.198259,
     "note": "By weight."
@@ -1444,18 +1478,18 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "09:00–19:00",
-      "tue": "09:00–19:00",
-      "wed": "09:00–19:00",
-      "thu": "09:00–19:00",
-      "fri": "09:00–19:00",
-      "sat": "09:00–19:00",
-      "sun": "09:00–19:00"
+      "mon": "08:00–18:00",
+      "tue": "08:00–18:00",
+      "wed": "08:00–18:00",
+      "thu": "08:00–18:00",
+      "fri": "08:00–18:00",
+      "sat": "08:00–18:00",
+      "sun": "08:00–18:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.25597,
     "lng": 23.856467,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Повне оновлення — вівторок і п’ятниця, «ЛЮКС» — середа і субота (за календарем мережі). · Clothing from Europe by weight, daily markdowns. Full restock Tuesday and Friday, \"Lux\" Wednesday and Saturday, per the chain calendar."
   },
   {
     "id": "c46",
@@ -1475,7 +1509,7 @@
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 50.397938,
     "lng": 24.241436,
     "note": "By weight."
@@ -1498,7 +1532,7 @@
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 50.396307,
     "lng": 24.23171,
     "note": "By weight."
@@ -1521,7 +1555,7 @@
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 50.400227,
     "lng": 24.24146,
     "note": "By weight."
@@ -1544,7 +1578,7 @@
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 50.478494,
     "lng": 24.277853,
     "note": "By weight."
@@ -1562,15 +1596,16 @@
       "mon": "09:00–19:00",
       "tue": "09:00–19:00",
       "wed": "09:00–19:00",
-      "thu": "09:00–19:00",
-      "fri": "09:00–19:00",
+      "thu": "09:00–15:00",
+      "fri": "08:00–19:00",
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 49.472014,
     "lng": 24.135333,
-    "note": "By weight."
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — субота. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Saturday.",
+    "restockDay": "fri"
   },
   {
     "id": "c51",
@@ -1590,7 +1625,7 @@
       "sat": "09:00–19:00",
       "sun": "09:00–19:00"
     },
-    "cycle": 35,
+    "cycle": 7,
     "lat": 50.400879,
     "lng": 24.248485,
     "note": "By weight."
