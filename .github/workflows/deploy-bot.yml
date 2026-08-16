@@ -22,11 +22,18 @@ name: Deploy Telegram bot
 # This workflow regenerates stores.gen.js from stores.json, deploys the worker, and
 # sets the BOT_TOKEN secret on it. WEBHOOK_SECRET (already set on the worker) and
 # any other existing secrets are preserved — `wrangler deploy` never deletes them.
+#
+# stores.json is in the trigger paths because the bot bundles the dataset: the
+# deploy step regenerates stores.gen.js (which is gitignored, not committed), so
+# a data-only change — a new restock day, corrected hours, an added shop — never
+# reaches the bot until this workflow runs again. Without it, editing stores.json
+# updates the website and silently leaves /today and /materials on stale data.
 on:
   push:
     branches: [main]
     paths:
       - 'telegram-bot/**'
+      - 'stores.json'
       - '.github/workflows/deploy-bot.yml'
   workflow_dispatch:
 
