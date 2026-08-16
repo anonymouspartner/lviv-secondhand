@@ -780,13 +780,36 @@ async function handleAgentCallback(env, c, cq) {
 // owner also gets /admin (see cmdAdminMenu), instead of every task getting its
 // own top-level command. Bump CMD_VER to force a re-sync after editing the
 // lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v5';
+const CMD_VER = 'v6';
+// Everything the router answers for an ordinary user. /stop and /leaderboard
+// are ungated commands that were missing from this list, so they existed and
+// worked but could not be discovered from the menu — only by reading /help.
 const PUBLIC_CMDS = [
   { command: 'today', description: 'Магазини із завезенням сьогодні' },
   { command: 'cheap', description: 'Найкращі ціни на вагу зараз' },
   { command: 'submit', description: 'Додати свій магазин (власникам)' },
   { command: 'materials', description: 'Матеріали для друку: флаєри, наліпки' },
+  { command: 'leaderboard', description: 'Топ учасників за балами' },
+  { command: 'stop', description: 'Відписатися від усіх сповіщень' },
   { command: 'help', description: 'Команди та інформація' },
+];
+// Agents additionally get the field-work commands. These are all gated on
+// isAgent in the router, so listing them for anyone else would only advertise a
+// refusal.
+const AGENT_CMDS = [
+  { command: 'agent', description: '🧭 Меню агента · Agent menu' },
+  { command: 'visit', description: 'Записати відвідування магазину' },
+  { command: 'route', description: 'Маршрут обходу від вашої локації' },
+  { command: 'myvisits', description: 'Мої відвідування та заробіток' },
+  { command: 'pay', description: 'Ставки оплати' },
+  { command: 'card', description: 'Картка для виплат' },
+  { command: 'job', description: 'Опис роботи' },
+  { command: 'cancel', description: 'Скасувати активну дію' },
+];
+const OWNER_CMDS = [
+  { command: 'admin', description: '⚙️ Адмін-меню · Admin menu' },
+  { command: 'report', description: 'Звіт: відвідування та оплата' },
+  { command: 'export', description: 'CSV усіх відвідувань' },
 ];
 async function syncBotCommands(env, userId, isOwner, isAgent) {
   // Public default menu — set once globally.
@@ -797,8 +820,7 @@ async function syncBotCommands(env, userId, isOwner, isAgent) {
   // Extended menu — only for owner/agents, scoped to their own chat, once each.
   if (!(isOwner || isAgent)) return;
   if ((await env.VISITS.get('cmds:' + userId)) === CMD_VER) return;
-  const cmds = PUBLIC_CMDS.concat([{ command: 'agent', description: '🧭 Меню агента · Agent menu' }]);
-  if (isOwner) cmds.push({ command: 'admin', description: '⚙️ Адмін-меню · Admin menu' });
+  const cmds = PUBLIC_CMDS.concat(AGENT_CMDS, isOwner ? OWNER_CMDS : []);
   await tg(env, 'setMyCommands', { commands: cmds, scope: { type: 'chat', chat_id: userId } });
   await env.VISITS.put('cmds:' + userId, CMD_VER);
 }
