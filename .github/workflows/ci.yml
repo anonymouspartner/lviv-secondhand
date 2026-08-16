@@ -39,6 +39,14 @@ jobs:
         run: node build-data.mjs
         working-directory: telegram-bot
 
+      # Structural invariants that nothing else covers, each one a bug that
+      # actually shipped: a D1 table written to but never created, a Telegram
+      # menu entry with no handler, and a Worker fetching another Worker by its
+      # public URL (which Cloudflare rejects with error 1042). All three failed
+      # silently in production before this check existed.
+      - name: Check cross-system wiring
+        run: node scripts/check-wiring.mjs
+
       # The per-store pages and sitemap are generated from stores.json but
       # committed (GitHub Pages serves the repo root, so the files ARE the
       # deploy). Regenerate and fail if the committed output differs — that

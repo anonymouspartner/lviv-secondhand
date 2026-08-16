@@ -129,6 +129,13 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS visits (day TEXT NOT NULL, vid TEXT NOT NULL, PRIMARY KEY (day, vid))"
   ).run();
+  // The usage-metrics table the root POST writes to. It was created by hand when
+  // the collector shipped and never added here, so it worked only because that
+  // one manual command had been run: recreate the D1 database and every beacon
+  // would 500 with nothing in the code to explain why.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, type TEXT NOT NULL, key TEXT, lang TEXT)"
+  ).run();
   _schemaReady = true;
 }
 
