@@ -816,36 +816,43 @@ async function handleAgentCallback(env, c, cq) {
 // owner also gets /admin (see cmdAdminMenu), instead of every task getting its
 // own top-level command. Bump CMD_VER to force a re-sync after editing the
 // lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v7';
-// Everything the router answers for an ordinary user. /stop and /leaderboard
-// are ungated commands that were missing from this list, so they existed and
-// worked but could not be discovered from the menu — only by reading /help.
+const CMD_VER = 'v8';
+// Telegram renders setMyCommands as one flat list in exactly the order given,
+// with no headers or sections available. So the menu is categorised the only
+// two ways it can be: the order groups related commands into contiguous bands,
+// and a leading emoji per band makes the boundary visible while scrolling.
+// The emoji is chosen per band, not per command, so the eye can pick out a band
+// without reading — which is the whole point of grouping eighteen entries.
+//
+// Public band, in the order a shopper needs them: find stock, then find a
+// bargain, then the two owner-facing entries, then community, then settings.
 const PUBLIC_CMDS = [
-  { command: 'today', description: 'Магазини із завезенням сьогодні' },
-  { command: 'cheap', description: 'Найкращі ціни на вагу зараз' },
-  { command: 'submit', description: 'Додати свій магазин (власникам)' },
-  { command: 'materials', description: 'Матеріали для друку: флаєри, наліпки' },
-  { command: 'leaderboard', description: 'Топ учасників за балами' },
-  { command: 'stop', description: 'Відписатися від усіх сповіщень' },
-  { command: 'help', description: 'Команди та інформація' },
+  { command: 'today', description: '🛍 Магазини із завезенням сьогодні' },
+  { command: 'cheap', description: '🛍 Найкращі ціни на вагу зараз' },
+  { command: 'submit', description: '🏪 Додати свій магазин (власникам)' },
+  { command: 'materials', description: '🏪 Матеріали для друку: флаєри, наліпки' },
+  { command: 'leaderboard', description: '🏆 Топ учасників за балами' },
+  { command: 'stop', description: '🔕 Вимкнути всі сповіщення' },
+  { command: 'help', description: 'ℹ️ Команди та інформація' },
 ];
-// Agents additionally get the field-work commands. These are all gated on
-// isAgent in the router, so listing them for anyone else would only advertise a
-// refusal.
+// Field-work band. All gated on isAgent in the router, so listing them for
+// anyone else would only advertise a refusal. Bilingual here and in the owner
+// band below, unlike the public band: these are read by the owner too.
 const AGENT_CMDS = [
   { command: 'agent', description: '🧭 Меню агента · Agent menu' },
-  { command: 'visit', description: 'Записати відвідування магазину' },
-  { command: 'route', description: 'Маршрут обходу від вашої локації' },
-  { command: 'myvisits', description: 'Мої відвідування та заробіток' },
-  { command: 'pay', description: 'Ставки оплати' },
-  { command: 'card', description: 'Картка для виплат' },
-  { command: 'job', description: 'Опис роботи' },
-  { command: 'cancel', description: 'Скасувати активну дію' },
+  { command: 'visit', description: '🧭 Записати відвідування магазину' },
+  { command: 'route', description: '🧭 Маршрут обходу від вашої локації' },
+  { command: 'myvisits', description: '🧭 Мої відвідування та заробіток' },
+  { command: 'pay', description: '🧭 Ставки оплати · Pay rates' },
+  { command: 'card', description: '🧭 Картка для виплат · Payout card' },
+  { command: 'job', description: '🧭 Опис роботи · Job brief' },
+  { command: 'cancel', description: '🧭 Скасувати активну дію · Cancel' },
 ];
+// Owner band — last, because it is the one nobody else ever sees.
 const OWNER_CMDS = [
   { command: 'admin', description: '⚙️ Адмін-меню · Admin menu' },
-  { command: 'report', description: 'Звіт: відвідування та оплата' },
-  { command: 'export', description: 'CSV усіх відвідувань' },
+  { command: 'report', description: '⚙️ Звіт: відвідування та оплата' },
+  { command: 'export', description: '⚙️ CSV усіх відвідувань' },
 ];
 async function syncBotCommands(env, userId, isOwner, isAgent) {
   // Record the version ONLY when Telegram accepted the menu.
