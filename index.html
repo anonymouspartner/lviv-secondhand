@@ -633,7 +633,7 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
     </div>
     <div class="help-section">
       <h3>🗺️ The Map</h3>
-      <p>Shows all store locations as pins. Pin <strong>colour shows the price cycle</strong>: <strong>green</strong> just restocked, <strong>amber</strong> mid-cycle, <strong>red</strong> late cycle and cheapest, <strong>blue</strong> when we have no restock date yet. The letter inside is the chain — <strong>H</strong> for HUMANA, <strong>S</strong> for the rest. A ✓ on a pin means you've visited. Tap any pin to see a summary, then tap "View Details".</p>
+      <p>Shows all store locations as pins. Pin <strong>colour shows the price cycle</strong>: <strong>green</strong> just restocked, <strong>amber</strong> mid-cycle, <strong>red</strong> late cycle and cheapest, <strong>blue</strong> when we have no restock date yet. The letter inside is the chain — <strong>H</strong> HUMANA, <strong>C</strong> Світ секонд-хенду, <strong>E</strong> EconomClass, <strong>Є</strong> Євро Тренд, no letter for unbranded stores. A ✓ on a pin means you've visited. Tap any pin to see a summary, then tap "View Details".</p>
       <p style="margin-top:8px;">Tap the <strong>📍</strong> button (bottom-right) to turn <strong>your location</strong> on — you'll appear as a blue dot that follows you as you move. The button turns green while it's on; tap it again to turn location off. Your browser will ask for permission the first time.</p>
     </div>
     <div class="help-section">
@@ -2132,6 +2132,18 @@ const PIN_COLORS = {
   none:  '#2471a3',  // no restock data yet
   paid:  '#ffd23f',  // paid placement
 };
+// Pin letter by chain. HUMANA was the only one lettered — every other chain
+// (Світ секонд-хенду, EconomClass, Євро Тренд, 88 stores between them) fell
+// through to the generic 'S', which is not a chain initial at all and made
+// four different chains indistinguishable on the map. Unbranded stores
+// (Independent, and the two single-location brands) get no letter, same as
+// before — a letter only means something once a chain has more than one pin.
+const BRAND_LABEL = {
+  'HUMANA': 'H',
+  'Світ секонд-хенду': 'C',
+  'EconomClass': 'E',
+  'Євро Тренд Секонд хенд': 'Є',
+};
 function renderPins() {
   mapMarkers.forEach(m => m.remove());
   mapMarkers = [];
@@ -2169,7 +2181,7 @@ function renderPins() {
     const phase = di ? getPhase(di.day, di.cycle) : null;
     const color = ad ? PIN_COLORS.paid : (phase ? PIN_COLORS[phase] : PIN_COLORS.none);
     const label = routeNum ? String(routeNum.get(s.id) || '') :
-      (ad ? (spot ? '🌟' : '⭐') : (sd.visited ? '✓' : (s.custom ? '+' : (s.type==='humana' ? 'H' : 'S'))));
+      (ad ? (spot ? '🌟' : '⭐') : (sd.visited ? '✓' : (s.custom ? '+' : (BRAND_LABEL[s.brand] || ''))));
     const labelColor = ad ? '#3a2c00' : 'white'; // dark label reads on the gold paid pin
     // Paid pins take a dark ring instead of the usual white one, so gold never has
     // to be told apart from mid-cycle amber on colour alone.
@@ -2981,7 +2993,7 @@ function renderWelcome(){
 const HELP = {
   en: { title:'How to use this app', got:'Got it!', sections:[
     ['📋 The List','Shows all stores. Use the <strong>filter buttons</strong> at the top to narrow by chain (HUMANA, EconomClass, Світ, Євро Тренд), by KG or per-item pricing, by what is open now, or by stores you have or haven\'t visited. Scroll the filters sideways if you can\'t see them all.'],
-    ['🗺️ The Map','Shows all store locations as pins. Pin <strong>colour shows the price cycle</strong>: <strong>green</strong> just restocked, <strong>amber</strong> mid-cycle, <strong>red</strong> late cycle and cheapest, <strong>blue</strong> when we have no restock date yet. The letter inside is the chain — <strong>H</strong> for HUMANA, <strong>S</strong> for the rest. A ✓ on a pin means you\'ve visited. Tap any pin to see a summary, then tap "View Details".<br><br>Tap the <strong>📍</strong> button (bottom-right) to turn <strong>your location</strong> on — you\'ll appear as a blue dot that follows you. The button turns green while it\'s on; tap again to turn it off. Your browser asks for permission the first time.'],
+    ['🗺️ The Map','Shows all store locations as pins. Pin <strong>colour shows the price cycle</strong>: <strong>green</strong> just restocked, <strong>amber</strong> mid-cycle, <strong>red</strong> late cycle and cheapest, <strong>blue</strong> when we have no restock date yet. The letter inside is the chain — <strong>H</strong> HUMANA, <strong>C</strong> Світ секонд-хенду, <strong>E</strong> EconomClass, <strong>Є</strong> Євро Тренд, no letter for unbranded stores. A ✓ on a pin means you\'ve visited. Tap any pin to see a summary, then tap "View Details".<br><br>Tap the <strong>📍</strong> button (bottom-right) to turn <strong>your location</strong> on — you\'ll appear as a blue dot that follows you. The button turns green while it\'s on; tap again to turn it off. Your browser asks for permission the first time.'],
     ['📦 Inventory Tracker','Inside each store, tap <strong>"Set Last Delivery Date"</strong> to record when new stock arrived. The app counts the days, shows a progress bar, and estimates the current discount (or exact KG price). <strong>Green</strong> = fresh, high prices. <strong>Orange</strong> = mid-cycle. <strong>Red</strong> = late cycle, best deals!'],
     ['✅ Visited','Tap the big green <strong>"Mark as Visited"</strong> button inside any store. It turns into a checkmark and the card gets a green border in the list.'],
     ['✏️ Edit or remove a store','Open any store and tap <strong>Edit Store</strong> to fix its details, or <strong>🗑️ Remove this store</strong> at the bottom. Stores <em>you</em> added are deleted; built-in stores are just hidden on your device — a <strong>"Restore all"</strong> link at the bottom of the list brings them back anytime.'],
@@ -2991,7 +3003,7 @@ const HELP = {
     ['💬 Telegram bot','Prefer chat? Message <strong><a href="https://t.me/Secondhandlvivbot" target="_blank" rel="noopener" style="color:var(--green);">@Secondhandlvivbot</a></strong> and send <strong>/today</strong> for stores restocking today, or <strong>/cheap</strong> for the best by-weight deals right now — each result links back here.'] ] },
   ua: { title:'Як користуватися додатком', got:'Зрозуміло!', sections:[
     ['📋 Список','Показує всі магазини. Використовуйте <strong>кнопки фільтрів</strong> угорі, щоб обрати мережу (HUMANA, EconomClass, Світ, Євро Тренд), ціну на вагу чи по штуці, відкриті зараз, відвідані чи ще не відвідані. Проведіть фільтри вбік, якщо не всі видно.'],
-    ['🗺️ Карта','Показує розташування магазинів як позначки. <strong>Колір</strong> показує ціновий цикл: <strong>зелений</strong> — щойно завезли, <strong>жовтий</strong> — середина, <strong>червоний</strong> — кінець циклу, найдешевше, <strong>синій</strong> — дати завезення ще немає. Літера всередині — мережа: <strong>H</strong> для HUMANA, <strong>S</strong> для інших. ✓ означає, що ви відвідали. Натисніть позначку для короткого опису, потім «Деталі».<br><br>Натисніть кнопку <strong>📍</strong> (внизу праворуч), щоб увімкнути <strong>ваше місцезнаходження</strong> — ви з\'явитесь синьою крапкою, що рухається за вами. Кнопка стає зеленою, коли ввімкнено; натисніть ще раз, щоб вимкнути. Уперше браузер запитає дозвіл.'],
+    ['🗺️ Карта','Показує розташування магазинів як позначки. <strong>Колір</strong> показує ціновий цикл: <strong>зелений</strong> — щойно завезли, <strong>жовтий</strong> — середина, <strong>червоний</strong> — кінець циклу, найдешевше, <strong>синій</strong> — дати завезення ще немає. Літера всередині — мережа: <strong>H</strong> HUMANA, <strong>C</strong> Світ секонд-хенду, <strong>E</strong> EconomClass, <strong>Є</strong> Євро Тренд, без літери — магазини поза мережами. ✓ означає, що ви відвідали. Натисніть позначку для короткого опису, потім «Деталі».<br><br>Натисніть кнопку <strong>📍</strong> (внизу праворуч), щоб увімкнути <strong>ваше місцезнаходження</strong> — ви з\'явитесь синьою крапкою, що рухається за вами. Кнопка стає зеленою, коли ввімкнено; натисніть ще раз, щоб вимкнути. Уперше браузер запитає дозвіл.'],
     ['📦 Трекер товару','У магазині натисніть <strong>«Встановити дату поставки»</strong>, щоб вказати, коли завезли товар. Додаток рахує дні, показує смугу прогресу й оцінює знижку (чи точну ціну за кг). <strong>Зелений</strong> = свіжий, високі ціни. <strong>Помаранчевий</strong> = середина. <strong>Червоний</strong> = кінець циклу, найкращі ціни!'],
     ['✅ Відвідані','Натисніть велику зелену кнопку <strong>«Відмітити як відвідане»</strong> у магазині. Вона стане галочкою, а картка отримає зелену рамку у списку.'],
     ['✏️ Редагувати чи видалити','Відкрийте магазин і натисніть <strong>«Редагувати»</strong>, щоб змінити деталі, або <strong>🗑️ Видалити магазин</strong> внизу. Магазини, <em>додані вами</em>, видаляються; вбудовані просто ховаються на вашому пристрої — посилання <strong>«Відновити всі»</strong> внизу списку поверне їх будь-коли.'],
@@ -3101,7 +3113,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-16.2';
+const APP_VERSION = '2026-08-17.1';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
