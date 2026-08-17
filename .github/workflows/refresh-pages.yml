@@ -1,0 +1,66 @@
+name: Refresh store pages
+
+# The per-store pages are generated from stores.json but some of their content
+# is derived from *today's date*, not from stores.json alone: a store with a
+# published restock calendar renders "Останнє завезення: <most recent past
+# date>", and each calendar row is marked "вже було" or "заплановано". Those
+# flip on their own as dates pass, with no commit involved.
+#
+# Two things go wrong without this workflow:
+#
+#   1. The pages quietly start lying. On 2026-08-17 the committed HUMANA pages
+#      still told Google the last delivery was 2026-07-06, six weeks stale, and
+#      nothing would have corrected them until someone happened to edit
+#      stores.json.
+#
+#   2. CI fails on unrelated work. ci.yml regenerates the pages and fails if the
+#      committed output differs — correctly, since it cannot tell a stale file
+#      from a forgotten one. So the first pull request opened after a calendar
+#      date passes fails on five files it never touched, blaming whoever is
+#      unlucky enough to be next.
+#
+# Running daily keeps main current, so the guard only ever fires for the reason
+# it was written: someone edited stores.json without regenerating.
+on:
+  schedule:
+    - cron: "17 3 * * *" # 03:17 UTC daily — before Kyiv's morning, off the hour
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-pages
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Rebuild store pages and sitemap
+        run: node scripts/build-store-pages.mjs
+
+      # The QR posters carry no date-derived content, but regenerating them here
+      # costs nothing and keeps the two generators from drifting apart.
+      - name: Rebuild QR posters
+        run: node scripts/build-qr-posters.mjs
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "lviv-secondhand-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add store sitemap.xml qr
+          if git diff --cached --quiet; then
+            echo "Nothing changed — no calendar date passed since the last run."
+            exit 0
+          fi
+          git commit -m "Refresh date-derived store pages [skip ci]"
+          git push
