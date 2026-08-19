@@ -184,13 +184,7 @@
     "cycle": 14,
     "lat": 49.841221,
     "lng": 23.96754,
-    "note": "2-week inventory cycle. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
-    "flashDeal": {
-      "text": "НД 16.08 зачинено · нова колекція в понеділок 17.08 · Closed Sun 16.08, new collection Mon 17.08",
-      "alert": false,
-      "startsAt": "2026-08-15T16:20:00.000Z",
-      "expiresAt": "2026-08-16T21:00:00.000Z"
-    }
+    "note": "⚠️ Магазин закривається назавжди 23.08.2026. Розпродаж: одяг/взуття/текстиль — 56 грн, дрібнички — 30 грн, ексклюзивні знахідки — знижка -50%. · 2-week inventory cycle. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · ⚠️ Permanently closing 2026-08-23. Clearance sale: clothing/shoes/textiles 56 UAH, small items 30 UAH, exclusive finds -50% off. · Hours can change the day before a new collection; some stores close or open short."
   },
   {
     "id": "h6",
