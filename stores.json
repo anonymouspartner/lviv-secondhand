@@ -711,29 +711,6 @@
     "note": ""
   },
   {
-    "id": "c13",
-    "name": "Євро тренд секонд хенд",
-    "brand": "Independent",
-    "address": "",
-    "addressEn": "",
-    "phone": "",
-    "type": "other",
-    "pricing": "kg",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "cycle": 7,
-    "lat": 49.794817,
-    "lng": 24.06357,
-    "note": ""
-  },
-  {
     "id": "c15",
     "name": "Euro marke",
     "brand": "Independent",
