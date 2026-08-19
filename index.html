@@ -190,8 +190,10 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 .card-top { padding: 13px 14px 10px; display: flex; gap: 11px; align-items: flex-start; }
 .store-dot { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
 /* Neutral on purpose: red and blue now mean end-of-cycle and no-data on the map,
-   so the list badge must not reuse them for store type. The emoji carries type. */
-.dot-humana, .dot-other { background: var(--chip); }
+   so the list badge must not reuse them for chain identity. BRAND_LABEL's
+   letter carries the chain (same convention as the map pins, #190); an
+   unbranded store falls back to a plain shopping-bag glyph, same as before. */
+.dot-brand { background: var(--chip); font-weight: 900; }
 .card-body { flex: 1; min-width: 0; }
 .card-name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
 .card-addr { font-size: 12px; color: var(--muted); margin-bottom: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -923,7 +925,7 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
     <!-- 1. Contribute to official map -->
     <div class="help-section" id="share-contrib-wrap">
       <h3 id="share-contrib-hdr">🌍 Contribute to the official map</h3>
-      <p id="share-contrib-hint" style="font-size:13px;color:var(--muted);margin-bottom:10px;">Submit your additions &amp; corrections so the maintainer can merge them into the map everyone downloads. Opens a pre-filled GitHub form (a free GitHub account is required to post).</p>
+      <p id="share-contrib-hint" style="font-size:13px;color:var(--muted);margin-bottom:10px;">Send your additions and corrections to the maintainer for review. No GitHub account needed — approved changes are merged into the map everyone downloads.</p>
       <button class="share-action share-primary" onclick="contributeGitHub(this)"><span id="share-lbl-contrib">🗺️ Add to the official map</span></button>
     </div>
 
@@ -999,7 +1001,7 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
   <button class="fbtn" onclick="setFilter('nearby',this)" data-i18n="fNear">📍 Поруч</button>
   <button class="fbtn" onclick="setFilter('open',this)" data-i18n="fOpen">🕐 Відкрито</button>
   <button class="fbtn" onclick="setFilter('day0',this)" data-i18n="fDay0">🎉 Свіжий сьогодні</button>
-  <button class="fbtn" onclick="setFilter('humana',this)">🔴 HUMANA</button>
+  <button class="fbtn" onclick="setFilter('humana',this)">👕 HUMANA</button>
   <button class="fbtn" onclick="setFilter('econom',this)" data-i18n="fEconom">🏬 EconomClass</button>
   <button class="fbtn" onclick="setFilter('svit',this)" data-i18n="fSvit">🌍 Світ</button>
   <button class="fbtn" onclick="setFilter('eurotrend',this)" data-i18n="fEuroTrend">🕶️ Євро Тренд</button>
@@ -1589,14 +1591,13 @@ function renderList() {
     }
     return `<div class="store-card ${sd.visited?'visited':''} ${isAd(promo)?'promo':''}" role="button" tabindex="0" aria-label="${escHtml(s.name)}" onclick="openStore('${s.id}')">
       <div class="card-top">
-        <div class="store-dot ${s.type==='humana'?'dot-humana':'dot-other'}">${s.type==='humana'?'🔴':'🛍️'}</div>
+        <div class="store-dot dot-brand">${BRAND_LABEL[s.brand] || '🛍️'}</div>
         <div class="card-body">
           <div class="card-name">${escHtml(s.name)}</div>
           <div class="card-addr">${escHtml(addr)}</div>
           <div class="tags">
             ${promoTagFor(promo)}
             ${s.custom?'<span class="tag" style="background:#fff3ea;color:#c45a00;">'+t('addedByYou')+'</span>':''}
-            ${s.type==='humana'?'<span class="tag tag-red">'+t('humanaTag')+'</span>':''}
             ${s.pricing==='kg'?'<span class="tag tag-blue">'+t('byKg')+'</span>':'<span class="tag tag-green">'+t('itemized')+'</span>'}
             ${distTag}
             <span class="tag tag-gold">${hrs==='closed'?t('closedToday'):'🕐 '+hrs}</span>
@@ -2143,6 +2144,12 @@ const BRAND_LABEL = {
   'Світ секонд-хенду': 'C',
   'EconomClass': 'E',
   'Євро Тренд Секонд хенд': 'Є',
+  // Both of these chains' own names start with a letter that looks like the
+  // Latin C already used for Світ (Cyrillic С) or the Є already used for
+  // Євро Тренд — so first-letter-of-name breaks down here. Picked a
+  // different, visually distinct glyph for each instead of a lookalike.
+  'ЄвроБренд': 'B',
+  'Сток та секонд хенд': 'S',
 };
 function renderPins() {
   mapMarkers.forEach(m => m.remove());
@@ -3022,7 +3029,6 @@ function renderHelp(){
         ? `<p style="text-align:center;margin-top:16px;font-size:13px;color:var(--muted);">${escHtml(t('donateSub'))}</p>`
           + `<button class="sheet-btn" style="background:#ff5a5f;margin-top:8px;" onclick="openDonate()">${escHtml(t('donateBtn'))}</button>`
         : '')
-    + `<p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);"><a href="store/" style="color:var(--muted);text-decoration:underline;">📄 Усі магазини списком · All stores as a list</a></p>`
     + `<p style="text-align:center;margin-top:4px;font-size:13px;color:var(--muted);"><a href="privacy.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">🔒 Privacy Policy · Політика конфіденційності</a></p>`
     + `<p style="text-align:center;margin-top:4px;font-size:11px;color:var(--muted);"><a href="jobs/" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">💼 Careers · Вакансії</a></p>`
     + `<p style="text-align:center;margin-top:6px;font-size:11px;color:var(--muted);">v${escHtml(APP_VERSION)}</p>`
@@ -3113,7 +3119,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-08-17.1';
+const APP_VERSION = '2026-08-19.1';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
