@@ -2275,5 +2275,168 @@
       "sun": "?"
     },
     "restock_date": "2026-08-12"
+  },
+  {
+    "id": "c85",
+    "name": "Світ секонд-хенду — Джорджа Вашингтона 5А",
+    "brand": "Світ секонд-хенду",
+    "address": "вул. Джорджа Вашингтона, 5А",
+    "addressEn": "5A Dzhordzha Vashynhtona St",
+    "phone": "",
+    "type": "other",
+    "pricing": "kg",
+    "cycle": 14,
+    "lat": 49.8164139,
+    "lng": 24.0694339,
+    "note": "By weight. Part of the Світ секонд-хенду chain.",
+    "hours": {
+      "sun": "09:00–19:00",
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00"
+    },
+    "restock_date": "2026-08-15"
+  },
+  {
+    "id": "c86",
+    "name": "Світ секонд-хенду — Степана Бандери 22",
+    "brand": "Світ секонд-хенду",
+    "address": "вул. Степана Бандери, 22",
+    "addressEn": "22 Stepana Bandery St",
+    "phone": "",
+    "type": "other",
+    "pricing": "kg",
+    "cycle": 14,
+    "lat": 49.8348764,
+    "lng": 24.0109518,
+    "note": "By weight. Part of the Світ секонд-хенду chain. 209 m from c57 (\"Оутлет Сток\") — different name, different brand; treated as a separate shop.",
+    "hours": {
+      "sun": "09:00–19:00",
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00"
+    },
+    "restock_date": "2026-08-15"
+  },
+  {
+    "id": "c87",
+    "name": "ЄвроБренд — Городоцька 94",
+    "brand": "ЄвроБренд",
+    "address": "вул. Городоцька, 94",
+    "addressEn": "94 Horodotska St",
+    "phone": "",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8378348,
+    "lng": 24.0054075,
+    "note": "Submitted by the owner (@evrobrand_lviv). No restock schedule given.",
+    "hours": {
+      "sun": "09:00–20:00",
+      "mon": "09:00–20:00",
+      "tue": "09:00–20:00",
+      "wed": "09:00–20:00",
+      "thu": "09:00–20:00",
+      "fri": "09:00–20:00",
+      "sat": "09:00–20:00"
+    }
+  },
+  {
+    "id": "c88",
+    "name": "ЄвроБренд — Городоцька 33",
+    "brand": "ЄвроБренд",
+    "address": "вул. Городоцька, 33",
+    "addressEn": "33 Horodotska St",
+    "phone": "",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8429182,
+    "lng": 24.0214116,
+    "note": "Submitted by the owner (@evrobrand_lviv). No restock schedule given.",
+    "hours": {
+      "sun": "09:00–20:00",
+      "mon": "09:00–20:00",
+      "tue": "09:00–20:00",
+      "wed": "09:00–20:00",
+      "thu": "09:00–20:00",
+      "fri": "09:00–20:00",
+      "sat": "09:00–20:00"
+    }
+  },
+  {
+    "id": "c89",
+    "name": "Сток та секонд хенд — Пасічна 96А",
+    "brand": "Сток та секонд хенд",
+    "address": "вул. Пасічна, 96А",
+    "addressEn": "96A Pasichna St",
+    "phone": "+380934228870",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8219211,
+    "lng": 24.0753189,
+    "note": "Address confirmed only to street level (house number not in OSM) — needs a field check. · Address resolved to street level only — needs field verification.",
+    "hours": {
+      "sun": "?–?",
+      "mon": "?–?",
+      "tue": "?–?",
+      "wed": "?–?",
+      "thu": "?–?",
+      "fri": "?–?",
+      "sat": "?–?"
+    }
+  },
+  {
+    "id": "c90",
+    "name": "Сток та секонд хенд — Величковського 30а",
+    "brand": "Сток та секонд хенд",
+    "address": "вул. Величковського, 30а",
+    "addressEn": "30a Velychkivskoho St",
+    "phone": "+380934228870",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8756978,
+    "lng": 23.934949,
+    "note": "",
+    "hours": {
+      "sun": "?–?",
+      "mon": "?–?",
+      "tue": "?–?",
+      "wed": "?–?",
+      "thu": "?–?",
+      "fri": "?–?",
+      "sat": "?–?"
+    }
+  },
+  {
+    "id": "c91",
+    "name": "Сток та секонд хенд — Стрийська 61",
+    "brand": "Сток та секонд хенд",
+    "address": "вул. Стрийська, 61",
+    "addressEn": "61 Stryiska St",
+    "phone": "+380934228870",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.795196,
+    "lng": 24.017837,
+    "note": "Pin reused from c55 (\"Точка Секонд Хенд\") pending a field check — geocoding could not confirm house number 61 on this street and placed c55 at the same point under a different name. Possible duplicate, not merged: different name, this record has a phone number. · Needs a field check to confirm whether this and c55 are the same shop.",
+    "hours": {
+      "sun": "?–?",
+      "mon": "?–?",
+      "tue": "?–?",
+      "wed": "?–?",
+      "thu": "?–?",
+      "fri": "?–?",
+      "sat": "?–?"
+    }
   }
 ]
