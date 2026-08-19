@@ -2,7 +2,9 @@
 // Lviv Second Hand — Telegram bot (Cloudflare Worker, webhook-based)
 //
 // Public commands (stateless, answered inside the webhook response — no token):
-//   /start, /help — intro + command list
+//   /start, /help — intro + command list — also attaches the persistent
+//                   reply-keyboard menu (see replyFor/MAIN_MENU_MARKUP), a
+//                   one-tap alternative to typing any of the below
 //   /today        — stores getting fresh stock TODAY (fixed weekly restock day)
 //   /day <day>    — same, for any weekday (en/uk name or short uk form)
 //   /rare         — stores on a longer-than-weekly restock cycle (14, 35 days…)
@@ -64,7 +66,7 @@
 import { STORES } from './stores.gen.js';
 import {
   getCycleLengthKeyboard, getDayOfWeekKeyboard, getOpenTimeKeyboard, getCloseTimeKeyboard,
-  getConfirmKeyboard, summaryText, sessionToUpdates,
+  getConfirmKeyboard, summaryText, sessionToUpdates, DAY_OPTIONS,
 } from './telegram-agent-keyboards.js';
 
 const APP_URL = 'https://www.lvivsecondhand.com/';
@@ -394,46 +396,102 @@ function submitText() {
   ].join('\n');
 }
 
-// Map a public command to its reply text. Returns null for anything we don't handle.
+// ─────────────────────────────────────────────────────────────────────────────
+// PERSISTENT REPLY-KEYBOARD (#209, Phase G 3/3) — a one-tap menu layered on
+// top of the slash commands above, entered via /start. Every button just
+// sends its own label back as an ordinary text message, so the whole thing
+// stays in the stateless, no-BOT_TOKEN-needed tier (same as /today/day/rare):
+// Telegram keeps whatever reply_markup a chat last received, so only /start
+// and the two taps that switch keyboards (day submenu ⇄ main menu) need to
+// resend one — everything else can omit it and the visible keyboard just
+// stays put. 💬 Залишити відгук is the one exception: it re-dispatches to
+// handleFeedbackFlow (Feature 7), which does need BOT_TOKEN + VISITS, exactly
+// as bare /feedback already does.
+// ─────────────────────────────────────────────────────────────────────────────
+const MENU_DAY = '📅 За днем тижня';
+const MENU_CHEAP = '💰 Найдешевше зараз';
+const MENU_RARE = '🐢 Рідко оновлюють';
+const MENU_ADD = '➕ Додати магазин';
+const MENU_FEEDBACK = '💬 Залишити відгук';
+const MENU_HELP = '❓ Довідка';
+const MENU_BACK = '⬅️ Назад';
+
+function kbMarkup(rows) {
+  return { keyboard: rows.map((row) => row.map((t) => ({ text: t }))), resize_keyboard: true };
+}
+const MAIN_MENU_MARKUP = kbMarkup([
+  [MENU_DAY, MENU_CHEAP],
+  [MENU_RARE, MENU_ADD],
+  [MENU_FEEDBACK, MENU_HELP],
+]);
+// Same short Ukrainian day labels as the bounty flow's DAY_OPTIONS
+// (telegram-agent-keyboards.js), reused here rather than duplicated.
+const DAY_MENU_MARKUP = kbMarkup([
+  DAY_OPTIONS.slice(0, 4).map((o) => o.label),
+  DAY_OPTIONS.slice(4).map((o) => o.label).concat([MENU_BACK]),
+]);
+const DAY_LABEL_TO_CODE = Object.fromEntries(DAY_OPTIONS.map((o) => [o.label, o.code]));
+
+function daySubmenuPrompt() {
+  return '📅 <b>Оберіть день · Pick a day</b>';
+}
+
+// Map a public command OR a tapped menu-keyboard button to { text, markup }.
+// markup is only set when the visible keyboard should change; omitting it
+// leaves whatever keyboard the chat already has in place.
 function replyFor(text) {
+  const trimmed = text.trim();
+
+  // Reply-keyboard taps arrive as plain text identical to the button label —
+  // checked before the slash-command parse below since none of these start
+  // with "/".
+  if (trimmed === MENU_DAY) return { text: daySubmenuPrompt(), markup: DAY_MENU_MARKUP };
+  if (trimmed === MENU_BACK) return { text: 'Головне меню · Main menu', markup: MAIN_MENU_MARKUP };
+  if (trimmed in DAY_LABEL_TO_CODE) return { text: dayText(DAY_LABEL_TO_CODE[trimmed]), markup: DAY_MENU_MARKUP };
+  if (trimmed === MENU_CHEAP) return { text: cheapText() };
+  if (trimmed === MENU_RARE) return { text: rareText() };
+  if (trimmed === MENU_ADD) return { text: submitText() };
+  if (trimmed === MENU_HELP) return { text: helpText(), markup: MAIN_MENU_MARKUP };
+  // MENU_FEEDBACK is deliberately not handled here — handleFeedbackFlow
+  // (Feature 7) recognizes it too and runs before this stateless fallback.
+
   // Strip a leading /command, tolerate "/today@BotName" and trailing args.
-  const m = /^\/([a-z]+)(?:@\w+)?/i.exec(text.trim());
-  if (!m) return "I only understand commands. Send /help to see them.";
+  const m = /^\/([a-z]+)(?:@\w+)?/i.exec(trimmed);
+  if (!m) return { text: "I only understand commands. Send /help to see them." };
   switch (m[1].toLowerCase()) {
     case 'start':
     case 'help':
-      return helpText();
+      return { text: helpText(), markup: MAIN_MENU_MARKUP };
     case 'today':
-      return todayText();
+      return { text: todayText() };
     case 'day': {
-      const arg = text.trim().replace(/^\/day(?:@\w+)?\s*/i, '').trim();
-      if (!arg) return dayPickerHelp();
+      const arg = trimmed.replace(/^\/day(?:@\w+)?\s*/i, '').trim();
+      if (!arg) return { text: dayPickerHelp() };
       const wd = parseDayArg(arg);
-      if (!wd) return `Не розпізнав день · Didn't recognize that day: "${arg}".\n\n` + dayPickerHelp();
-      return dayText(wd);
+      if (!wd) return { text: `Не розпізнав день · Didn't recognize that day: "${arg}".\n\n` + dayPickerHelp() };
+      return { text: dayText(wd) };
     }
     case 'rare':
-      return rareText();
+      return { text: rareText() };
     case 'cheap':
-      return cheapText();
+      return { text: cheapText() };
     case 'submit':
     case 'owner':
-      return submitText();
+      return { text: submitText() };
     case 'materials':
     case 'print':
     case 'flyers':
-      return materialsText();
+      return { text: materialsText() };
     default:
-      return 'Unknown command. Send /help to see what I can do.';
+      return { text: 'Unknown command. Send /help to see what I can do.' };
   }
 }
 
 // Stateless reply: answer inside the webhook HTTP response (no bot token needed).
-function sendMessage(chatId, text) {
-  return new Response(
-    JSON.stringify({ method: 'sendMessage', chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
-    { headers: { 'Content-Type': 'application/json' } },
-  );
+function sendMessage(chatId, text, markup) {
+  const body = { method: 'sendMessage', chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true };
+  if (markup) body.reply_markup = markup;
+  return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
 }
 
 const ok = (body = 'ok') => new Response(body, { status: 200 });
@@ -712,8 +770,11 @@ async function handleFeedbackFlow(env, ctx) {
   const { userId, chatId, text } = ctx;
   const raw = String(text || '').trim();
   const command = raw ? (/^\/([a-z]+)(?:@\w+)?/i.exec(raw) || [])[1]?.toLowerCase() : null;
-  if (command === 'feedback') {
-    const arg = raw.replace(/^\/feedback(?:@\w+)?\s*/i, '').trim();
+  // The reply-keyboard's 💬 button is just bare /feedback by another name —
+  // a button tap can never carry inline text, so it always takes the "ask for
+  // the next message" branch below rather than the /feedback <text> shortcut.
+  if (command === 'feedback' || raw === MENU_FEEDBACK) {
+    const arg = command === 'feedback' ? raw.replace(/^\/feedback(?:@\w+)?\s*/i, '').trim() : '';
     if (arg) return await submitFeedback(env, ctx, arg);
     await env.VISITS.put(feedbackWaitKey(userId), '1', { expirationTtl: FEEDBACK_WAIT_TTL });
     await tg(env, 'sendMessage', {
@@ -2214,6 +2275,7 @@ export default {
 
     // Public, stateless commands (answered in the webhook response — no token).
     if (!text) return ok();
-    return sendMessage(chatId, replyFor(text));
+    const reply = replyFor(text);
+    return sendMessage(chatId, reply.text, reply.markup);
   },
 };
