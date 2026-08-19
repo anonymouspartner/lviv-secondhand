@@ -636,7 +636,7 @@ async function publishRestockDate(env, storeId, date) {
 // POSTs here, the owner gets a ✅/❌ in Telegram, and only an approval creates
 // the issue — via the API, using GH_PAT, with the body rendered server-side
 // from structured fields so no one can inject markdown into the repo.
-const SUB_KINDS = new Set(['contribution', 'owner', 'claim']);
+const SUB_KINDS = new Set(['contribution', 'owner', 'claim', 'feedback']);
 const SUB_MAX_JSON = 24000;   // a contribution bundle can carry many stores
 
 // Markdown-safe: strips the characters that could break out of a list item or
@@ -646,6 +646,16 @@ function mdSafe(v, max) {
 }
 
 function renderSubmissionIssue(kind, payload) {
+  if (kind === 'feedback') {
+    const p = payload || {};
+    return {
+      title: 'Bot feedback: ' + (mdSafe(p.text, 80) || '(empty)'),
+      labels: ['bot-feedback'],
+      body: 'Sent via the Telegram bot\'s /feedback command, approved by the maintainer.\n\n'
+        + `> ${mdSafe(p.text, 2000)}\n\n`
+        + `Chat: \`${mdSafe(p.chatId, 40)}\`` + (p.username ? ` (@${mdSafe(p.username, 60)})` : ''),
+    };
+  }
   if (kind === 'owner') {
     const p = payload || {};
     const rows = [
@@ -749,6 +759,9 @@ function generatePin() {
 
 function submissionSummary(kind, storeId, payload) {
   const p = payload || {};
+  if (kind === 'feedback') {
+    return `💬 BOT FEEDBACK\n\n${mdSafe(p.text, 500)}`;
+  }
   if (kind === 'owner') {
     return `🏪 STORE OWNER SUBMISSION\n\nStore: ${mdSafe(p.name, 120)}\nAddress: ${mdSafe(p.address, 200) || '—'}\nContact: ${mdSafe(p.contact, 200)}`;
   }

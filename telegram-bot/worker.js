@@ -24,6 +24,13 @@
 //   /leaderboard     — top contributors by points
 //   ✅/❌ buttons on a moderator-channel edit message — isOwner/isAgent only
 //
+// General feedback (active, needs BOT_TOKEN + VISITS — see handleFeedbackFlow):
+//   /feedback [text] — general feedback about the app or bot, not tied to a
+//                      store; POSTs to /api/submit (kind:'feedback') on the
+//                      metrics Worker, same owner-approval-before-GitHub-
+//                      issue path as a map contribution. Bare /feedback asks
+//                      for the text as the next message instead of failing.
+//
 // Field-agent commands (stateful — require BOT_TOKEN + the VISITS KV binding).
 // /agent (agents + owner) and /admin (owner only) group these into a one-tap
 // menu; every command below also still works typed directly:
@@ -208,6 +215,7 @@ function helpText() {
     '/rare — stores that restock every 14+ days · рідко оновлювані магазини',
     '/cheap — best by-weight deals right now · найкращі ціни на вагу',
     '/submit — add your store (for owners) · додати свій магазин',
+    '/feedback — tell the maintainer something · залишити відгук',
     '/materials — print-ready flyers, stickers, poster · рекламні матеріали для друку',
     '/help — this message · ця довідка',
     '',
@@ -665,6 +673,66 @@ async function handleLeaderboardCommand(env, ctx) {
   return true;
 }
 
+// General app/bot feedback (#209/#210), not tied to any store. POSTs to the
+// metrics Worker's /api/submit as kind:'feedback' — same pending-until-
+// approved path a map contribution or owner submission already takes: the
+// owner gets a ✅/❌ in Telegram, and only approval opens a GitHub issue (see
+// worker/worker.js's renderSubmissionIssue). Unlike Features 5/6 above, this
+// needs VISITS as well as BOT_TOKEN — remembering "this chat typed bare
+// /feedback and owes the next message" is exactly what the QR-poster wait
+// flag two features down does, so the same short-lived-KV-flag shape is used
+// here rather than inventing a session. Checked directly against the env
+// vars rather than through cfg().enabled: feedback isn't a field-agent
+// feature and has no business gated behind agent/owner ids.
+const FEEDBACK_WAIT_TTL = 300; // 5 min
+const feedbackWaitKey = (uid) => `fbwait:${uid}`;
+
+async function submitFeedback(env, ctx, feedbackText) {
+  const { chatId, from } = ctx;
+  const text = String(feedbackText || '').trim().slice(0, 2000);
+  if (!text) return false;
+  const username = (from && (from.username || from.first_name)) || null;
+  const sent = await metricsCall(env, '/api/submit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind: 'feedback', payload: { text, chatId: String(chatId), username } }),
+  });
+  if (!sent.ok) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: METRICS_DOWN });
+    return true;
+  }
+  await tg(env, 'sendMessage', {
+    chat_id: chatId,
+    text: '💬 Дякуємо! Ваш відгук надіслано власнику на перегляд.\n💬 Thanks — your feedback was sent to the maintainer for review.',
+  });
+  return true;
+}
+
+async function handleFeedbackFlow(env, ctx) {
+  if (!env.BOT_TOKEN || !env.VISITS) return false;
+  const { userId, chatId, text } = ctx;
+  const raw = String(text || '').trim();
+  const command = raw ? (/^\/([a-z]+)(?:@\w+)?/i.exec(raw) || [])[1]?.toLowerCase() : null;
+  if (command === 'feedback') {
+    const arg = raw.replace(/^\/feedback(?:@\w+)?\s*/i, '').trim();
+    if (arg) return await submitFeedback(env, ctx, arg);
+    await env.VISITS.put(feedbackWaitKey(userId), '1', { expirationTtl: FEEDBACK_WAIT_TTL });
+    await tg(env, 'sendMessage', {
+      chat_id: chatId,
+      text: "💬 Напишіть свій відгук одним повідомленням — я передам його власнику.\n💬 Type your feedback as your next message — I'll pass it on to the maintainer.",
+    });
+    return true;
+  }
+  // Not a command — might be the pending feedback text the prompt above asked
+  // for. Bail on anything command-shaped so this can never swallow an
+  // unrelated command as feedback.
+  if (!raw || raw.startsWith('/')) return false;
+  let waiting = null;
+  try { waiting = await env.VISITS.get(feedbackWaitKey(userId)); } catch (e) {}
+  if (!waiting) return false;
+  await env.VISITS.delete(feedbackWaitKey(userId));
+  return await submitFeedback(env, ctx, raw);
+}
+
 // `/start bounty_{token}` — the deep-link entry point. Returns true if it
 // consumed the update (whether or not the token was valid).
 async function handleBountyStart(env, c, ctx) {
@@ -902,7 +970,7 @@ async function handleAgentCallback(env, c, cq) {
 // owner also gets /admin (see cmdAdminMenu), instead of every task getting its
 // own top-level command. Bump CMD_VER to force a re-sync after editing the
 // lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v9';
+const CMD_VER = 'v10';
 // Telegram renders setMyCommands as one flat list in exactly the order given,
 // with no headers or sections available. So the menu is categorised the only
 // two ways it can be: the order groups related commands into contiguous bands,
@@ -919,6 +987,7 @@ const PUBLIC_CMDS = [
   { command: 'cheap', description: '🛍 Найкращі ціни на вагу зараз' },
   { command: 'submit', description: '🏪 Додати свій магазин (власникам)' },
   { command: 'materials', description: '🏪 Матеріали для друку: флаєри, наліпки' },
+  { command: 'feedback', description: '💬 Залишити відгук власнику' },
   { command: 'leaderboard', description: '🏆 Топ учасників за балами' },
   { command: 'stop', description: '🔕 Вимкнути всі сповіщення' },
   { command: 'help', description: 'ℹ️ Команди та інформація' },
@@ -2134,6 +2203,14 @@ export default {
         return ok();
       }
     }
+
+    // General feedback (Feature 7). Only needs BOT_TOKEN + VISITS, not the
+    // rest of the field-agent gate — checked after it so an in-progress
+    // /visit questionnaire's free-text answers are never mistaken for
+    // pending feedback text.
+    try {
+      if (await handleFeedbackFlow(env, mctx)) return ok();
+    } catch (e) {}
 
     // Public, stateless commands (answered in the webhook response — no token).
     if (!text) return ok();
