@@ -4,6 +4,8 @@
 // Public commands (stateless, answered inside the webhook response — no token):
 //   /start, /help — intro + command list
 //   /today        — stores getting fresh stock TODAY (fixed weekly restock day)
+//   /day <day>    — same, for any weekday (en/uk name or short uk form)
+//   /rare         — stores on a longer-than-weekly restock cycle (14, 35 days…)
 //   /cheap        — best by-weight deals right now (late in the weekly cycle)
 //   /submit       — point store owners at the web submission form
 //
@@ -111,6 +113,28 @@ const METRICS_DOWN = '⚠️ Сервіс тимчасово недоступн�
   + '⚠️ The service is temporarily unavailable — please try again in a minute.';
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_NAMES = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
+// Same Ukrainian labels as scripts/build-store-pages.mjs's DAYS list — kept in
+// sync by hand since one lives in the app's build step and the other here.
+const DAY_NAMES_UK = { mon: 'Понеділок', tue: 'Вівторок', wed: 'Середа', thu: 'Четвер', fri: 'П’ятниця', sat: 'Субота', sun: 'Неділя' };
+// Accepts a weekday in English, Ukrainian, or the common two-letter Ukrainian
+// short form, so "/day mon", "/day понеділок" and "/day пн" all resolve the
+// same way. Apostrophes are stripped first so "п'ятниця" and "пʼятниця" (two
+// different Unicode apostrophes people actually type) both match.
+const DAY_ALIASES = (() => {
+  const short = { mon: 'пн', tue: 'вт', wed: 'ср', thu: 'чт', fri: 'пт', sat: 'сб', sun: 'нд' };
+  const map = {};
+  for (const d of DAYS) {
+    map[d] = d;
+    map[DAY_NAMES[d].toLowerCase()] = d;
+    map[DAY_NAMES_UK[d].toLowerCase().replace(/['ʼ’]/g, '')] = d;
+    map[short[d]] = d;
+  }
+  return map;
+})();
+function parseDayArg(arg) {
+  const key = String(arg || '').trim().toLowerCase().replace(/['ʼ’]/g, '');
+  return DAY_ALIASES[key] || null;
+}
 
 // Today's weekday in Lviv (Europe/Kyiv), as 'mon'..'sun'.
 function kyivWeekday() {
@@ -180,6 +204,8 @@ function helpText() {
     '',
     '<b>Commands</b>',
     '/today — stores restocking today · магазини із завезенням сьогодні',
+    '/day — pick any weekday · обрати будь-який день тижня',
+    '/rare — stores that restock every 14+ days · рідко оновлювані магазини',
     '/cheap — best by-weight deals right now · найкращі ціни на вагу',
     '/submit — add your store (for owners) · додати свій магазин',
     '/materials — print-ready flyers, stickers, poster · рекламні матеріали для друку',
@@ -297,6 +323,57 @@ function cheapEmpty() {
   return `No by-weight stores are tracked yet. Open the full map: ${APP_URL}`;
 }
 
+// Stores with a fixed weekly restock day — any day, not just today. This is a
+// pure filter over the same `restockDay` field /today already reads: it never
+// applies to dated (restock_date/restockDates) or non-weekly-cycle stores,
+// same as /today's weekday branch, since a bare weekday can't place a store on
+// a 14- or 35-day cycle (see getDayInfo() in index.html).
+function dayText(wd) {
+  const stores = STORES.filter((s) => s.restockDay === wd);
+  const label = DAY_NAMES[wd];
+  const labelUk = DAY_NAMES_UK[wd];
+  if (!stores.length) {
+    return featuredBlock() + [
+      `📦 <b>No stores have a fixed ${label} (${labelUk}) restock day on record.</b>`,
+      'Спробуйте інший день · Try another day: /day mon, /day tue, /day wed…',
+      '',
+      `🐢 Rarely-restocking stores instead: /rare`,
+    ].join('\n');
+  }
+  const blocks = stores.map((s) => storeBlock(s, `🗓️ Restocks every ${label} · Щотижня в ${labelUk.toLowerCase()}`)).join('\n\n');
+  return featuredBlock() + [
+    `📦 <b>Fixed ${label} (${labelUk}) restocks</b> — ${stores.length} store${stores.length > 1 ? 's' : ''}:`,
+    '',
+    blocks,
+  ].join('\n');
+}
+
+function dayPickerHelp() {
+  const lines = DAYS.map((d) => `/day ${d} — ${DAY_NAMES[d]} · ${DAY_NAMES_UK[d]}`);
+  return [
+    '📅 <b>Pick a day · Оберіть день</b>',
+    'Which day should I check for fixed weekly restocks?',
+    '',
+    ...lines,
+  ].join('\n');
+}
+
+// "Rarely restocks" — any store on a longer-than-weekly cycle (14, 35 days…).
+// Pure read of the existing `cycle` field, sorted slowest-first so the chains
+// shoppers ask about least often ("does this place even get new stock?") lead.
+function rareText() {
+  const rare = STORES.filter((s) => s.cycle > 7).sort((a, b) => b.cycle - a.cycle);
+  if (!rare.length) {
+    return `No rarely-restocking stores on record. Open the full map: ${APP_URL}`;
+  }
+  const blocks = rare.map((s) => storeBlock(s, `🐢 Restocks every ${s.cycle} days`)).join('\n\n');
+  return featuredBlock() + [
+    `🐢 <b>Rarely-restocking stores</b> (14+ day cycle) — ${rare.length} store${rare.length > 1 ? 's' : ''}:`,
+    '',
+    blocks,
+  ].join('\n');
+}
+
 // Owner-submission: point owners at the web form (compliant first-party source).
 // The form opens a GitHub issue a maintainer reviews — no scraping, no bot state.
 function submitText() {
@@ -320,6 +397,15 @@ function replyFor(text) {
       return helpText();
     case 'today':
       return todayText();
+    case 'day': {
+      const arg = text.trim().replace(/^\/day(?:@\w+)?\s*/i, '').trim();
+      if (!arg) return dayPickerHelp();
+      const wd = parseDayArg(arg);
+      if (!wd) return `Не розпізнав день · Didn't recognize that day: "${arg}".\n\n` + dayPickerHelp();
+      return dayText(wd);
+    }
+    case 'rare':
+      return rareText();
     case 'cheap':
       return cheapText();
     case 'submit':
@@ -816,7 +902,7 @@ async function handleAgentCallback(env, c, cq) {
 // owner also gets /admin (see cmdAdminMenu), instead of every task getting its
 // own top-level command. Bump CMD_VER to force a re-sync after editing the
 // lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v8';
+const CMD_VER = 'v9';
 // Telegram renders setMyCommands as one flat list in exactly the order given,
 // with no headers or sections available. So the menu is categorised the only
 // two ways it can be: the order groups related commands into contiguous bands,
@@ -828,6 +914,8 @@ const CMD_VER = 'v8';
 // bargain, then the two owner-facing entries, then community, then settings.
 const PUBLIC_CMDS = [
   { command: 'today', description: '🛍 Магазини із завезенням сьогодні' },
+  { command: 'day', description: '🛍 Обрати будь-який день тижня' },
+  { command: 'rare', description: '🛍 Рідко оновлювані магазини' },
   { command: 'cheap', description: '🛍 Найкращі ціни на вагу зараз' },
   { command: 'submit', description: '🏪 Додати свій магазин (власникам)' },
   { command: 'materials', description: '🏪 Матеріали для друку: флаєри, наліпки' },
