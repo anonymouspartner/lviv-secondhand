@@ -1102,7 +1102,11 @@ function dayName(d){ const i = DAYS.indexOf(d); return (lang==='ua' ? DAY_NAMES_
 // DAYS key ('mon'..'sun') for a "YYYY-MM-DD" string. JS getDay() is 0=Sun..6=Sat.
 function weekdayOf(str){ const d = parseLocalDate(str); return d ? DAYS[(d.getDay()+6)%7] : ''; }
 // First restock on/after today, given a last-restock date and cycle length (days).
-function nextRestockDate(str, cycle){
+// (Kept distinct from the storeId-keyed nextRestockDate() below — they used to
+// share a name, which meant this one silently never ran: the later function
+// declaration in the file wins for every call site, so the owner-submission
+// summary below was calling the wrong one with the wrong argument types.)
+function nextRestockFromAnchor(str, cycle){
   const d = parseLocalDate(str); if(!d || !cycle) return '';
   const today = new Date(); today.setHours(0,0,0,0); d.setHours(0,0,0,0);
   while(d < today){ d.setDate(d.getDate() + cycle); }
@@ -1292,7 +1296,7 @@ function getDayInfo(storeId, defaultCycle, forceCycle, restockDay, restockDate, 
   const idx = restockDay ? WEEKDAY_IDX[String(restockDay).toLowerCase()] : undefined;
   if (idx !== undefined && cycle === 7) {
     const day = (today.getDay() - idx + 7) % 7;
-    return { day, total: day, cycle: 7, source: 'schedule' };
+    return { day, total: day, cycle: 7, source: 'schedule', nextIn: 7 - day };
   }
   return null;
 }
@@ -2724,7 +2728,7 @@ async function submitOwner(btn){
     const cyc = cycle ? ('every ' + cycle + ' days' + (cycle === '7' ? ' (weekly)' : cycle === '14' ? ' (2 weeks)' : cycle === '42' ? ' (6 weeks)' : '')) : 'frequency unspecified';
     const last = restockDate ? ('last restocked ' + restockDate + ' (' + dayName(weekdayOf(restockDate)) + ')') : 'last-restock date unspecified';
     restockLine = last + ', ' + cyc;
-    if(restockDate && cycle){ restockLine += ' \u2192 next restock ~' + nextRestockDate(restockDate, +cycle); }
+    if(restockDate && cycle){ restockLine += ' \u2192 next restock ~' + nextRestockFromAnchor(restockDate, +cycle); }
   }
   if(btn) btn.disabled = true;
   try {
@@ -3404,27 +3408,30 @@ function urlB64ToU8(s){
 function isoDate(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 // Cycle used for restock prediction: KG schedule length, else the store's saved cycle.
 function restockCycle(storeId, s){ return (s && kgCycle(s)) || getSD(storeId).cycle || (s && s.cycle) || 7; }
-// Predicted next restock date = the first "last delivery + N·cycle" boundary that
-// is today or later. Returns 'YYYY-MM-DD', or null if no delivery date is set.
+// Predicted next restock date, from the exact same source hierarchy the
+// Inventory & Price Tracker card itself uses (this device's own recorded
+// date, then the chain's published calendar, then a shared delivery date
+// another visitor reported, then the store's published weekday) — not just
+// this device's own recorded delivery. That used to be the whole bug: a
+// store the tracker already confidently places at "Day 4 of 35" still made
+// "Notify me" insist on a personal delivery date before it would predict
+// anything, because it only ever looked at getSD(storeId).lastDelivery.
+// Returns 'YYYY-MM-DD', or null when nothing at all is known yet.
 function nextRestockDate(storeId, s){
-  const sd = getSD(storeId);
-  const del = parseLocalDate(sd.lastDelivery);
-  if (!del) return null;
-  const cycle = restockCycle(storeId, s);
-  const today = new Date(); today.setHours(0,0,0,0); del.setHours(0,0,0,0);
-  // If the recorded date is still ahead of us it IS the next restock; starting at
-  // del+cycle would skip straight past the delivery the shop actually told us about.
-  if (del >= today) return isoDate(del);
-  const n = new Date(del); n.setDate(n.getDate() + cycle); // next restock is AFTER the recorded delivery
-  while (n < today) n.setDate(n.getDate() + cycle);
-  return isoDate(n);
+  const di = getDayInfo(storeId, s && s.cycle, s && kgCycle(s), s && s.restockDay, s && s.restock_date, s && s.restockDates);
+  if (!di || di.nextIn == null) return null;
+  const d = new Date(); d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + di.nextIn);
+  return isoDate(d);
 }
 async function toggleFollow(storeId, btn){
   if (!pushSupported()){ alert(t('notifyUnsupported')); return; }
   if (isFollowing(storeId)){ await unfollowStore(storeId, btn); return; }
   const raw = allStores().find(x => x.id === storeId);
-  // Notifications follow the last delivery date + cycle — so it must be set first.
-  if (!getSD(storeId).lastDelivery){ alert(t('notifyNeedDate')); openDelModal(storeId); return; }
+  // Only stores with genuinely nothing to go on — no device date, no chain
+  // calendar, no shared date, no published weekday — need a personal delivery
+  // date before a next restock can be predicted at all.
+  if (!nextRestockDate(storeId, raw)){ alert(t('notifyNeedDate')); openDelModal(storeId); return; }
   await doFollow(storeId, raw, btn);
 }
 async function doFollow(storeId, raw, btn){
