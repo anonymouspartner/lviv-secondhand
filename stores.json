@@ -278,18 +278,18 @@
     "type": "humana",
     "pricing": "item",
     "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
+      "mon": "10:00–20:00",
+      "tue": "10:00–20:00",
+      "wed": "10:00–20:00",
+      "thu": "10:00–20:00",
+      "fri": "10:00–20:00",
       "sat": "10:00–20:00",
-      "sun": "?"
+      "sun": "10:00–20:00"
     },
     "cycle": 35,
     "lat": 49.845559,
     "lng": 24.007059,
-    "note": "Додано з оголошення HUMANA — пін і години потребують перевірки на місці. · Added from HUMANA’s own announcement; pin and hours need field verification. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
+    "note": "Додано з оголошення HUMANA — пін потребує перевірки на місці. Години встановлено за стандартним графіком мережі (10:00–20:00 щодня, як у решти 7 точок HUMANA), а не підтверджено особисто для цієї адреси. · Added from HUMANA’s own announcement; pin still needs field verification. Hours are set to the brand's standard 10:00–20:00 daily schedule (matching all 7 other HUMANA locations), not individually confirmed for this address. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "restockDates": [
       "2026-01-12",
       "2026-02-16",
