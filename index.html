@@ -2889,12 +2889,19 @@ async function contributeGitHub(btn){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ kind:'contribution', payload: b }),
     });
-    if(!res.ok) throw new Error('submit failed');
+    if(!res.ok) {
+      // Distinguish "reached the server but it said no" from a network-level
+      // failure (CORS, ad-blocker, offline) — both used to collapse into the
+      // same silent alert, which made this un-diagnosable without dev tools.
+      const detail = await res.text().catch(() => '');
+      throw new Error(`HTTP ${res.status}${detail ? ': ' + detail.slice(0, 100) : ''}`);
+    }
     track('action','contribute');
     document.getElementById('share-overlay').classList.add('hidden');
     alert(t('submitThanks'));
   } catch(e){
-    alert(t('submitFailed'));
+    console.error('contributeGitHub failed:', e);
+    alert(t('submitFailed') + '\n\n(' + (e && e.message ? e.message : 'unknown error') + ')');
   } finally {
     if(btn) btn.disabled = false;
   }
