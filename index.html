@@ -2543,12 +2543,15 @@ function buildBundle(){
   const removed = getHiddenStores()
     .map(id => { const base = STORES.find(s => s.id === id); return base ? { id, name: base.name } : null; })
     .filter(Boolean);
+  // overrideList already carries every override's full `changes` object (plus
+  // a reviewable name) — sending the raw `overrides` map too would duplicate
+  // that data wholesale for no consumer (nothing server-side reads it), which
+  // is real weight against the submission size cap for no benefit.
   return {
     app: 'lviv-secondhand',
     v: 1,
     exported: new Date().toISOString().slice(0,10),
     custom: custom,
-    overrides: overrides,
     overrideList: overrideList,
     removed: removed
   };
@@ -2557,7 +2560,7 @@ function buildBundle(){
 function bundleCounts(b){
   return {
     added: (b.custom||[]).length,
-    edited: Object.keys(b.overrides||{}).length,
+    edited: (b.overrideList||[]).length,
     removed: (b.removed||[]).length
   };
 }
