@@ -85,7 +85,7 @@
     "cycle": 14,
     "lat": 49.822719,
     "lng": 23.973377,
-    "note": "2nd floor entrance. 2-week inventory cycle. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
+    "note": "2nd floor entrance. 2-week inventory cycle. Confirmed: shares this building with c70 (Світ секонд-хенду) — two separate stores, not a duplicate. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
     "flashDeal": {
       "text": "НД 16.08 зачинено · нова колекція в понеділок 17.08 · Closed Sun 16.08, new collection Mon 17.08",
       "alert": false,
@@ -1984,7 +1984,7 @@
     "cycle": 7,
     "lat": 49.8227191,
     "lng": 23.9733768,
-    "note": "By weight. Part of the Світ секонд-хенду chain.",
+    "note": "By weight. Part of the Світ секонд-хенду chain. Confirmed: shares this building with h2 (HUMANA) — two separate stores, not a duplicate.",
     "restock_date": "2026-08-05"
   },
   {
