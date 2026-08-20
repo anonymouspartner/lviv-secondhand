@@ -21,7 +21,14 @@ const WORKER_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
 const TYPES = new Set(['store_open', 'filter', 'tab', 'lang', 'action']);
 const LANGS = new Set(['en', 'ua']);
 const MAX_BATCH = 20;
-const MAX_BODY = 8192;
+// Every POST body funnels through this one guard before route dispatch, so it
+// has to be sized for the largest legitimate body of any route — a map-
+// contribution bundle (see SUB_MAX_JSON below), not just a metrics batch.
+// It was left at the metrics-only size when /api/submit was added, so any
+// contributor with more than a handful of edits got a silent 413 — same
+// status and body as SUB_MAX_JSON's own "too large", so it looked like that
+// check firing at 24000 chars when it was actually this one firing at 8192.
+const MAX_BODY = 65536;
 const VAPID_SUBJECT = 'mailto:lviv.secondhand@example.com';
 // Each follow carries the store's predicted next restock date + cycle + name
 // (client computes next = last delivery date + inventory cycle). The cron fires
