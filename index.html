@@ -338,19 +338,6 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 .sheet-btn:active { background: #12412a; }
 .sheet-cancel { width: 100%; padding: 13px; background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; margin-top: 8px; }
 
-/* ── WELCOME MODAL ── */
-.welcome-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.welcome-overlay.hidden { display: none; }
-.welcome-box { background: white; border-radius: 22px; width: 100%; max-width: 400px; overflow: hidden; }
-.welcome-top { background: var(--green); color: white; padding: 28px 24px 22px; text-align: center; }
-.welcome-top h2 { font-size: 26px; font-weight: 900; margin-bottom: 6px; }
-.welcome-top p { font-size: 14px; opacity: 0.85; }
-.welcome-steps { padding: 20px 24px; }
-.step { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
-.step-num { width: 34px; height: 34px; background: var(--green); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; flex-shrink: 0; }
-.step-text strong { display: block; font-size: 15px; margin-bottom: 2px; }
-.step-text p { font-size: 13px; color: var(--muted); line-height: 1.4; }
-.welcome-btn { display: block; width: calc(100% - 48px); margin: 0 24px 24px; padding: 16px; background: var(--green); color: white; border: none; border-radius: 14px; font-size: 17px; font-weight: 800; cursor: pointer; text-align: center; }
 
 /* ── HELP MODAL ── */
 .help-section { margin-bottom: 18px; }
@@ -547,7 +534,7 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
     --ink:#0d2c1a; --chip:#173a27;
     --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 30px rgba(0,0,0,.45);
   }
-  .tabs, .filter-bar, .info-card, .tracker-card, .welcome-box, .sheet, .restore-banner, .store-card{ background:var(--card); }
+  .tabs, .filter-bar, .info-card, .tracker-card, .sheet, .restore-banner, .store-card{ background:var(--card); }
   .fbtn, .share-action, .field{ background:var(--card); color:var(--text); }
   .field::placeholder{ color:var(--muted); }
   .fbtn.active{ background:var(--acid); color:#0a1c12; border-color:var(--acid); }  /* invert: pops on dark */
@@ -576,50 +563,6 @@ header{ background:linear-gradient(118deg,var(--green2),var(--green)); }
 </style>
 </head>
 <body>
-
-<!-- ══════════════════════════════════════════ -->
-<!-- WELCOME SCREEN (shown on first visit)       -->
-<!-- ══════════════════════════════════════════ -->
-<div class="welcome-overlay hidden" id="welcome">
-  <div class="welcome-box" id="welcome-box">
-    <div class="welcome-top">
-      <div style="font-size:48px;margin-bottom:10px;">🧥</div>
-      <h2>Lviv Second Hand</h2>
-      <p>Your personal guide to every second-hand store in Lviv</p>
-    </div>
-    <div class="welcome-steps">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div class="step-text">
-          <strong>Browse or search stores</strong>
-          <p>See every store in a list or on the map. Filter by chain, by price type, by what you have visited, and more.</p>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div class="step-text">
-          <strong>Tap a store to see full details</strong>
-          <p>Hours, address, phone, pricing type, and notes are all inside each store card.</p>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div class="step-text">
-          <strong>Track inventory & prices</strong>
-          <p>Set the last delivery date for any store — the app counts each day and shows estimated discounts automatically.</p>
-        </div>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div class="step-text">
-          <strong>Mark stores as visited</strong>
-          <p>Tap the green button inside any store to record your visit. Your progress is saved.</p>
-        </div>
-      </div>
-    </div>
-    <button class="welcome-btn" onclick="closeWelcome()">Let's Go →</button>
-  </div>
-</div>
 
 <!-- ══════════════════════════════════════════ -->
 <!-- HELP SHEET                                 -->
@@ -1062,7 +1005,7 @@ function setLang(l, viaUser){
   document.getElementById('lang-en').setAttribute('aria-pressed', String(l==='en'));
   document.getElementById('lang-ua').setAttribute('aria-pressed', String(l==='ua'));
   document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n');if(TR[lang][k]!==undefined)el.textContent=TR[lang][k];});
-  renderWelcome(); renderHelp();
+  renderHelp();
   updateStats();renderList();
   if(currentStoreId)openDetail(currentStoreId);
 }
@@ -2971,32 +2914,8 @@ async function sendToTelegramAgent(storeId, btn){
 }
 
 // ─────────────────────────────────────────────
-// WELCOME + HELP (bilingual, rendered from JS)
+// HELP (bilingual, rendered from JS)
 // ─────────────────────────────────────────────
-const WELCOME = {
-  en: { sub:'Your personal guide to every second-hand store in Lviv',
-    steps:[['Browse or search stores','See all {n} stores in a list or on the map. Filter by chain, by KG, by open now, by visited, and more.'],
-      ['Tap a store to see full details','Hours, address, phone, pricing type, and notes are all inside each store card.'],
-      ['Track inventory & prices','Set the last delivery date for any store — the app counts each day and shows estimated discounts automatically.'],
-      ['Mark stores as visited','Tap the green button inside any store to record your visit. Your progress is saved.'],
-      ['🔔 Get restock alerts','Set a store\'s last delivery date, follow it, and get a push around the next expected restock.']],
-    btn:"Let's Go →" },
-  ua: { sub:'Ваш особистий гід по секонд-хендах Львова',
-    steps:[['Переглядайте або шукайте магазини','Усі магазини ({n}) у списку чи на карті. Фільтри: мережа, на вагу, відкрито зараз, відвідані тощо.'],
-      ['Натисніть магазин, щоб побачити деталі','Години, адреса, телефон, тип цін і примітки — усе всередині картки магазину.'],
-      ['Стежте за товаром і цінами','Вкажіть дату останньої поставки — додаток рахує дні та показує орієнтовні знижки.'],
-      ['Позначайте відвідані магазини','Натисніть зелену кнопку в магазині, щоб зберегти візит. Прогрес зберігається.'],
-      ['🔔 Сповіщення про завезення','Вкажіть дату останньої поставки, відстежуйте магазин і отримуйте сповіщення близько наступного очікуваного завезення.']],
-    btn:'Почати →' }
-};
-function renderWelcome(){
-  const w = WELCOME[lang] || WELCOME.en;
-  document.getElementById('welcome-box').innerHTML =
-    `<div class="welcome-top"><div style="font-size:48px;margin-bottom:10px;">🧥</div><h2>${escHtml(t('brand'))}</h2><p>${escHtml(w.sub)}</p></div>`
-    + `<div class="welcome-steps">` + w.steps.map((s,i)=>
-        `<div class="step"><div class="step-num">${i+1}</div><div class="step-text"><strong>${escHtml(s[0])}</strong><p>${escHtml(s[1].replace('{n}', allStores().length))}</p></div></div>`).join('')
-    + `</div><button class="welcome-btn" onclick="closeWelcome()">${escHtml(w.btn)}</button>`;
-}
 const HELP = {
   en: { title:'How to use this app', got:'Got it!', sections:[
     ['📋 The List','Shows all stores. Use the <strong>filter buttons</strong> at the top to narrow by chain (HUMANA, EconomClass, Світ, Євро Тренд), by KG or per-item pricing, by what is open now, or by stores you have or haven\'t visited. Scroll the filters sideways if you can\'t see them all.'],
@@ -3035,14 +2954,6 @@ function renderHelp(){
     + `<p style="text-align:center;margin-top:2px;font-size:11px;color:var(--muted);">© 2026 Lviv Second Hand · All rights reserved</p>`;
 }
 
-// ─────────────────────────────────────────────
-// WELCOME
-// ─────────────────────────────────────────────
-function closeWelcome(){
-  document.getElementById('welcome').classList.add('hidden');
-  localStorage.setItem('lviv_sh_welcomed','1');
-}
-
 // One-time "what's new" announcement for returning users.
 const WHATSNEW_KEY = 'lviv_sh_whatsnew_restock';
 function showWhatsNew(){
@@ -3064,7 +2975,6 @@ window.addEventListener('DOMContentLoaded',async ()=>{
   renderHelp(); initDonate(); initAnalytics();
   expireVisits();
   await loadStores(); // store data now lives in stores.json, fetched at runtime
-  renderWelcome(); // needs STORES loaded — the intro copy counts allStores()
   setLang(lang); // apply saved-or-detected language to the UI (Ukrainian by default)
   renderList();
   updateStats();
@@ -3083,10 +2993,8 @@ window.addEventListener('DOMContentLoaded',async ()=>{
     openStore(deepLinkStore);
   } else if(wantOwner){
     openOwnerModal();       // ?owner=1 (e.g. from the Telegram bot's /submit link)
-  } else if(!localStorage.getItem('lviv_sh_welcomed')){
-    document.getElementById('welcome').classList.remove('hidden');
   } else {
-    showWhatsNew();   // returning users get a one-time heads-up about restock alerts
+    showWhatsNew();   // a one-time heads-up about restock alerts
   }
   showFlashToastIfAny(); // once per load — the "memorable" high-contrast toast (Feature 5)
   // Keyboard activation for non-native controls (tabs, language pills, store cards, restore banner)
