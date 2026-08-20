@@ -415,6 +415,12 @@ const MENU_ADD = '➕ Додати магазин';
 const MENU_FEEDBACK = '💬 Залишити відгук';
 const MENU_HELP = '❓ Довідка';
 const MENU_BACK = '⬅️ Назад';
+// Extra row, appended only for the owner/agents (see mainMenuMarkupFor) — the
+// public rows above stay identical for everyone else. Same labels cmdAgentMenu
+// and cmdAdminMenu already use, so this reads as "the same menu, one tap
+// closer" rather than a third way of naming the same thing.
+const MENU_AGENT = '🧭 Меню агента · Agent menu';
+const MENU_ADMIN = '⚙️ Адмін-меню · Admin menu';
 
 function kbMarkup(rows) {
   return { keyboard: rows.map((row) => row.map((t) => ({ text: t }))), resize_keyboard: true };
@@ -424,6 +430,22 @@ const MAIN_MENU_MARKUP = kbMarkup([
   [MENU_RARE, MENU_ADD],
   [MENU_FEEDBACK, MENU_HELP],
 ]);
+// isOwner/isAgent gate real access everywhere these menus are actually used
+// (handleVisit's command router) — this only controls whether the button is
+// worth showing, so a shopper's keyboard never grows a row that would just
+// bounce them with "not authorized".
+function mainMenuMarkupFor(isOwner, isAgent) {
+  const extra = [];
+  if (isAgent || isOwner) extra.push(MENU_AGENT);
+  if (isOwner) extra.push(MENU_ADMIN);
+  if (!extra.length) return MAIN_MENU_MARKUP;
+  return kbMarkup([
+    [MENU_DAY, MENU_CHEAP],
+    [MENU_RARE, MENU_ADD],
+    [MENU_FEEDBACK, MENU_HELP],
+    extra,
+  ]);
+}
 // Same short Ukrainian day labels as the bounty flow's DAY_OPTIONS
 // (telegram-agent-keyboards.js), reused here rather than duplicated.
 const DAY_MENU_MARKUP = kbMarkup([
@@ -438,22 +460,27 @@ function daySubmenuPrompt() {
 
 // Map a public command OR a tapped menu-keyboard button to { text, markup }.
 // markup is only set when the visible keyboard should change; omitting it
-// leaves whatever keyboard the chat already has in place.
-function replyFor(text) {
+// leaves whatever keyboard the chat already has in place. isOwner/isAgent
+// only affect which keyboard comes back (mainMenuMarkupFor) — actual access
+// to /agent and /admin is still enforced where those commands are handled
+// (handleVisit), same as if someone typed them without ever seeing a button.
+function replyFor(text, isOwner, isAgent) {
   const trimmed = text.trim();
+  const menuMarkup = mainMenuMarkupFor(isOwner, isAgent);
 
   // Reply-keyboard taps arrive as plain text identical to the button label —
   // checked before the slash-command parse below since none of these start
   // with "/".
   if (trimmed === MENU_DAY) return { text: daySubmenuPrompt(), markup: DAY_MENU_MARKUP };
-  if (trimmed === MENU_BACK) return { text: 'Головне меню · Main menu', markup: MAIN_MENU_MARKUP };
+  if (trimmed === MENU_BACK) return { text: 'Головне меню · Main menu', markup: menuMarkup };
   if (trimmed in DAY_LABEL_TO_CODE) return { text: dayText(DAY_LABEL_TO_CODE[trimmed]), markup: DAY_MENU_MARKUP };
   if (trimmed === MENU_CHEAP) return { text: cheapText() };
   if (trimmed === MENU_RARE) return { text: rareText() };
   if (trimmed === MENU_ADD) return { text: submitText() };
-  if (trimmed === MENU_HELP) return { text: helpText(), markup: MAIN_MENU_MARKUP };
-  // MENU_FEEDBACK is deliberately not handled here — handleFeedbackFlow
-  // (Feature 7) recognizes it too and runs before this stateless fallback.
+  if (trimmed === MENU_HELP) return { text: helpText(), markup: menuMarkup };
+  // MENU_FEEDBACK, MENU_AGENT and MENU_ADMIN are deliberately not handled
+  // here — handleFeedbackFlow (Feature 7) and handleVisit's command router
+  // recognize them too and run before this stateless fallback.
 
   // Strip a leading /command, tolerate "/today@BotName" and trailing args.
   const m = /^\/([a-z]+)(?:@\w+)?/i.exec(trimmed);
@@ -461,7 +488,7 @@ function replyFor(text) {
   switch (m[1].toLowerCase()) {
     case 'start':
     case 'help':
-      return { text: helpText(), markup: MAIN_MENU_MARKUP };
+      return { text: helpText(), markup: menuMarkup };
     case 'today':
       return { text: todayText() };
     case 'day': {
@@ -1925,12 +1952,16 @@ async function handleVisit(env, c, msg, ctx) {
   // the extended /agent + /admin menu only for the owner & agents).
   if (command) await syncBotCommands(env, userId, isOwner, isAgent);
 
-  if (command === 'agent') {
+  // The MENU_AGENT/MENU_ADMIN reply-keyboard buttons (mainMenuMarkupFor) are
+  // just another way to say "/agent" or "/admin" — same authorization here
+  // either way, so a button only a shopper somehow typed out by hand gets
+  // the same notAgentMsg a typed command would.
+  if (command === 'agent' || text === MENU_AGENT) {
     if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
     await cmdAgentMenu(env, chatId, isAgent);
     return true;
   }
-  if (command === 'admin') {
+  if (command === 'admin' || text === MENU_ADMIN) {
     if (!isOwner) { await say(env, chatId, notAgentMsg(userId)); return true; }
     // Subcommands typed directly, e.g. "/admin fire 123456" — the menu button
     // path (ad:agents → ad:firereq: → confirm) is for browsing/one-tap use;
@@ -2275,7 +2306,11 @@ export default {
 
     // Public, stateless commands (answered in the webhook response — no token).
     if (!text) return ok();
-    const reply = replyFor(text);
+    // Gated on c.enabled too, not just role: the buttons this unlocks only
+    // work through handleVisit, which never runs otherwise.
+    const isOwner = c.enabled && Boolean(c.ownerId) && String(from.id) === c.ownerId;
+    const isAgent = c.enabled && c.agentIds.includes(String(from.id));
+    const reply = replyFor(text, isOwner, isAgent);
     return sendMessage(chatId, reply.text, reply.markup);
   },
 };
