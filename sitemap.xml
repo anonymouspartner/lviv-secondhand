@@ -295,12 +295,17 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.lvivsecondhand.com/store/s6/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.lvivsecondhand.com/store/c59/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.lvivsecondhand.com/store/s6/</loc>
+    <loc>https://www.lvivsecondhand.com/store/c125/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
