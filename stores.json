@@ -426,10 +426,10 @@
   },
   {
     "id": "s9",
-    "name": "Planet of Second-Hand",
-    "brand": "Independent",
+    "name": "Світ секонд-хенду — Горська 5а",
+    "brand": "Світ секонд-хенду",
     "address": "вул. Горська, 5а",
-    "addressEn": "Horska St, 5a",
+    "addressEn": "5a Horska St",
     "phone": "096 946 1702",
     "type": "other",
     "pricing": "item",
@@ -445,14 +445,14 @@
     "cycle": 7,
     "lat": 49.8155,
     "lng": 24.0495,
-    "note": "⭐ 4.1 (179 reviews). Open 7 days."
+    "note": "⭐ 4.1 (179 reviews). Open 7 days. Listed as \"Planet of Second-Hand\" (an English rendering of Світ секонд-хенду) prior to being confirmed as part of the chain."
   },
   {
     "id": "s10",
-    "name": "Planeta Second Hand",
-    "brand": "Independent",
+    "name": "Світ секонд-хенду — Драгана 4",
+    "brand": "Світ секонд-хенду",
     "address": "вул. Драгана, 4",
-    "addressEn": "Drahana St, 4",
+    "addressEn": "4 Drahana St",
     "phone": "097 146 7226",
     "type": "other",
     "pricing": "item",
@@ -469,7 +469,7 @@
     "restockDay": "sat",
     "lat": 49.813,
     "lng": 24.031,
-    "note": "⭐ 3.8 (187 reviews)."
+    "note": "⭐ 3.8 (187 reviews). Listed as \"Planeta Second Hand\" (an English rendering of Світ секонд-хенду) prior to being confirmed as part of the chain."
   },
   {
     "id": "c2",
