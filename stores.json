@@ -540,8 +540,9 @@
     "cycle": 7,
     "lat": 49.839572,
     "lng": 24.026161,
-    "note": "",
-    "restock_date": "2026-08-08"
+    "note": "New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "restock_date": "2026-08-08",
+    "dailyDrop": true
   },
   {
     "id": "c5",
@@ -612,7 +613,8 @@
     "cycle": 7,
     "lat": 49.839957,
     "lng": 24.027046,
-    "note": ""
+    "note": "New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "dailyDrop": true
   },
   {
     "id": "c9",
@@ -774,7 +776,8 @@
     "cycle": 7,
     "lat": 49.840224,
     "lng": 24.048986,
-    "note": ""
+    "note": "New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "dailyDrop": true
   },
   {
     "id": "c20",
@@ -797,7 +800,8 @@
     "cycle": 7,
     "lat": 49.8393,
     "lng": 24.035811,
-    "note": ""
+    "note": "New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "dailyDrop": true
   },
   {
     "id": "c21",
@@ -1797,7 +1801,8 @@
     "cycle": 7,
     "lat": 49.848122,
     "lng": 24.02414,
-    "note": "From locator.lviv.ua listing."
+    "note": "From locator.lviv.ua listing. New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "dailyDrop": true
   },
   {
     "id": "c63",
@@ -1890,7 +1895,8 @@
     "cycle": 7,
     "lat": 49.833748,
     "lng": 24.035063,
-    "note": "From locator.lviv.ua listing."
+    "note": "From locator.lviv.ua listing. New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "dailyDrop": true
   },
   {
     "id": "c67",
@@ -1913,7 +1919,8 @@
     "cycle": 7,
     "lat": 49.838047,
     "lng": 24.006954,
-    "note": "From locator.lviv.ua listing."
+    "note": "From locator.lviv.ua listing. New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "dailyDrop": true
   },
   {
     "id": "c68",
@@ -2164,13 +2171,13 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00",
+      "sun": "10:00–20:00"
     },
     "cycle": 7,
     "lat": 49.84924,
@@ -2214,7 +2221,7 @@
     "cycle": 35,
     "lat": 49.8458124,
     "lng": 24.0194973,
-    "note": "Address from the #208 community list (31m from this pin), which agrees on a Monday restock (matches this store's existing restock_date) but implies a weekly cycle — conflicts with the 35-day cycle already on record here; cycle not changed, flagged for a field check.",
+    "note": "Address from the #208 community list (31m from this pin). New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle — resolves the earlier cycle-length conflict (this was never a fixed 7- or 35-day cycle to begin with).",
     "hours": {
       "mon": "?",
       "tue": "?",
@@ -2224,7 +2231,8 @@
       "sat": "?",
       "sun": "?"
     },
-    "restock_date": "2026-08-10"
+    "restock_date": "2026-08-10",
+    "dailyDrop": true
   },
   {
     "id": "c80",
@@ -3023,30 +3031,6 @@
     "cycle": 7,
     "lat": 49.8449538,
     "lng": 24.0203462,
-    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown).",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "restockDay": "tue"
-  },
-  {
-    "id": "c117",
-    "name": "Second hand — Соборна 5",
-    "brand": "Independent",
-    "address": "пл. Соборна, 5",
-    "addressEn": "5 Soborna Sq",
-    "phone": "",
-    "type": "other",
-    "pricing": "item",
-    "cycle": 7,
-    "lat": 49.8387866,
-    "lng": 24.0360179,
     "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown).",
     "hours": {
       "mon": "?",
