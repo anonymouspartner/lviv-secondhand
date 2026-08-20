@@ -399,7 +399,7 @@
     "cycle": 7,
     "lat": 49.842,
     "lng": 24.068,
-    "note": "Wholesale + retail. Direct from UK, Germany, Poland, Netherlands warehouses."
+    "note": "Wholesale + retail. Direct from UK, Germany, Poland, Netherlands warehouses. A Lviv business directory (dlab.com.ua) lists a \"Брендовий сток з Європи\" (ua-opt.com) at this exact address, phone +38 (067) 197-68-27 — description matches closely enough that it's plausibly this same business under its formal registered name, but not confirmed."
   },
   {
     "id": "s8",
@@ -821,7 +821,7 @@
     "restockDay": "mon",
     "lat": 49.865577,
     "lng": 24.015615,
-    "note": "By weight. Restocked Mondays."
+    "note": "By weight. Restocked Mondays. A Lviv business directory (dlab.com.ua) lists \"EconomClass, секонд-хенд\" at this exact address instead — could be a directory error, a chain change, or two shops sharing the building (a pattern confirmed elsewhere on this map); not changed pending a field check."
   },
   {
     "id": "c22",
@@ -1595,7 +1595,7 @@
     "brand": "Independent",
     "address": "вул. Авіаційна, 7",
     "addressEn": "Aviatsiyna St, 7",
-    "phone": "",
+    "phone": "+38 (067) 340-02-37",
     "type": "other",
     "pricing": "item",
     "hours": {
@@ -1610,7 +1610,7 @@
     "cycle": 7,
     "lat": 49.813649,
     "lng": 23.930203,
-    "note": "From locator.lviv.ua listing."
+    "note": "From locator.lviv.ua listing. Phone number from the dlab.com.ua business directory, same name and address."
   },
   {
     "id": "c55",
@@ -2941,17 +2941,17 @@
   },
   {
     "id": "c113",
-    "name": "Second hand — Стрийська 45",
+    "name": "Одяг з Європи — Стрийська 45",
     "brand": "Independent",
     "address": "вул. Стрийська, 45",
     "addressEn": "45 Stryiska St",
-    "phone": "",
+    "phone": "+38 (093) 859-85-74",
     "type": "other",
     "pricing": "item",
     "cycle": 7,
     "lat": 49.8080267,
     "lng": 24.0202128,
-    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown). Possibly the same store as c55 (Точка Секонд Хенд, address on record as just вул. Стрийська with no house number) — kept separate pending a field check, same treatment as c91.",
+    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding. Name and phone from the dlab.com.ua business directory, listed there as \"Одяг з Європи, Сток та секонд хенд\" — a distinct name from c55 (Точка Секонд Хенд), which strengthens (but doesn't fully confirm) that these are two separate stores rather than one misplaced record.",
     "hours": {
       "mon": "?",
       "tue": "?",
@@ -3082,5 +3082,143 @@
       "sun": "?"
     },
     "restockDay": "wed"
+  },
+  {
+    "id": "c119",
+    "name": "MOSTOK",
+    "brand": "Independent",
+    "address": "вул. Шептицького, 19а",
+    "addressEn": "19a Andreya Sheptytskoho St",
+    "phone": "+38 (096) 651-83-73",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8156681,
+    "lng": 24.1551026,
+    "note": "Men's and women's clothing (sweaters, jeans, jackets, dresses). In Vynnyky, an eastern suburb of Lviv. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    }
+  },
+  {
+    "id": "c120",
+    "name": "ЕЛІТ",
+    "brand": "Independent",
+    "address": "вул. Театральна, 23",
+    "addressEn": "23 Teatralna St",
+    "phone": "+38 (096) 081-89-98",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8443089,
+    "lng": 24.0281042,
+    "note": "Consignment shop: used and new clothing, footwear, fur, accessories. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    }
+  },
+  {
+    "id": "c121",
+    "name": "Комісійний — Гашека 15а",
+    "brand": "Independent",
+    "address": "вулиця Ярослава Гашека, 15а",
+    "addressEn": "15a Yaroslava Hashka St",
+    "phone": "+38 (097) 775-22-56",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.7969275,
+    "lng": 24.0189755,
+    "note": "Consignment shop: women's, men's, and children's used clothing and footwear. Name (\"Комісійний\") from an OpenStreetMap/Nominatim POI at this exact address. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    }
+  },
+  {
+    "id": "c122",
+    "name": "Second hand — Окуневського 3",
+    "brand": "Independent",
+    "address": "вулиця Теофіла Окуневського, 3",
+    "addressEn": "3 Teofila Okunevskoho St",
+    "phone": "+38 (067) 776-44-74",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8589845,
+    "lng": 24.0179571,
+    "note": "Large assortment of stock clothing, footwear, underwear; household textiles from Germany. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    }
+  },
+  {
+    "id": "c123",
+    "name": "МЮНХЕН — Вороного 2",
+    "brand": "МЮНХЕН",
+    "address": "вулиця Миколи Вороного, 2",
+    "addressEn": "2 Mykoly Voronoho St",
+    "phone": "+38 (097) 134-55-78",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8386832,
+    "lng": 24.0299467,
+    "note": "Stock clothing & footwear chain, 2 Lviv locations (see also c124, Городоцька 10): men's, women's, children's clothing, footwear, hats, belts, underwear, bags. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    }
+  },
+  {
+    "id": "c124",
+    "name": "МЮНХЕН — Городоцька 10",
+    "brand": "МЮНХЕН",
+    "address": "Городоцька вулиця, 10",
+    "addressEn": "10 Horodotska St",
+    "phone": "+38 (067) 679-05-98",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "lat": 49.8439178,
+    "lng": 24.023748,
+    "note": "Stock clothing & footwear chain, 2 Lviv locations (see also c123, Вороного 2): men's, women's, children's clothing, footwear, hats, belts, underwear, bags. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    }
   }
 ]
