@@ -358,7 +358,7 @@
   },
   {
     "id": "s6",
-    "name": "Birka! Lux",
+    "name": "Birka! Lux — Зелена 69а",
     "brand": "Birka! Lux",
     "address": "вул. Зелена, 69а",
     "addressEn": "Zelena St, 69a",
@@ -366,18 +366,19 @@
     "type": "other",
     "pricing": "item",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–18:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00",
+      "sun": "10:00–17:00"
     },
     "cycle": 7,
-    "lat": 49.832,
-    "lng": 23.987,
-    "note": "Stock and used. Popular for children's clothing, shoes and toys."
+    "lat": 49.8304495,
+    "lng": 24.0440999,
+    "note": "Stock and used. Popular for children's clothing, shoes and toys. Confirmed as a 3-location chain (Зелена 69а, Котика 2, Шпитальна 7) via a list.in.ua directory listing with published hours.",
+    "dailyDrop": true
   },
   {
     "id": "s7",
@@ -1715,26 +1716,27 @@
   },
   {
     "id": "c59",
-    "name": "Birka Lux",
-    "brand": "Independent",
-    "address": "вул. Богдана Котика",
-    "addressEn": "Bohdana Kotyka St",
+    "name": "Birka! Lux — Котика 2",
+    "brand": "Birka! Lux",
+    "address": "вул. Богдана Котика, 2",
+    "addressEn": "2 Bohdana Kotyka St",
     "phone": "",
     "type": "other",
     "pricing": "item",
     "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00",
+      "sun": "10:00–17:00"
     },
     "cycle": 7,
     "lat": 49.836844,
-    "lng": 24.060129,
-    "note": "From locator.lviv.ua listing."
+    "lng": 24.0601287,
+    "note": "Confirmed as a 3-location chain (Зелена 69а, Котика 2, Шпитальна 7) via a list.in.ua directory listing with published hours.",
+    "dailyDrop": true
   },
   {
     "id": "c60",
@@ -3213,5 +3215,29 @@
       "sun": "?"
     },
     "dailyDrop": true
+  },
+  {
+    "id": "c125",
+    "name": "Birka! Lux — Шпитальна 7",
+    "brand": "Birka! Lux",
+    "address": "вул. Шпитальна, 7",
+    "addressEn": "7 Shpytalna St",
+    "phone": "",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "dailyDrop": true,
+    "lat": 49.8443936,
+    "lng": 24.0235193,
+    "note": "Confirmed as a 3-location chain (Зелена 69а, Котика 2, Шпитальна 7) via a list.in.ua directory listing with published hours.",
+    "hours": {
+      "mon": "10:00–20:00",
+      "tue": "10:00–20:00",
+      "wed": "10:00–20:00",
+      "thu": "10:00–20:00",
+      "fri": "10:00–20:00",
+      "sat": "10:00–20:00",
+      "sun": "11:00–19:00"
+    }
   }
 ]
