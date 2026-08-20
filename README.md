@@ -36,6 +36,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🗺️ **Map** of all second-hand stores in Lviv
 - 📍 **Show my location** — see yourself on the map with a live GPS toggle
 - ⏱️ **Inventory cycle tracker** — counts days since last delivery, estimates current discounts
+- 🆕 **Daily-drop stores** — shops that restock every day and only rotate seasonally are marked as such instead of being forced into a cycle countdown
 - ⚖️ Supports both **by-KG** and **itemized** stores
 - 🌐 **EN / UA** language toggle
 - ✅ Mark stores as **visited**
@@ -43,7 +44,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - ➕ **Add**, ✏️ **edit**, and 🗑️ **remove/hide** stores
 - 🤝 **Contribute** additions/edits for review, and **back up** everything on your device
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
-- 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` for stores restocking today, `/cheap` for the best by-weight deals
+- 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): a tap-through menu plus `/today`, `/day` (any weekday), `/rare` and `/cheap`
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
 - ⚡ **Flash deals** — a store can run a short paid sale (3h / 24h) with a live countdown banner and toast; follow a store on Telegram to hear the moment one goes live
 - ✏️ **Suggest a correction** — send a fix via Telegram; a moderator reviews it, or a trusted contributor's own edit publishes instantly
@@ -62,26 +63,40 @@ Pin **colour answers the question the app exists for: when is this store cheapes
 | 🟡 Amber | `#e0a11b` | **Mid cycle** — choice and price in balance |
 | 🔴 Red | `#c0392b` | **End of cycle** — picked over, but the **best deals** |
 | 🔵 Blue | `#2471a3` | **No restock data yet** for this store |
+| 🟣 Purple | `#6b3fa0` | **Restocks daily** — no cycle to track, any day is a good day |
 | 🟨 Gold | `#ffd23f` | **Paid placement**, always labelled as advertising |
 
 Green → amber → red is one scale, not three categories: it is the same journey the deal meter and the store page show, from the same values (`--phase-*` in `:root`, mirrored in `PIN_COLORS`). Change it in one place.
 
-**Label — how it relates to you**
+**Purple sits outside that scale on purpose.** Some shops put out new stock every day and only rotate the full collection seasonally — they have no cycle position to be early or late in. Reusing blue would have read as "we don't know yet" when the truth is the opposite, so they get their own colour and skip the day-count entirely (`dailyDrop` in the dataset).
+
+**Label — the chain, when there is one**
+
+The letter inside a pin is the **chain**, so a shopper can spot a familiar brand without opening anything. Unbranded independents carry no letter — a letter only earns its place once a chain has more than one pin.
 
 | Label | Meaning |
 | --- | --- |
-| `S` | Store — not visited yet |
-| `H` | HUMANA — not visited yet |
-| `+` | Added by you — not visited yet |
+| `H` | HUMANA |
+| `C` | Світ секонд-хенду |
+| `E` | EconomClass |
+| `Є` | Євро Тренд |
+| `B` | ЄвроБренд |
+| `S` | Сток та секонд хенд |
+| `M` | МЮНХЕН |
+| `L` | Birka! Lux |
+| *(none)* | Independent — not part of a mapped chain |
+| `+` | Added by you |
 | `✓` | **You have marked it visited** (replaces the letter; the colour stays) |
 | ⭐ | Featured — a paid placement |
 | 🌟 | Spotlight — the top paid tier |
+
+`B`, `S`, `M` and `L` are deliberately not their chains' own first letters: Cyrillic `С` and `Є` already stand for Світ and Євро Тренд, so a lookalike initial would be worse than a distinct glyph. The list lives in `BRAND_LABEL` (`index.html`).
 
 **Size, ring and stacking** — ordinary pins are 36px with a white ring. Paid pins are 44px (Featured) and 50px (Spotlight), float above everything, and take a **dark ring instead of a white one** so gold never has to be told apart from amber on colour alone. Size is bought, never earned.
 
 **Three consequences worth knowing:**
 
-- **Blue means we genuinely don't know yet.** Cycle position comes from one of two sources. If the store publishes a **restock weekday** (`restockDay` in the dataset), the phase is computed for everyone with nothing stored — it rolls over on its own and resets to green each restock day. Otherwise it needs a **last-delivery date**, and those are per device. Stores with neither are blue. Blue is therefore a live map of where the field agent's next visit is worth most, and it turns to colour permanently as soon as a restock day is recorded.
+- **Blue means we genuinely don't know yet.** Cycle position is resolved in a fixed priority order, first match wins: a **delivery date you recorded on this device** (an observation, and the freshest thing we have for you specifically) → a **published calendar** of dated drops (`restockDates`, which states every drop rather than one, so it stays right across an irregular gap) → a **delivery date another visitor contributed** (`restock_date`) → the store's **published restock weekday** (`restockDay`, shared data that works for every visitor with nothing stored, but only on a weekly cycle, where a weekday alone pins the position down). Stores with none of those are blue. Blue is therefore a live map of where the field agent's next visit is worth most, and it turns to colour permanently as soon as any shared source is recorded. Daily-drop stores are exempt from this entirely — they're purple regardless.
 - **Visited replaces the letter, not the colour.** A visited store keeps its cycle colour and reads `✓` — you never lose the timing signal by having been there.
 - **A promoted pin never shows `✓`, and never shows its cycle colour.** Gold and the star outrank both, so on a paid pin the map tells you neither. The store's own page still does.
 
@@ -93,7 +108,7 @@ Green → amber → red is one scale, not three categories: it is the same journ
 
 Stores you add or edit are saved only on your own device. The **🤝 button** (top-right) is where they leave it:
 
-- **🌍 Contribute to the official map** — sends your additions and corrections to the maintainer for review. **No GitHub account needed.** The app posts to the metrics Worker, the maintainer gets a ✅/❌ in Telegram, and only an approval creates the GitHub issue (server-side, via the API).
+- **🗺️ Add to the official map** — sends your additions and corrections to the maintainer for review. **No GitHub account needed.** The app posts to the metrics Worker, the maintainer gets a ✅/❌ in Telegram, and only an approval creates the GitHub issue (server-side, via the API).
 - **🏪 Own a store?** and **🔑 I own this store** — an owner submitting their shop, or claiming one already on the map. Both go through the same Telegram approval. Approving a *claim* mints that store's 4-digit PIN, which lets a flash deal the owner buys publish immediately instead of waiting for review.
 - **🛟 Backup & restore** — a complete snapshot of everything this device holds (visits, delivery dates, added stores, edits, follows), saved as a file you keep. Restoring puts it all back.
 
@@ -104,8 +119,10 @@ Stores you add or edit are saved only on your own device. The **🤝 button** (t
 Approving a submission in Telegram opens a GitHub issue labelled `map-contribution` (or `owner-submission`). Each lists the added/edited/removed stores in plain text. To merge:
 
 - **`custom`** — copy each object into `stores.json` (a plain JSON array; assign a stable `id`, fill in `hours`).
-- **`overrides`** — fold each into the matching store's fields.
+- **`overrideList`** — each entry is `{ id, name, changes }`; fold `changes` into the matching store's fields. (The raw `overrides` map the bundle used to also carry was dropped — it duplicated this same data for no reader, and the redundancy pushed real bundles over the request size limit.)
 - **`removed`** — a list of built-in store `id`s the contributor reports as non-existent/wrong; delete those entries from `stores.json`.
+
+**Diff every correction against current `stores.json` before applying it.** A contribution is a snapshot of one device's local edits at submit time, so a large batch routinely arrives mostly already-applied — and can carry values that are now *stale*, if the same store was fixed through another route since. Applying such a batch wholesale silently reverts the newer fix. At more than a handful of corrections, script the comparison rather than eyeballing it. A contributor can clear their own superseded edits with **✏️ Edit store → ↺ Reset to official data**.
 
 A single-store correction (a field-scout visit, a Telegram edit suggestion) doesn't go through a GitHub issue at all — see **🛠️ Automated map updates** below.
 
@@ -237,36 +254,47 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 
 **[@Secondhandlvivbot](https://t.me/Secondhandlvivbot)** — the app's companion. Every result links back into the map, so a shopper can go from a Telegram message to directions in two taps. The interface is Ukrainian.
 
+**Tap-through menu.** `/start` attaches a persistent reply-keyboard, so the common paths need no typed commands at all: 📅 by weekday (opens a day submenu), 💰 cheapest now, 🐢 rarely restocked, ➕ add a store, 💬 leave feedback, ❓ help. Each button just sends its own label back as ordinary text, which keeps the whole menu in the stateless tier — no bot token required to answer it.
+
+> Telegram never pushes a changed keyboard into an existing chat on its own; it only updates when the bot sends a message carrying one. After a menu change, send `/start` to see it.
+
 **Anyone can use:**
 
 | Command | What it does |
 | --- | --- |
 | `/today` | Stores getting new stock today |
+| `/day` | Pick any weekday and see what restocks then |
+| `/rare` | Stores that restock rarely — worth a special trip |
 | `/cheap` | Best by-weight prices right now |
 | `/submit` | Submit your own store (for shop owners) |
 | `/materials` | Printable flyers, posters and QR stickers |
+| `/feedback` | Send the maintainer a note about the bot or the map |
 | `/leaderboard` | Top 10 community contributors by points |
 | `/stop` | Unsubscribe from every store's flash-deal alerts |
 | `/help` | Command list and info |
 
-**Field agent & owner only** — these appear in the menu only for authorised Telegram IDs, and are refused for anyone else:
+**Field agent & owner only** — these appear in the menu only for authorised Telegram IDs, and are refused for anyone else. For those users the reply-keyboard also grows a row: **🧭 Agent menu** (agents and the owner) and **⚙️ Admin menu** (owner only), which are just one-tap aliases for `/agent` and `/admin` and go through the same authorization checks.
 
 | Command | What it does |
 | --- | --- |
+| `/agent` | The agent menu — everything below, as tappable buttons |
 | `/visit` | Log a store visit — GPS, storefront photo, questionnaire |
-| `/myvisits` | Your own logged visits |
+| `/route` | A walking route between stores from your location |
+| `/myvisits` | Your own logged visits and earnings |
 | `/pay` | The live pay scheme, from the configured rates |
+| `/card` | Your payout card |
 | `/job` | The full job description |
 | `/cancel` | Abandon a half-finished `/visit` |
+| `/admin` | Owner only — the admin menu (report, visitors, export, agents) |
 | `/report` · `/export` | Owner only — totals, estimated pay, CSV export |
 
-The menu is **self-managing**: the bot pushes its own command list to Telegram on startup, so there is no BotFather `/setcommands` step. Bump `CMD_VER` in `telegram-bot/worker.js` after editing the lists to force a re-sync.
+The command menu is **self-managing**: the bot pushes its own command list to Telegram on startup, so there is no BotFather `/setcommands` step. Bump `CMD_VER` in `telegram-bot/worker.js` after editing the lists to force a re-sync. The version is recorded **only when Telegram accepts the menu**, so a rejected push retries instead of marking itself done and going stale forever.
 
 > The bot also carries the money side: a Telegram message arrives the moment any promotion or à la carte order is paid.
 
 ## 🎒 Field agent handbook
 
-Surveying ~90 stores and keeping their restock schedules accurate is fieldwork, so the project employs a local agent. The complete handbook — bilingual, and the document the agent actually works from — is **[`docs/FIELD_AGENT.md`](docs/FIELD_AGENT.md)**.
+Surveying ~130 stores and keeping their restock schedules accurate is fieldwork, so the project employs a local agent. The complete handbook — bilingual, and the document the agent actually works from — is **[`docs/FIELD_AGENT.md`](docs/FIELD_AGENT.md)**.
 
 **Pay** — ₴80 per verified visit, plus ₴200 per verifiable result (QR poster placed, or store owner signed up; both can apply to one visit). Suggested pace 8–12 stores/day. Paid weekly against `/report` and `/export`.
 
@@ -274,7 +302,7 @@ Surveying ~90 stores and keeping their restock schedules accurate is fieldwork, 
 
 **What counts as a visit** — GPS reading, clear storefront photo, and every question answered. Incomplete submissions don't count, the bot records distance from the store's map pin so far-off visits get flagged, and re-visiting the same store in one survey cycle doesn't earn a second base.
 
-**Updating the map** — restock days, hours, names, addresses and notes are edited **in the app**, then submitted via 🤝 → 🌍 Contribute → 🚀 Send for review, which reaches the maintainer on Telegram (no GitHub account required). Photos, chat and live location go through Telegram, which the app can't do.
+**Updating the map** — restock days, hours, names, addresses and notes are edited **in the app**, then submitted via 🤝 → 🗺️ Add to the official map, which reaches the maintainer on Telegram (no GitHub account required). Photos, chat and live location go through Telegram, which the app can't do.
 
 **Phase 2** — once pricing is validated, the agent also sells promotions and earns a one-time commission per signed store. Not active yet.
 
@@ -354,6 +382,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - 🗺️ **Карта** усіх секонд-хенд магазинів Львова
 - 📍 **Показати моє місцезнаходження** — ви на карті з перемикачем GPS
 - ⏱️ **Трекер циклу завезення товару** — лічить дні з останньої доставки та оцінює поточні знижки
+- 🆕 **Магазини з щоденним оновленням** — крамниці, які завозять товар щодня й міняють колекцію лише сезонно, позначені окремо, а не втиснуті в лічильник циклу
 - ⚖️ Підтримка магазинів **на кіло** та **поштучно**
 - 🌐 Перемикач мови **EN / UA**
 - ✅ Позначення магазинів як **відвіданих**
@@ -361,7 +390,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
-- 💬 **Телеграм-бот** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): `/today` — завезення сьогодні, `/cheap` — найкращі ціни на вагу
+- 💬 **Телеграм-бот** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): меню кнопками, а також `/today`, `/day` (будь-який день тижня), `/rare` і `/cheap`
 - 📣 **Просування магазину** — власник може просувати свій магазин прямо із застосунку; кожне платне розміщення позначене
 - ⚡ **Спалах-знижки** — магазин може запустити короткий платний розпродаж (3 год / 24 год) з таймером зворотного відліку; стежте за магазином у Telegram, щоб дізнатися, щойно знижка стане активною
 - ✏️ **Запропонувати виправлення** — надішліть правку через Telegram; модератор перевірить її, або довірений редактор одразу опублікує свою
@@ -380,26 +409,40 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | 🟡 Бурштинова | `#e0a11b` | **Середина циклу** — баланс вибору й ціни |
 | 🔴 Червона | `#c0392b` | **Кінець циклу** — вибір менший, але **найкращі ціни** |
 | 🔵 Синя | `#2471a3` | **Немає даних** про завезення для цього магазину |
+| 🟣 Фіолетова | `#6b3fa0` | **Оновлення щодня** — циклу немає, будь-який день вдалий |
 | 🟨 Золота | `#ffd23f` | **Платне розміщення**, завжди позначене як реклама |
 
 Зелений → бурштиновий → червоний — це одна шкала, а не три категорії: той самий шлях показують шкала знижок і сторінка магазину, з тих самих значень (`--phase-*` у `:root`, віддзеркалені в `PIN_COLORS`). Змінюється в одному місці.
 
-**Напис — як магазин стосується вас**
+**Фіолетовий навмисно поза цією шкалою.** Деякі крамниці викладають новий товар щодня й міняють повну колекцію лише сезонно — у них просто немає місця в циклі, щоб бути раннім чи пізнім. Синій читався б як «ми ще не знаємо», хоча насправді все навпаки, тож вони мають власний колір і взагалі не показують лічильник днів (`dailyDrop` у даних).
+
+**Напис — мережа, якщо вона є**
+
+Літера всередині позначки — це **мережа**, щоб знайому марку було видно, нічого не відкриваючи. Незалежні магазини поза мережами літери не мають: літера має сенс лише тоді, коли в мережі більше однієї позначки.
 
 | Напис | Значення |
 | --- | --- |
-| `S` | Магазин — ще не відвіданий |
-| `H` | HUMANA — ще не відвідана |
-| `+` | Доданий вами — ще не відвіданий |
+| `H` | HUMANA |
+| `C` | Світ секонд-хенду |
+| `E` | EconomClass |
+| `Є` | Євро Тренд |
+| `B` | ЄвроБренд |
+| `S` | Сток та секонд хенд |
+| `M` | МЮНХЕН |
+| `L` | Birka! Lux |
+| *(немає)* | Незалежний — не входить до мереж на карті |
+| `+` | Доданий вами |
 | `✓` | **Ви позначили його відвіданим** (замінює літеру; колір лишається) |
 | ⭐ | Featured — платне розміщення |
 | 🌟 | Spotlight — найвищий платний тариф |
+
+`B`, `S`, `M` і `L` навмисно не збігаються з першими літерами назв своїх мереж: кирилична `С` і `Є` вже зайняті під Світ і Євро Тренд, тож схожа літера була б гіршою за окремий, чітко відмінний знак. Список — у `BRAND_LABEL` (`index.html`).
 
 **Розмір, обідок і порядок** — звичайні позначки 36px з білим обідком. Платні — 44px (Featured) і 50px (Spotlight), вони вище за всіх і мають **темний обідок замість білого**, щоб золотий ніколи не доводилося відрізняти від бурштинового лише за кольором. Розмір купують, а не заслуговують.
 
 **Три наслідки, які варто знати:**
 
-- **Синій означає, що ми справді ще не знаємо.** Місце в циклі береться з одного з двох джерел. Якщо магазин має **день завезення** (`restockDay` у даних), фаза обчислюється для всіх без нічого збереженого — вона змінюється сама й скидається на зелений щотижня в день завезення. Інакше потрібна **дата останнього завезення**, а вона зберігається лише на пристрої. Магазини без жодного з цих даних — сині. Тож синій показує, де візит польового агента вартий найбільше, і стає кольором назавжди, щойно записано день завезення.
+- **Синій означає, що ми справді ще не знаємо.** Місце в циклі визначається за чіткою послідовністю пріоритетів — перше, що знайдено, те й діє: **дата завезення, яку ви записали на цьому пристрої** (це спостереження і найсвіжіше, що ми маємо саме для вас) → **опублікований календар** дат завезення (`restockDates` — він називає кожне завезення, а не одне, тож лишається точним навіть за нерівних проміжків) → **дата завезення, яку вніс інший відвідувач** (`restock_date`) → **опублікований день тижня** завезення (`restockDay` — спільні дані, які працюють для кожного, у кого нічого не збережено, але лише для тижневого циклу, де сам день однозначно визначає позицію). Магазини, у яких немає жодного з цих джерел, — сині. Тож синій показує, де візит польового агента вартий найбільше, і стає кольором назавжди, щойно з’явиться будь-яке спільне джерело. Магазини з щоденним оновленням до цього не належать взагалі — вони фіолетові незалежно ні від чого.
 - **Відвідано замінює літеру, а не колір.** Відвіданий магазин зберігає колір циклу й показує `✓` — ви не втрачаєте сигнал про час.
 - **Просунута позначка ніколи не показує ані `✓`, ані колір циклу.** Золотий і зірка мають пріоритет над обома, тож на платній позначці карта не скаже ні того, ні іншого. Сторінка самого магазину — скаже.
 
@@ -409,13 +452,14 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 ## 🤝 Обмін і внесок
 
-Магазини, які ви додаєте чи редагуєте, зазвичай зберігаються лише на вашому пристрої. Кнопка **🤝** (праворуч зверху) дозволяє поділитися ними:
+Магазини, які ви додаєте чи редагуєте, зберігаються лише на вашому пристрої. Кнопка **🤝** (праворуч зверху) — це те, як вони його полишають:
 
-- **🔗 Копіювати посилання** — надсилає ваші додані та змінені магазини будь-кому. Відкривши посилання, людина додає ваші магазини на свою карту (дублікати пропускаються). Також можна **завантажити файл** або **скопіювати короткий код**.
-- **📥 Імпорт від інших** — вставте посилання/код, який вам надіслали, або завантажте файл `.json`, щоб додати їхні магазини до своїх.
-- **🌍 Внести до офіційної карти** — відкриває попередньо заповнене [звернення на GitHub](https://github.com/anonymouspartner/lviv-secondhand/issues) з вашими доповненнями та виправленнями. Після того як супровідник їх додасть, ваші зміни з’являться на карті, яку завантажують усі. (Для публікації потрібен безкоштовний акаунт GitHub.)
+- **🗺️ Додати до офіційної карти** — надсилає ваші доповнення та виправлення супровіднику на перевірку. **Акаунт GitHub не потрібен.** Застосунок надсилає їх на метрик-воркер, супровідник отримує ✅/❌ у Telegram, і лише схвалення створює звернення на GitHub (на боці сервера, через API).
+- **🏪 Власник магазину?** і **🔑 Це мій магазин** — власник додає свою крамницю або заявляє права на ту, що вже є на карті. Обидва шляхи проходять те саме схвалення в Telegram. Схвалення *заявки* створює 4-значний PIN магазину, який дозволяє купленій власником спалах-знижці опублікуватися одразу, не чекаючи перевірки.
+- **🛟 Резервна копія та відновлення** — повний знімок усього, що зберігає цей пристрій (відвідування, дати завезення, додані магазини, правки, підписки), у файлі, який лишається у вас. Відновлення повертає все назад.
+- **✏️ Редагувати магазин → ↺ Скинути до офіційних даних** — прибирає ваші локальні правки для цього магазину, якщо їх уже замінило новіше офіційне виправлення. Інакше застаріла правка тихо надсилалася б знову з кожним наступним внеском.
 
-> Оскільки застосунок — це статичний сайт без сервера, обмін між користувачами миттєвий і приватний, а внески до *офіційної* карти проходять через GitHub, щоб супровідник міг їх переглянути та додати.
+> Обмін між користувачами (посилання, короткі коди та імпорт чужої карти) прибрано: тепер усе проходить одним перевіреним шляхом, тож у спільної карти один вхід і одне місце, де перевіряють якість.
 
 ## 📣 Просування магазинів (реклама)
 
@@ -504,36 +548,47 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **[@Secondhandlvivbot](https://t.me/Secondhandlvivbot)** — супутник застосунку. Кожен результат посилається назад на карту, тож від повідомлення в Telegram до маршруту — два дотики. Інтерфейс українською.
 
+**Меню кнопками.** `/start` додає постійну клавіатуру, тож для найчастіших дій не треба вводити команди взагалі: 📅 за днем тижня (відкриває підменю днів), 💰 найдешевше зараз, 🐢 рідко оновлюють, ➕ додати магазин, 💬 залишити відгук, ❓ довідка. Кожна кнопка просто надсилає свій підпис як звичайний текст — тому все меню лишається в тому ж рівні без стану, для відповіді не потрібен токен бота.
+
+> Telegram ніколи не оновлює клавіатуру в наявному чаті сам — вона змінюється лише тоді, коли бот надішле повідомлення з новою. Після зміни меню надішліть `/start`, щоб побачити його.
+
 **Доступно всім:**
 
 | Команда | Що робить |
 | --- | --- |
 | `/today` | Магазини із завезенням сьогодні |
+| `/day` | Обрати будь-який день тижня і побачити, що завозять тоді |
+| `/rare` | Магазини, які оновлюються рідко — варті окремої поїздки |
 | `/cheap` | Найкращі ціни на вагу зараз |
 | `/submit` | Додати свій магазин (для власників) |
 | `/materials` | Матеріали для друку: флаєри, постери, QR-наліпки |
+| `/feedback` | Надіслати власнику відгук про бота чи карту |
 | `/leaderboard` | Топ-10 учасників спільноти за балами |
 | `/stop` | Відписатися від усіх сповіщень про спалах-знижки |
 | `/help` | Команди та інформація |
 
-**Лише для агента та власника** — зʼявляються в меню тільки для дозволених Telegram ID, іншим відмовлено:
+**Лише для агента та власника** — зʼявляються в меню тільки для дозволених Telegram ID, іншим відмовлено. Для них клавіатура також отримує додатковий рядок: **🧭 Меню агента** (агенти й власник) і **⚙️ Адмін-меню** (лише власник) — це просто кнопки-синоніми до `/agent` та `/admin` із тими самими перевірками доступу.
 
 | Команда | Що робить |
 | --- | --- |
+| `/agent` | Меню агента — усе нижче у вигляді кнопок |
 | `/visit` | Записати візит: GPS, фото вітрини, анкета |
-| `/myvisits` | Ваші записані візити |
+| `/route` | Маршрут обходу магазинів від вашої локації |
+| `/myvisits` | Ваші записані візити та заробіток |
 | `/pay` | Актуальна схема оплати з налаштованих ставок |
+| `/card` | Ваша картка для виплат |
 | `/job` | Повний опис вакансії |
 | `/cancel` | Скасувати незавершений `/visit` |
+| `/admin` | Лише власник — адмін-меню (звіт, відвідувачі, експорт, агенти) |
 | `/report` · `/export` | Лише власник — підсумки, оплата, експорт CSV |
 
-Меню **керує собою саме**: бот надсилає власний список команд у Telegram під час запуску, тож крок `/setcommands` у BotFather не потрібен. Після редагування списків змініть `CMD_VER` у `telegram-bot/worker.js`, щоб примусити пересинхронізацію.
+Список команд **керує собою сам**: бот надсилає його у Telegram під час запуску, тож крок `/setcommands` у BotFather не потрібен. Після редагування списків змініть `CMD_VER` у `telegram-bot/worker.js`, щоб примусити пересинхронізацію. Версія записується **лише тоді, коли Telegram прийняв меню**, тож відхилена спроба повторюється, а не позначає себе виконаною й не застрягає назавжди.
 
 > Бот також відповідає за гроші: повідомлення приходить щойно оплачено будь-яке просування чи додаткову послугу.
 
 ## 🎒 Довідник польового агента
 
-Обстежити ~90 магазинів і підтримувати графіки завезення актуальними — це польова робота, тож у проєкті працює місцевий агент. Повний довідник — двомовний, саме той, з якого працює агент — **[`docs/FIELD_AGENT.md`](docs/FIELD_AGENT.md)**.
+Обстежити ~130 магазинів і підтримувати графіки завезення актуальними — це польова робота, тож у проєкті працює місцевий агент. Повний довідник — двомовний, саме той, з якого працює агент — **[`docs/FIELD_AGENT.md`](docs/FIELD_AGENT.md)**.
 
 **Оплата** — ₴80 за перевірений візит плюс ₴200 за кожен підтверджений результат (розміщено QR-постер або власник зареєструвався; обидва можуть бути в одному візиті). Орієнтир — 8–12 магазинів на день. Виплати щотижня за `/report` і `/export`.
 
@@ -541,7 +596,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **Що вважається візитом** — показник GPS, чітке фото вітрини та відповіді на всі питання. Неповні подання не зараховуються, бот фіксує відстань від позначки магазину на карті, тож віддалені візити позначаються для перевірки, а повторний візит до того ж магазину в одному циклі не дає другої бази.
 
-**Оновлення карти** — дні завезення, години, назви, адреси й нотатки редагуються **в застосунку**, а потім надсилаються через 🤝 → 🌍 Внести → 🚀 Надіслати на GitHub, що відкриває заповнене звернення (потрібен безкоштовний акаунт GitHub). Фото, спілкування та геолокація в реальному часі — через Telegram, чого застосунок не вміє.
+**Оновлення карти** — дні завезення, години, назви, адреси й нотатки редагуються **в застосунку**, а потім надсилаються через 🤝 → 🗺️ Додати до офіційної карти, що потрапляє до супровідника в Telegram (акаунт GitHub не потрібен). Фото, спілкування та геолокація в реальному часі — через Telegram, чого застосунок не вміє.
 
 **Фаза 2** — коли ціни підтвердяться, агент також продаватиме просування й отримуватиме разову комісію за кожен підписаний магазин. Ще не активна.
 
