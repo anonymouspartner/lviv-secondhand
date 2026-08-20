@@ -353,7 +353,8 @@
     "cycle": 7,
     "lat": 49.85,
     "lng": 24.0195,
-    "note": "Stock and used. Branded items. Updated daily. Frequent sales."
+    "note": "Stock and used. Branded items. Updated daily. Frequent sales.",
+    "dailyDrop": true
   },
   {
     "id": "s6",
@@ -637,7 +638,8 @@
     "cycle": 7,
     "lat": 49.836733,
     "lng": 24.003885,
-    "note": ""
+    "note": "",
+    "dailyDrop": true
   },
   {
     "id": "c10",
@@ -660,7 +662,8 @@
     "cycle": 7,
     "lat": 49.835161,
     "lng": 24.005551,
-    "note": "50% off"
+    "note": "50% off",
+    "dailyDrop": true
   },
   {
     "id": "c11",
@@ -1684,7 +1687,8 @@
     "cycle": 7,
     "lat": 49.834682,
     "lng": 24.008058,
-    "note": "From locator.lviv.ua listing."
+    "note": "From locator.lviv.ua listing.",
+    "dailyDrop": true
   },
   {
     "id": "c58",
@@ -2351,7 +2355,8 @@
       "thu": "09:00–20:00",
       "fri": "09:00–20:00",
       "sat": "09:00–20:00"
-    }
+    },
+    "dailyDrop": true
   },
   {
     "id": "c88",
@@ -2374,7 +2379,8 @@
       "thu": "09:00–20:00",
       "fri": "09:00–20:00",
       "sat": "09:00–20:00"
-    }
+    },
+    "dailyDrop": true
   },
   {
     "id": "c89",
@@ -3111,7 +3117,8 @@
       "fri": "?",
       "sat": "?",
       "sun": "?"
-    }
+    },
+    "dailyDrop": true
   },
   {
     "id": "c121",
@@ -3180,7 +3187,8 @@
       "fri": "?",
       "sat": "?",
       "sun": "?"
-    }
+    },
+    "dailyDrop": true
   },
   {
     "id": "c124",
@@ -3203,6 +3211,7 @@
       "fri": "?",
       "sat": "?",
       "sun": "?"
-    }
+    },
+    "dailyDrop": true
   }
 ]
