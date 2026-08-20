@@ -424,7 +424,8 @@
     "cycle": 7,
     "lat": 49.818,
     "lng": 24.005,
-    "note": "European brands. Furs, leather, bags, jewellery. Accepts items by appointment Mon/Wed/Fri."
+    "note": "European brands. Furs, leather, bags, jewellery. Accepts items by appointment Mon/Wed/Fri.",
+    "dailyDrop": true
   },
   {
     "id": "s9",
@@ -434,7 +435,7 @@
     "addressEn": "5a Horska St",
     "phone": "096 946 1702",
     "type": "other",
-    "pricing": "item",
+    "pricing": "kg",
     "hours": {
       "mon": "10:00–19:00",
       "tue": "10:00–19:00",
@@ -444,7 +445,7 @@
       "sat": "10:00–19:00",
       "sun": "10:00–19:00"
     },
-    "cycle": 7,
+    "cycle": 14,
     "lat": 49.8155,
     "lng": 24.0495,
     "note": "⭐ 4.1 (179 reviews). Open 7 days. Listed as \"Planet of Second-Hand\" (an English rendering of Світ секонд-хенду) prior to being confirmed as part of the chain."
@@ -481,7 +482,7 @@
     "addressEn": "",
     "phone": "",
     "type": "other",
-    "pricing": "item",
+    "pricing": "kg",
     "hours": {
       "sun": "09:00–17:00",
       "mon": "09:00–13:00",
@@ -505,7 +506,7 @@
     "addressEn": "42 Shota Rustaveli St",
     "phone": "",
     "type": "other",
-    "pricing": "item",
+    "pricing": "kg",
     "hours": {
       "mon": "?",
       "tue": "?",
@@ -554,7 +555,7 @@
     "addressEn": "14 Yuliusha Slovatskoho St",
     "phone": "",
     "type": "other",
-    "pricing": "item",
+    "pricing": "kg",
     "hours": {
       "mon": "?",
       "tue": "?",
