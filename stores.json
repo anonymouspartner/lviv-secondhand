@@ -612,7 +612,8 @@
     "cycle": 7,
     "lat": 49.839957,
     "lng": 24.027046,
-    "note": ""
+    "note": "New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "dailyDrop": true
   },
   {
     "id": "c9",
