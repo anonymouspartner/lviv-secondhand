@@ -2164,13 +2164,13 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00",
+      "sun": "10:00–20:00"
     },
     "cycle": 7,
     "lat": 49.84924,
@@ -3023,30 +3023,6 @@
     "cycle": 7,
     "lat": 49.8449538,
     "lng": 24.0203462,
-    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown).",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "restockDay": "tue"
-  },
-  {
-    "id": "c117",
-    "name": "Second hand — Соборна 5",
-    "brand": "Independent",
-    "address": "пл. Соборна, 5",
-    "addressEn": "5 Soborna Sq",
-    "phone": "",
-    "type": "other",
-    "pricing": "item",
-    "cycle": 7,
-    "lat": 49.8387866,
-    "lng": 24.0360179,
     "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown).",
     "hours": {
       "mon": "?",
