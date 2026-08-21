@@ -35,7 +35,7 @@ because the permission names differ:
 | --- | --- | --- |
 | Host | `graph.facebook.com` | `graph.instagram.com` |
 | Facebook Page | **required** | not needed |
-| Permissions | `instagram_basic`, `instagram_content_publish`, `pages_read_engagement` | `instagram_business_basic`, `instagram_business_content_publish` |
+| Permissions | `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement` | `instagram_business_basic`, `instagram_business_content_publish` |
 
 The workflow uses the Facebook Login path. If you follow a tutorial that names
 `instagram_business_content_publish`, you're on the other path and the token
@@ -68,7 +68,9 @@ add yourself under **App roles → Roles** as an admin or tester, and accept the
 invite. That's what makes publishing work without App Review.
 
 The permissions to grant on the token are `instagram_basic`,
-`instagram_content_publish`, and `pages_read_engagement`.
+`instagram_content_publish`, `pages_show_list`, and `pages_read_engagement`.
+`pages_show_list` is the one people miss — without it `/me/accounts` comes back
+empty and step 4 looks broken when the token is the actual problem.
 
 > Meta renames these product flows fairly often. Follow their current
 > [Content Publishing guide](https://developers.facebook.com/docs/instagram-platform/content-publishing)
