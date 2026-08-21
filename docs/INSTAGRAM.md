@@ -92,27 +92,41 @@ won't publish.
 
 ### 4. Get the two values
 
-**`IG_USER_ID`** — your Instagram user id, a number, not the handle. On this
-path it does *not* come from a Facebook Page lookup. In the
-[Graph API Explorer](https://developers.facebook.com/tools/explorer/), pick your
-app and an **Instagram** token, then:
+**Do not use the Graph API Explorer.** It is a Facebook tool and mints Facebook
+tokens; on this path it returns
+
+```
+"An active access token must be used to query information about the current
+ user." (code 2500)
+```
+
+which reads like a missing token but actually means *this token has no Instagram
+user context*. Both values come from the app dashboard instead.
+
+**App Dashboard → Instagram → API setup with Instagram login → 1. Generate
+access tokens.**
+
+- **Add an Instagram account** and log in with the Instagram Business/Creator
+  account, if it isn't listed already.
+- **`IG_USER_ID`** is shown next to the connected account.
+- Click **Generate token** for **`IG_ACCESS_TOKEN`**.
+
+**Copy the token immediately.** The dashboard will not show it again — generating
+a replacement is easy, but there is no "view existing token".
+
+This token is already long-lived (60 days), so no exchange step is needed — the
+`ig_exchange_token` call belongs to the OAuth flow, not to this one. If the token
+stops working after about an hour, it was short-lived and you're on the OAuth
+route instead; exchange it as described under token expiry below.
+
+To confirm before saving it anywhere:
 
 ```
 GET https://graph.instagram.com/v26.0/me?fields=user_id,username
+  &access_token={the-token}
 ```
 
-**`IG_ACCESS_TOKEN`** — an Instagram User access token. The Explorer issues a
-short-lived one (1 hour); exchange it for a 60-day token server-side:
-
-```
-GET https://graph.instagram.com/access_token
-  ?grant_type=ig_exchange_token
-  &client_secret={app-secret}
-  &access_token={short-lived-token}
-```
-
-The exchange includes your app secret, so run it from a terminal — never from a
-browser page you've shared or a client-side script.
+`username` should be your handle, and `user_id` should equal `IG_USER_ID`.
 
 ### 5. Add them as repo secrets
 **Settings → Secrets and variables → Actions → New repository secret.**
