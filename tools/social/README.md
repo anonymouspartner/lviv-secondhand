@@ -28,6 +28,19 @@ its bundled browser.
 | `npm run sellsheet` | `marketing/sell-sheet.pdf` + `.png` (A4) | Bilingual one-page pitch for selling store owners on paid promotions (prices mirror `docs/ADVERTISING.md`). Override the contact with `SELLSHEET_CONTACT=…`. |
 | `npm run flyer` | `marketing/flyer.pdf` + `.png` (A4 → 4× A6) | Bilingual shopper **handout flyer**, 4-up on one A4 to print and cut. The QR opens the app. |
 | `npm run stickers` | `marketing/qr-stickers.pdf` + `.png` (A4 → 24) | Sheet of small **QR stickers** (4×6) for the agent to place in/around stores. Print on label paper and cut. |
+| `npm run promo` | `marketing/instagram/*.png` (8 files) | **Instagram posts advertising the app itself** — 4 messages (coverage, the price-cycle idea, restock alerts, free/no-account) × 2 sizes (1080×1080 square, 1080×1350 portrait). Every post ends on the site URL. Override with `PROMO_URL=…`. |
+
+### Notes on the Instagram set
+
+- Counts (`131 магазин`, `8 мереж`, `59 на вагу`) are **read from `stores.json` at
+  render time**, so re-running after the data changes updates the claims rather
+  than leaving a stale number in an image.
+- Ukrainian numerals take three forms, so those counts go through a `plural()`
+  helper — `131 магазин`, `59 магазинів`, `8 мереж` are each a different form.
+- Headlines set `h1.display`, not `h1`: `brand.mjs`'s `.display` sets
+  `line-height:.94`, and a class outranks a bare element selector, so an `h1`
+  rule is silently ignored. Uppercase Cyrillic (Й, Ї) needs more leading than
+  that Latin-tuned default or the diacritics clip into the line above.
 
 The deals image is also refreshed automatically every Monday by
 [`.github/workflows/deals-image.yml`](../../.github/workflows/deals-image.yml),

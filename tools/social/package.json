@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Generators for Lviv Second Hand social/marketing assets (OG image, QR poster, deals image).",
+  "description": "Generators for Lviv Second Hand social/marketing assets (OG image, QR poster, deals image, Instagram promo posts).",
   "license": "SEE LICENSE IN ../../LICENSE",
   "scripts": {
     "og": "node og-image.mjs",
@@ -11,7 +11,8 @@
     "deals": "node deals-image.mjs",
     "sellsheet": "node sell-sheet.mjs",
     "flyer": "node flyer.mjs",
-    "stickers": "node qr-stickers.mjs"
+    "stickers": "node qr-stickers.mjs",
+    "promo": "node promo.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",
