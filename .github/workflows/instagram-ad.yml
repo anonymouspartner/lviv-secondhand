@@ -71,12 +71,19 @@ jobs:
             # Previously it invented an id locally, so its approve link hit a
             # row that did not exist and 404'd — meaning the approve→publish
             # half could not be tested without taking an actual payment.
-            R=$(curl -s -X POST "$WORKER/api/ad/register" \
+            # -w writes the status onto its own trailing line. The first
+            # version reported only `.reason`, so when the route was missing
+            # entirely the error read "Worker refused to register the ad:" with
+            # nothing after the colon — the one failure it needed to explain.
+            R=$(curl -s -w '\n%{http_code}' -X POST "$WORKER/api/ad/register" \
               -H "X-Admin-Key: $ADMIN_KEY" -H 'Content-Type: application/json' \
               -d "$(jq -nc --arg s "$STORE" --arg t "$TEXT" --arg r "$TIER" \
-                    '{storeId:$s, text:$t, tier:$r}')" || echo '{}')
-            if [ "$(echo "$R" | jq -r '.ok // false')" != "true" ]; then
-              echo "::error::Worker refused to register the ad: $(echo "$R" | jq -c '.reason // .' 2>/dev/null)"
+                    '{storeId:$s, text:$t, tier:$r}')" || printf '\n000')
+            CODE=$(printf '%s' "$R" | tail -n1)
+            R=$(printf '%s' "$R" | sed '$d')
+            if [ "$(printf '%s' "$R" | jq -r '.ok // false' 2>/dev/null)" != "true" ]; then
+              echo "::error::Worker refused to register the ad (HTTP $CODE): ${R:-<empty body>}"
+              echo "A 204 with an empty body means the route did not match — check it is in the POST section of worker.js and that the Worker has deployed."
               exit 1
             fi
             AD_ID=$(echo "$R" | jq -r '.id')
