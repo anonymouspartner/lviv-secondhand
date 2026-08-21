@@ -78,31 +78,24 @@ you want the first two, **not** Basic Display, which cannot publish.
 dashboard. Do not switch to Live and do not submit for App Review: review only
 governs publishing to accounts you don't own.
 
-**3d — add the Instagram Tester, then accept the invite.** This is two separate
-roles and conflating them is the usual reason a correct-looking setup fails at
-the token step:
+**3d — check your Page role. There is no Instagram Tester step.**
 
-| Role | Where | What it does |
-| --- | --- | --- |
-| App admin/developer | **App roles → Roles** | Lets *you* administer the app |
-| **Instagram Tester** | **App roles → Roles → Instagram Testers** | Lets the app *act on your Instagram account* |
+On the Facebook Login path the grant is *Page-based*, not Instagram-based. Meta's
+requirement is that the Instagram professional account is connected to a Facebook
+Page, and that you "be able to perform admin-equivalent tasks on the linked
+Facebook Page" — specifically the `PROFILE_PLUS_CREATE_CONTENT` task, which is
+what backs the `instagram_content_publish` permission.
 
-Add your Instagram handle as an **Instagram Tester** — then open Instagram
-itself and accept it: **Settings → Apps and websites → Tester invites →
-Accept**. The invite is pending by default and nothing in the Meta dashboard
-warns you it is unaccepted, so this failure surfaces much later as a token that
-inexplicably won't publish.
+So all you need is: a role on the app (3c) **and** admin on the Page. If you
+created the Page, you already have both, and step 3 is done.
 
-The permissions to grant on the token are `instagram_basic`,
-`instagram_content_publish`, `pages_show_list`, and `pages_read_engagement`.
-`pages_show_list` is the one people miss — without it `/me/accounts` comes back
-empty and step 4 looks broken when the token is the actual problem.
-
-> Meta renames these product flows fairly often. Follow their current
-> [Content Publishing guide](https://developers.facebook.com/docs/instagram-platform/content-publishing)
-> rather than any fixed click-path written here — the four things you need
-> (professional account, linked Page, app, long-lived token) are stable even
-> when the UI moves.
+> **The `Instagram Tester` role is not part of this path.** It belongs to
+> Instagram Login / Basic Display, where the app authenticates *as* the Instagram
+> user rather than through the Page. If you go looking for
+> *Instagram → Settings → Apps and websites → Tester invites*, you will not find a
+> pending invite, because none was ever sent — and there is nothing wrong with
+> your setup. This doc previously said to accept one; that was wrong, and it is
+> an easy mistake to make because most tutorials online cover the other path.
 
 ### 4. Get the two values
 
