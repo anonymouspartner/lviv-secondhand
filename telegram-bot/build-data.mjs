@@ -25,6 +25,7 @@ const slim = STORES
     restockDate: s.restock_date || null, // concrete last-delivery date — works for any cycle length
     restockDates: Array.isArray(s.restockDates) && s.restockDates.length ? s.restockDates : null, // chain's published calendar; beats both fields above
     cycle: s.cycle || 7, // days per restock cycle, for cycle-aware duplicate-visit detection
+    dailyDrop: s.dailyDrop || undefined, // restocks every day — no cycle to predict, so restock alerts decline politely
     lat: s.lat,
     lng: s.lng,
     promo: s.promo || null, // optional paid promotion { tier, offer, until } — drives the sponsored slot

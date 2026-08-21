@@ -689,6 +689,97 @@ async function handleFlashSubStart(env, ctx) {
   return true;
 }
 
+// `/start rsub_{storeId}` — opts this chat into RESTOCK alerts for a store.
+// Distinct from sub_ next door: that one is paid flash deals, this one is "tell
+// me when this shop gets new stock". It exists because the web-push version of
+// this is unavailable on iOS unless the app is installed, so a large share of
+// shoppers previously had no restock alert available at all.
+//
+// The prediction is computed here rather than on the metrics Worker because the
+// store list lives in this Worker and the D1 binding lives in that one.
+function nextRestockFor(store) {
+  if (!store) return null;
+  const cycle = (store.cycle >= 1 && store.cycle <= 90) ? store.cycle : 7;
+  const today = isoDay(0);
+  // Same precedence as getDayInfo() in the app: a chain's published calendar
+  // beats a computed cycle, and a concrete date beats a bare weekday.
+  if (Array.isArray(store.restockDates)) {
+    const upcoming = store.restockDates.filter((d) => typeof d === 'string' && d > today).sort();
+    if (upcoming.length) return { next: upcoming[0], cycle };
+  }
+  // NOTE: restockDate, not restock_date — build-data.mjs renames it on the way
+  // into stores.gen.js, and reading the snake_case name here silently yields
+  // undefined for every store.
+  if (typeof store.restockDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(store.restockDate)) {
+    let n = store.restockDate;
+    while (n <= today) {
+      const d = new Date(n + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + cycle);
+      n = d.toISOString().slice(0, 10);
+    }
+    return { next: n, cycle };
+  }
+  // A bare weekday only places a store on a 7-day cycle — the same limit
+  // /today and /day already observe.
+  if (store.restockDay && DAYS.includes(store.restockDay)) {
+    const from = DAYS.indexOf(kyivWeekday());
+    const to = DAYS.indexOf(store.restockDay);
+    const ahead = ((to - from + 7) % 7) || 7;
+    return { next: isoDay(ahead), cycle: 7 };
+  }
+  return null;
+}
+
+async function handleRestockSubStart(env, ctx) {
+  if (!env.BOT_TOKEN) return false;
+  const { chatId, text } = ctx;
+  const m = /^\/start\s+rsub_(\S+)/.exec(String(text || '').trim());
+  if (!m) return false;
+  const storeId = m[1];
+  if (!/^[a-z0-9]{1,12}$/i.test(storeId)) return false;
+  const store = STORES.find((s) => s.id === storeId);
+  const name = store ? store.name : storeId;
+
+  if (store && store.dailyDrop) {
+    await tg(env, 'sendMessage', {
+      chat_id: chatId,
+      text: `🆕 <b>${esc(name)}</b> оновлює товар щодня — сповіщати нема про що, заходьте будь-коли.\n\n` +
+            `<b>${esc(name)}</b> restocks daily, so there is nothing to notify about — drop in any time.`,
+      parse_mode: 'HTML',
+    });
+    return true;
+  }
+
+  const pred = nextRestockFor(store);
+  if (!pred) {
+    await tg(env, 'sendMessage', {
+      chat_id: chatId,
+      text: `📦 Для <b>${esc(name)}</b> ще не відомий графік завозу, тому попередити не вийде.\n` +
+            `Знаєте дату? Надішліть її через застосунок — ${APP_URL}?store=${encodeURIComponent(storeId)}\n\n` +
+            `No restock schedule on record for <b>${esc(name)}</b> yet, so there is nothing to predict from.`,
+      parse_mode: 'HTML',
+    });
+    return true;
+  }
+
+  const saved = await metricsCall(env, '/api/rsub', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeId, chatId, name, next: pred.next, cycle: pred.cycle }),
+  });
+  if (!saved.ok) {
+    await tg(env, 'sendMessage', { chat_id: chatId, text: METRICS_DOWN });
+    return true;
+  }
+  await tg(env, 'sendMessage', {
+    chat_id: chatId,
+    text: `🔔 Стежите за завозом у <b>${esc(name)}</b>. Напишемо вранці ${esc(pred.next)}, коли очікується новий товар.\n\n` +
+          `Following <b>${esc(name)}</b> for restocks — we'll message you on ${esc(pred.next)}.\n\n` +
+          `Відписатися від усього · unsubscribe from everything — /stop`,
+    parse_mode: 'HTML',
+  });
+  return true;
+}
+
 // /stop — unsubscribe this chat from every store's flash-deal alerts.
 async function handleStopCommand(env, ctx) {
   if (!env.BOT_TOKEN) return false;
@@ -2273,6 +2364,7 @@ export default {
 
     // Flash-deal subscribe/unsubscribe (Feature 5). Only needs BOT_TOKEN.
     try {
+      if (await handleRestockSubStart(env, mctx)) return ok();
       if (await handleFlashSubStart(env, mctx)) return ok();
       if (await handleStopCommand(env, mctx)) return ok();
     } catch (e) {}
