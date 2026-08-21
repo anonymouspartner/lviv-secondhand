@@ -14,7 +14,8 @@
     "stickers": "node qr-stickers.mjs",
     "promo": "node promo.mjs",
     "avatar": "node avatar.mjs",
-    "stories": "node stories.mjs"
+    "stories": "node stories.mjs",
+    "ad": "node ad-image.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",

@@ -1,0 +1,184 @@
+name: Queue an Instagram ad for approval
+
+# Renders a paid store advertisement, commits it, and sends it to the owner on
+# Telegram with approve / reject links. IT PUBLISHES NOTHING.
+#
+# That separation is the whole design. A store pays, this workflow prepares the
+# post, and it sits in the queue until a human taps approve. The only route from
+# here to the public feed is the Worker's /ad/approve endpoint, which then fires
+# instagram-ad-publish.yml. Nothing about a completed payment publishes anything.
+#
+# Triggered by repository_dispatch from worker/worker.js's queueInstagramAd().
+# client_payload: { ad_id, store_id, text, tier, image_path, caption_path }
+#
+# SECRETS: BOT_TOKEN / OWNER_ID (same pair the token watchdog uses),
+#          WORKER_ADMIN_KEY (must equal the Worker's ADMIN_KEY — it is what
+#          makes the approve link work, and what stops anyone else's)
+
+on:
+  repository_dispatch:
+    types: [instagram_ad]
+  # Hand-run for testing the render without a real payment. It still only
+  # queues — there is no input here that can make it post.
+  workflow_dispatch:
+    inputs:
+      store_id: { description: "Store id, e.g. c8", required: true, type: string }
+      text:     { description: "Offer line (max 120 chars)", required: true, type: string }
+      tier:     { description: "flash | featured | spotlight | verified", required: false, type: string, default: "flash" }
+
+permissions:
+  contents: write
+
+env:
+  SITE: https://www.lvivsecondhand.com
+  WORKER: https://lviv-metrics.lshanalytic.workers.dev
+
+jobs:
+  queue:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/social
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve inputs from either trigger
+        id: cfg
+        working-directory: .
+        env:
+          # Via env, never interpolated into the shell: the offer text is
+          # buyer-supplied through a Stripe custom field.
+          D_ID:    ${{ github.event.client_payload.ad_id }}
+          D_STORE: ${{ github.event.client_payload.store_id }}
+          D_TEXT:  ${{ github.event.client_payload.text }}
+          D_TIER:  ${{ github.event.client_payload.tier }}
+          W_STORE: ${{ inputs.store_id }}
+          W_TEXT:  ${{ inputs.text }}
+          W_TIER:  ${{ inputs.tier }}
+        run: |
+          if [ -n "$D_ID" ]; then
+            AD_ID="$D_ID"; STORE="$D_STORE"; TEXT="$D_TEXT"; TIER="$D_TIER"
+          else
+            # Hand-run ids are prefixed so a test never collides with a real
+            # queued row, and so they are obvious in the ads directory.
+            AD_ID="ad_manual_$(date +%s)"; STORE="$W_STORE"; TEXT="$W_TEXT"; TIER="$W_TIER"
+          fi
+          if [ -z "$STORE" ] || [ -z "$TEXT" ]; then
+            echo "::error::store id and offer text are both required."
+            exit 1
+          fi
+          {
+            echo "ad_id=$AD_ID"
+            echo "store=$STORE"
+            echo "tier=$TIER"
+            echo "img=marketing/instagram/ads/$AD_ID.jpg"
+            echo "cap=marketing/instagram/ads/$AD_ID.txt"
+          } >> "$GITHUB_OUTPUT"
+          # Multi-line safe, and keeps the buyer's text out of the log line.
+          {
+            echo 'text<<AD_TEXT_EOF'
+            printf '%s\n' "$TEXT"
+            echo 'AD_TEXT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install deps + Chromium
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Render the ad
+        env:
+          AD_STORE_ID: ${{ steps.cfg.outputs.store }}
+          AD_TEXT: ${{ steps.cfg.outputs.text }}
+          AD_TIER: ${{ steps.cfg.outputs.tier }}
+          AD_OUT: ${{ steps.cfg.outputs.img }}
+        run: node ad-image.mjs
+
+      # The caption is written here, not on the Worker, because stores.json is
+      # here — the Worker knows only store ids and would caption an ad "c8".
+      - name: Write the caption
+        working-directory: .
+        env:
+          STORE: ${{ steps.cfg.outputs.store }}
+          TEXT: ${{ steps.cfg.outputs.text }}
+          CAP: ${{ steps.cfg.outputs.cap }}
+        run: |
+          NAME=$(node -e '
+            const s=JSON.parse(require("fs").readFileSync("stores.json","utf8"));
+            const f=s.find(x=>x.id===process.env.STORE);
+            process.stdout.write(f ? f.name : process.env.STORE);
+          ')
+          {
+            printf '%s\n\n' "$TEXT"
+            printf '📍 %s\n' "$NAME"
+            printf '%s/?store=%s\n\n' "$SITE" "$STORE"
+            printf 'Реклама. Розміщення оплачене магазином.\n\n'
+            printf '#секондхендльвів #львів #секондхенд #знижки #lviv\n'
+          } > "$CAP"
+          echo "Caption written to $CAP"
+
+      - name: Commit the ad
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${{ steps.cfg.outputs.img }}" "${{ steps.cfg.outputs.cap }}"
+          git commit -m "Queue Instagram ad ${{ steps.cfg.outputs.ad_id }} for approval [skip ci]"
+          git push
+
+      # Meta fetches image_url over HTTP at publish time, so the image has to be
+      # served before anyone can approve it — otherwise the approve tap fails on
+      # a 404 the owner cannot diagnose.
+      - name: Wait for Pages to serve it
+        working-directory: .
+        run: |
+          URL="$SITE/${{ steps.cfg.outputs.img }}"
+          for i in $(seq 1 30); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -L "$URL" || true)
+            [ "$CODE" = "200" ] && { echo "Live: $URL"; exit 0; }
+            sleep 10
+          done
+          echo "::error::$URL did not become reachable within 5 minutes."
+          exit 1
+
+      - name: Send it to the owner for approval
+        working-directory: .
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          OWNER_ID: ${{ secrets.OWNER_ID }}
+          ADMIN_KEY: ${{ secrets.WORKER_ADMIN_KEY }}
+          AD_ID: ${{ steps.cfg.outputs.ad_id }}
+          IMG: ${{ steps.cfg.outputs.img }}
+          CAP: ${{ steps.cfg.outputs.cap }}
+          STORE: ${{ steps.cfg.outputs.store }}
+        run: |
+          if [ -z "$BOT_TOKEN" ] || [ -z "$OWNER_ID" ]; then
+            echo "::warning::BOT_TOKEN / OWNER_ID not set — the ad is queued but nobody was told. Approve manually via the Worker."
+            exit 0
+          fi
+          if [ -z "$ADMIN_KEY" ]; then
+            echo "::error::WORKER_ADMIN_KEY not set — an approval link without it cannot work."
+            exit 1
+          fi
+          APPROVE="$WORKER/ad/approve?id=$AD_ID&key=$ADMIN_KEY"
+          REJECT="$WORKER/ad/reject?id=$AD_ID&key=$ADMIN_KEY"
+          # The caption is quoted in full, because this message IS the approval:
+          # the publish step reads back this same committed file.
+          CAPTION_BODY=$(cat "$CAP")
+          MSG=$(printf '%s\n\n%s\n\n%s\n%s\n\n%s\n%s\n\n%s\n%s' \
+            "📣 Реклама чекає на підтвердження · Ad awaiting approval" \
+            "Магазин · Store: $STORE" \
+            "Підпис · Caption:" \
+            "$CAPTION_BODY" \
+            "✅ Опублікувати · Publish:" "$APPROVE" \
+            "❌ Відхилити · Reject:" "$REJECT")
+          # sendPhoto so the owner decides on the actual image, not a filename.
+          curl -s -o /dev/null -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendPhoto" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg c "$OWNER_ID" --arg p "$SITE/$IMG" --arg cap "$MSG" \
+                  '{chat_id:$c, photo:$p, caption:$cap}')" || true
+          echo "::notice::Ad $AD_ID queued and sent for approval. Nothing has been posted."

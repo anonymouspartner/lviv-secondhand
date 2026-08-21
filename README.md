@@ -276,6 +276,30 @@ Setup lives in **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Two things that wil
 
 Images must be **JPEG** — the API rejects PNG with a generic container error that never mentions the format.
 
+### Paid ads on Instagram — you approve, then it posts
+
+A store buying a flash deal now also queues an **Instagram advertisement**. It is queued, never posted: the only route from a completed payment to the public feed is you tapping approve.
+
+1. Stripe webhook → `queueInstagramAd()` writes a row to `instagram_ads` as `rendering` and fires a `repository_dispatch`.
+2. **`instagram-ad.yml`** renders the ad, writes its caption, commits both, waits for Pages to serve the image, and sends it to you on Telegram as a photo with ✅ / ❌ links. **It publishes nothing.**
+3. Tapping ✅ hits the Worker's `/ad/approve` (same `ADMIN_KEY` link pattern as `/flash-deal/approve`), which fires a second dispatch.
+4. **`instagram-ad-publish.yml`** reads the committed caption back off disk and hands it to `instagram-post.yml`.
+
+Reading the caption back from the committed file is what makes "you approve exactly what publishes" true rather than merely intended — the file quoted in your Telegram message is the same file the publisher reads.
+
+Approving the ad is **deliberately separate** from approving the flash deal for the map. The same words can be fine on a store page and wrong on a public feed, so they are two decisions.
+
+| Piece | Where |
+| --- | --- |
+| Queue + approve/reject | `worker/worker.js` — `instagram_ads`, `queueInstagramAd()`, `/ad/approve`, `/ad/reject` |
+| Render | `tools/social/ad-image.mjs` |
+| Queue for approval | `.github/workflows/instagram-ad.yml` (also hand-runnable for a test render) |
+| Publish after approval | `.github/workflows/instagram-ad-publish.yml` |
+
+Needs one secret beyond the Instagram pair: **`WORKER_ADMIN_KEY`**, matching the Worker's `ADMIN_KEY` — it is what makes your approve link work and everyone else's fail.
+
+Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The app tells shoppers "paid placements are always labelled", and an ad that quietly drops the mark to perform better would break that promise.
+
 ## 💬 Telegram bot
 
 **[@Secondhandlvivbot](https://t.me/Secondhandlvivbot)** — the app's companion. Every result links back into the map, so a shopper can go from a Telegram message to directions in two taps. The interface is Ukrainian.
