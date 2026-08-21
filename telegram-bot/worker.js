@@ -8,7 +8,9 @@
 //   /today        — stores getting fresh stock TODAY (fixed weekly restock day)
 //   /day <day>    — same, for any weekday (en/uk name or short uk form)
 //   /rare         — stores on a longer-than-weekly restock cycle (14, 35 days…)
-//   /cheap        — best by-weight deals right now (late in the weekly cycle)
+//   /cheap        — stores longest since a restock (late in the weekly cycle).
+//                   Ranked by days elapsed, never by price: the data holds no
+//                   prices, and per-kg rates move with the exchange rate.
 //   /submit       — point store owners at the web submission form
 //
 // Flash-deal alerts (active, needs BOT_TOKEN — no VISITS/session involved):
@@ -215,7 +217,7 @@ function helpText() {
     '/today — stores restocking today · магазини із завезенням сьогодні',
     '/day — pick any weekday · обрати будь-який день тижня',
     '/rare — stores that restock every 14+ days · рідко оновлювані магазини',
-    '/cheap — best by-weight deals right now · найкращі ціни на вагу',
+    '/cheap — longest since a restock · найдовше без завозу',
     '/submit — add your store (for owners) · додати свій магазин',
     '/feedback — tell the maintainer something · залишити відгук',
     '/materials — print-ready flyers, stickers, poster · рекламні матеріали для друку',
@@ -269,7 +271,7 @@ function todayText() {
       `📦 <b>No scheduled restocks today (${DAY_NAMES[wd]}).</b>`,
       'The tracked by-weight stores restock Mon–Fri.',
       '',
-      'Try /cheap for the best by-weight deals right now, or open the full map:',
+      'Try /cheap for the stores longest since a restock, or open the full map:',
       APP_URL,
     ].join('\n');
   }
@@ -323,7 +325,7 @@ function cheapText() {
     })
     .join('\n\n');
   return featuredBlock() + [
-    '💸 <b>Best by-weight deals right now</b>',
+    '💸 <b>Найдовше без завозу · Longest since a restock</b>',
     'By-weight prices drop each day after a restock, so the stores furthest into their weekly cycle have the deepest discounts today:',
     '',
     blocks,
@@ -1164,7 +1166,7 @@ const PUBLIC_CMDS = [
   { command: 'today', description: '🛍 Магазини із завезенням сьогодні' },
   { command: 'day', description: '🛍 Обрати будь-який день тижня' },
   { command: 'rare', description: '🛍 Рідко оновлювані магазини' },
-  { command: 'cheap', description: '🛍 Найкращі ціни на вагу зараз' },
+  { command: 'cheap', description: '🛍 Хто найдовше без завозу' },
   { command: 'submit', description: '🏪 Додати свій магазин (власникам)' },
   { command: 'materials', description: '🏪 Матеріали для друку: флаєри, наліпки' },
   { command: 'feedback', description: '💬 Залишити відгук власнику' },

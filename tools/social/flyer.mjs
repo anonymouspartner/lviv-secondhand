@@ -40,7 +40,7 @@ const flyer = `
 
     <ul class="benefits body">
       <li><b>Карта, години, маршрут</b><span>map · hours · directions</span></li>
-      <li><b>Ціни на вагу та поштучно</b><span>by-weight &amp; itemized prices</span></li>
+      <li><b>На вагу чи поштучно</b><span>by weight or by item</span></li>
       <li><b>Дні завезення — коли найдешевше</b><span>restock days · best-price timing</span></li>
     </ul>
 

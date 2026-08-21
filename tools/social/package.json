@@ -13,7 +13,8 @@
     "flyer": "node flyer.mjs",
     "stickers": "node qr-stickers.mjs",
     "promo": "node promo.mjs",
-    "avatar": "node avatar.mjs"
+    "avatar": "node avatar.mjs",
+    "stories": "node stories.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",
