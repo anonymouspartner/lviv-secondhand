@@ -106,6 +106,17 @@ function metricsFetch(env, path, init) {
 //
 // Returning an explicit ok flag forces the caller to decide what to say when
 // the call did not happen. A 204 with no body is a success with data: null.
+// Headers for the metrics Worker's bot-only routes (/api/sub, /api/rsub,
+// /api/unsub-all). They are ADMIN_KEY-gated there because they act on a chat id
+// taken from the body, and this Worker is their only caller. Returns the plain
+// content-type alone when no key is configured, so the failure is a clean 401
+// from the Worker rather than a confusing half-authenticated request.
+function adminJsonHeaders(env) {
+  const h = { 'Content-Type': 'application/json' };
+  if (env.ADMIN_KEY) h['X-Admin-Key'] = env.ADMIN_KEY;
+  return h;
+}
+
 async function metricsCall(env, path, init) {
   try {
     const res = await metricsFetch(env, path, init);
@@ -684,7 +695,7 @@ async function handleFlashSubStart(env, ctx) {
   if (!/^[a-z0-9]{1,12}$/i.test(storeId)) return false;
   const store = STORES.find((s) => s.id === storeId);
   const saved = await metricsCall(env, '/api/sub', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: adminJsonHeaders(env),
     body: JSON.stringify({ storeId, chatId }),
   });
   if (!saved.ok) {
@@ -774,7 +785,7 @@ async function handleRestockSubStart(env, ctx) {
   }
 
   const saved = await metricsCall(env, '/api/rsub', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: adminJsonHeaders(env),
     body: JSON.stringify({ storeId, chatId, name, next: pred.next, cycle: pred.cycle }),
   });
   if (!saved.ok) {
@@ -797,7 +808,7 @@ async function handleStopCommand(env, ctx) {
   const { chatId, text } = ctx;
   if (!/^\/stop\b/i.test(String(text || '').trim())) return false;
   const cleared = await metricsCall(env, '/api/unsub-all', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: adminJsonHeaders(env),
     body: JSON.stringify({ chatId }),
   });
   if (!cleared.ok) {

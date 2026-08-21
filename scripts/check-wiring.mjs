@@ -143,15 +143,23 @@ const errors = [];
   };
   try {
     const worker_mod = await import('../worker/worker.js');
+    // /api/sub is bot-only and ADMIN_KEY-gated, so the probe has to
+    // authenticate — otherwise it 401s before ensureSchema is ever reached and
+    // this check reports "0 of 19 statements", blaming the schema for an
+    // authorization change. That is exactly what happened when the gate landed.
+    const ADMIN_KEY = 'check-wiring-probe-key';
     const res = await worker_mod.default.fetch(
       new Request('https://x/api/sub', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY },
         body: JSON.stringify({ storeId: 's10', chatId: '1' }),
       }),
-      { DB },
+      { DB, ADMIN_KEY },
       { waitUntil() {} },
     );
+    if (res.status === 401) {
+      errors.push('ensureSchema probe was rejected before reaching the schema — /api/sub\'s gate changed and this check needs its credentials updated.');
+    }
     if (res.status >= 500) {
       errors.push(`ensureSchema left the Worker answering HTTP ${res.status} on a D1 route.`);
     }

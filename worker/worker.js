@@ -1576,6 +1576,16 @@ export default {
       return json({ ok: true, ...made }, 200, origin);
     }
     if (url.pathname === '/api/sub') {
+      // Bot-only: the Telegram Worker is the sole caller, over a service
+      // binding. Gated on ADMIN_KEY because these write and delete another
+      // person's subscriptions from a chat id supplied in the body, and
+      // Telegram chat ids are enumerable integers — ungated, /api/unsub-all
+      // let anyone unsubscribe anyone from everything, and its siblings let
+      // anyone subscribe an arbitrary chat. Same header gate as
+      // /api/ad/register; the browser never calls any of the three.
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
       const storeId = body && body.storeId;
       const chatId = body && body.chatId;
       if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)
@@ -1591,6 +1601,16 @@ export default {
     // data and posts them here, because this Worker has the D1 binding and the
     // bot has the store list — neither has both.
     if (url.pathname === '/api/rsub') {
+      // Bot-only: the Telegram Worker is the sole caller, over a service
+      // binding. Gated on ADMIN_KEY because these write and delete another
+      // person's subscriptions from a chat id supplied in the body, and
+      // Telegram chat ids are enumerable integers — ungated, /api/unsub-all
+      // let anyone unsubscribe anyone from everything, and its siblings let
+      // anyone subscribe an arbitrary chat. Same header gate as
+      // /api/ad/register; the browser never calls any of the three.
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
       const storeId = body && body.storeId;
       const chatId = body && body.chatId;
       if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)
@@ -1614,6 +1634,16 @@ export default {
       return new Response(null, { status: 204, headers: cors(origin) });
     }
     if (url.pathname === '/api/unsub-all') {
+      // Bot-only: the Telegram Worker is the sole caller, over a service
+      // binding. Gated on ADMIN_KEY because these write and delete another
+      // person's subscriptions from a chat id supplied in the body, and
+      // Telegram chat ids are enumerable integers — ungated, /api/unsub-all
+      // let anyone unsubscribe anyone from everything, and its siblings let
+      // anyone subscribe an arbitrary chat. Same header gate as
+      // /api/ad/register; the browser never calls any of the three.
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
       const chatId = body && body.chatId;
       if (typeof chatId !== 'string' && typeof chatId !== 'number') {
         return new Response('bad request', { status: 400, headers: cors(origin) });
