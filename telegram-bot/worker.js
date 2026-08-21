@@ -222,6 +222,7 @@ function helpText() {
     '/help — this message · ця довідка',
     '',
     `🗺️ Full map, hours &amp; price tracker: ${APP_URL}`,
+    `📸 Instagram — щотижневі ціни та нові магазини · weekly prices and new stores: https://www.instagram.com/secondhandlvivbot/`,
   ].join('\n');
 }
 
