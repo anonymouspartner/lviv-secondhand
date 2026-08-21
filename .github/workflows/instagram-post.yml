@@ -48,6 +48,14 @@ name: Post to Instagram
 # instead. Refresh roughly every 50 days; see docs/INSTAGRAM.md.
 
 on:
+  # Callable from deals-image.yml so the Monday image posts itself, and
+  # dispatchable by hand for the promo set. Both surfaces read the same
+  # `inputs` context, so there is one set of parameters, not two.
+  workflow_call:
+    inputs:
+      image:    { type: string,  required: true }
+      caption:  { type: string,  required: true }
+      dry_run:  { type: boolean, required: false, default: false }
   workflow_dispatch:
     inputs:
       image:
@@ -106,7 +114,7 @@ jobs:
       - name: Pre-flight — image is committed and publicly reachable
         if: steps.guard.outputs.ready == 'true'
         env:
-          IMG: ${{ github.event.inputs.image }}
+          IMG: ${{ inputs.image }}
         run: |
           if [ ! -f "$IMG" ]; then
             echo "::error::$IMG is not in the repo. Commit it first — Meta fetches it over HTTP."
@@ -173,11 +181,11 @@ jobs:
 
       # Step 1 of 2: create the media container. Meta downloads the image here.
       - name: Create media container
-        if: steps.guard.outputs.ready == 'true' && github.event.inputs.dry_run != 'true'
+        if: steps.guard.outputs.ready == 'true' && inputs.dry_run != true
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
-          CAPTION: ${{ github.event.inputs.caption }}
+          CAPTION: ${{ inputs.caption }}
         run: |
           RESP=$(curl -s -X POST "$GRAPH/$PUBLISH_ID/media" \
             --data-urlencode "image_url=$IMAGE_URL" \
@@ -196,7 +204,7 @@ jobs:
       # Images are usually ready immediately, but publishing a container that is
       # still processing fails — so wait for FINISHED rather than assuming.
       - name: Wait for the container to finish processing
-        if: steps.guard.outputs.ready == 'true' && github.event.inputs.dry_run != 'true'
+        if: steps.guard.outputs.ready == 'true' && inputs.dry_run != true
         env:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
         run: |
@@ -219,7 +227,7 @@ jobs:
       # Without this a dry run ends green with no output, which reads exactly
       # like a successful post — the one confusion this feature must not create.
       - name: Dry run — report and stop
-        if: steps.guard.outputs.ready == 'true' && github.event.inputs.dry_run == 'true'
+        if: steps.guard.outputs.ready == 'true' && inputs.dry_run == true
         run: |
           {
             echo "### Dry run — nothing was posted"
@@ -231,7 +239,7 @@ jobs:
 
       # Step 2 of 2: publish. This is the irreversible one — it goes live.
       - name: Publish
-        if: steps.guard.outputs.ready == 'true' && github.event.inputs.dry_run != 'true'
+        if: steps.guard.outputs.ready == 'true' && inputs.dry_run != true
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -251,6 +259,6 @@ jobs:
           {
             echo "### Posted to Instagram"
             echo ""
-            echo "- **Image:** \`${{ github.event.inputs.image }}\`"
+            echo "- **Image:** \`${{ inputs.image }}\`"
             echo "- **Post:** ${LINK:-$MEDIA_ID}"
           } >> "$GITHUB_STEP_SUMMARY"

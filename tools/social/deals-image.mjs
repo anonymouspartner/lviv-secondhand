@@ -1,7 +1,11 @@
 // Renders a 1080×1080 "best deals right now" share image (Instagram/Telegram)
 // from the app's /cheap logic, straight out of stores.json (single source of
 // truth, same file index.html fetches at runtime). Run: `npm run deals` →
-// marketing/deals-this-week.png
+// marketing/deals-this-week.jpg + deals-caption.txt
+//
+// JPEG, not PNG: Instagram's publishing API accepts JPEG only and rejects a PNG
+// image_url with a generic container error. The card background is opaque, so
+// there is no alpha to lose.
 //
 // The ranking mirrors telegram-bot/worker.js cheapText(): by-weight stores with
 // a fixed weekly restock day, ranked by how many days they are into their weekly
@@ -103,7 +107,27 @@ const page_html = `<!doctype html><html><head><meta charset="utf-8"><style>
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const page = await browser.newPage({ viewport: { width: 1080, height: 1080 }, deviceScaleFactor: 1 });
 await page.setContent(page_html, { waitUntil: 'networkidle' });
-const buf = await page.locator('.card').screenshot();
-writeFileSync(resolve(outDir, 'deals-this-week.png'), buf);
+const buf = await page.locator('.card').screenshot({ type: 'jpeg', quality: 92 });
+writeFileSync(resolve(outDir, 'deals-this-week.jpg'), buf);
 await browser.close();
-console.log(`Wrote marketing/deals-this-week.png — ${ranked.length} stores ranked for ${dateEN} (Kyiv).`);
+
+// Caption written alongside the image so the Instagram post describes THIS
+// week's ranking rather than repeating a generic line. The workflow reads this
+// file rather than hardcoding text that would drift from the picture.
+const top = ranked[0];
+const lead = top
+  ? `Цього тижня найдешевше: ${top.s.name}${top.days ? ` — ${top.days} ${top.days === 1 ? 'день' : top.days < 5 ? 'дні' : 'днів'} після завозу.` : '.'}`
+  : 'Ціни на вагу падають щодня після завозу.';
+const caption = [
+  '🧥 Найкращі ціни на вагу зараз',
+  '',
+  lead,
+  'У секонд-хенді ціна падає з кожним днем після завозу — карта показує, де кожен магазин у своєму циклі.',
+  '',
+  'Оновлюється щопонеділка → www.lvivsecondhand.com',
+  '',
+  '#секондхенд #секондхендльвів #львів #lviv #шопінгльвів #thrifting #secondhand #вінтаж #ukraine',
+].join('\n');
+writeFileSync(resolve(outDir, 'deals-caption.txt'), caption + '\n');
+
+console.log(`Wrote marketing/deals-this-week.jpg + deals-caption.txt — ${ranked.length} stores ranked for ${dateEN} (Kyiv).`);
