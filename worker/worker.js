@@ -75,7 +75,7 @@ async function ensureSchema(env) {
   // Flash deals (Feature 4). status: 'pending' (awaiting owner approval via the
   // Telegram link) | 'auto' (PIN matched — published immediately) | 'approved'.
   await env.DB.prepare(
-    "CREATE TABLE IF NOT EXISTS flash_deals (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, tier TEXT NOT NULL, text TEXT NOT NULL, alert INTEGER NOT NULL DEFAULT 0, starts_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', created TEXT NOT NULL DEFAULT (datetime('now')))"
+    "CREATE TABLE IF NOT EXISTS flash_deals (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, tier TEXT NOT NULL, text TEXT NOT NULL, alert INTEGER NOT NULL DEFAULT 0, starts_at TEXT NOT NULL, expires_at TEXT NOT NULL, token TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', created TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
   // Optional per-store 4-digit PIN a flash-deal buyer can supply to skip
   // moderator approval. Not settable from any UI yet — set directly in D1;
@@ -100,6 +100,13 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS tg_restock_subs (chat_id TEXT NOT NULL, store_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', next TEXT NOT NULL, cycle INTEGER NOT NULL DEFAULT 7, created TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (chat_id, store_id))"
   ).run();
+  // flash_deals predates its per-deal approval token. Same try/catch idiom as
+  // the promos and instagram_ads ALTERs (SQLite has no ADD COLUMN IF NOT EXISTS).
+  try {
+    await env.DB.prepare(
+      "ALTER TABLE flash_deals ADD COLUMN token TEXT NOT NULL DEFAULT ''"
+    ).run();
+  } catch {}
   // Instagram advertisements awaiting the owner's approval. Nothing here ever
   // publishes on its own: a row reaches 'published' only after a human opens
   // the approve link, which is the whole point of the queue. The image is
@@ -343,13 +350,19 @@ async function dispatchGitHub(env, eventType, payload) {
 async function createAdRow(env, { storeId, text, tier }) {
   await ensureSchema(env);
   const id = 'ad_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
-  const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '').slice(0, 8);
+  const token = newToken();
   const imagePath = `marketing/instagram/ads/${id}.jpg`;
   const captionPath = `marketing/instagram/ads/${id}.txt`;
   await env.DB.prepare(
     'INSERT INTO instagram_ads (id, store_id, ad_text, tier, image_path, caption_path, token, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
   ).bind(id, storeId, text, tier || '', imagePath, captionPath, token, 'rendering').run();
   return { id, token, imagePath, captionPath };
+}
+
+// One generator for every approval token, so a second call site cannot quietly
+// ship a weaker one. 160 bits of crypto randomness, hex, no separators.
+function newToken() {
+  return crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '').slice(0, 8);
 }
 
 // Length-independent comparison. The token is 128+ bits of randomness so
@@ -614,10 +627,13 @@ async function applyFlashDealEvent(env, ev, ctx) {
   const pinRow = pin ? await env.DB.prepare('SELECT pin FROM store_pins WHERE store_id = ?').bind(storeId).first() : null;
   const pinOk = !!(pinRow && pinRow.pin === pin);
 
+  // The approval token is minted with the row, so the only copy that ever
+  // leaves the Worker is the one inside the link sent to the owner.
+  const dealToken = newToken();
   await env.DB.prepare(
-    "INSERT INTO flash_deals (id, store_id, tier, text, alert, starts_at, expires_at, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
+    "INSERT INTO flash_deals (id, store_id, tier, text, alert, starts_at, expires_at, token, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
     'ON CONFLICT(id) DO NOTHING'
-  ).bind(id, storeId, md.tier, text, tier.alert ? 1 : 0, startsAt, expiresAt, pinOk ? 'auto' : 'pending').run();
+  ).bind(id, storeId, md.tier, text, tier.alert ? 1 : 0, startsAt, expiresAt, dealToken, pinOk ? 'auto' : 'pending').run();
 
   const updates = { flashDeal: { text, startsAt, expiresAt, alert: tier.alert } };
   if (pinOk) {
@@ -643,13 +659,16 @@ async function applyFlashDealEvent(env, ev, ctx) {
       .catch((e) => tgNotify(env, ctx, `⚠️ Could not queue the Instagram ad for ${storeId}: ${e.message}`))
   );
 
-  const approveLink = env.ADMIN_KEY
-    ? `${WORKER_URL}/flash-deal/approve?id=${encodeURIComponent(id)}&key=${encodeURIComponent(env.ADMIN_KEY)}`
-    : null;
+  // Per-deal token, not ADMIN_KEY. This link goes through Telegram, where it is
+  // screenshot, forwarded and stored on servers we do not control — so it must
+  // not carry the credential that also opens /orders (buyer email addresses),
+  // /admin/test and /billing-selftest. No secret to configure, either: the
+  // token exists because the row does, so the link is never missing.
+  const approveLink = `${WORKER_URL}/flash-deal/approve?id=${encodeURIComponent(id)}&t=${encodeURIComponent(dealToken)}`;
   tgNotify(env, ctx,
     `⚡ FLASH DEAL PAID — needs your review before it goes live\n\n` +
     `Store: ${storeId}\nTier:  ${tier.label}\nText:  ${text}\nWould run until: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n` +
-    (approveLink ? `Tap to approve & publish:\n${approveLink}\n\n` : `(Set ADMIN_KEY to get a one-tap approve link here.)\n\n`) +
+    `Tap to approve & publish:\n${approveLink}\n\n` +
     `${storeLink(storeId)}`);
 }
 
@@ -1179,15 +1198,28 @@ export default {
       // Owner taps this from the Telegram notification to approve & publish a
       // flash deal that didn't have a matching PIN. GET (not POST) so it works
       // as a plain tappable link — Telegram auto-linkifies a bare URL even in
-      // a plain-text message. Requires ADMIN_KEY, same as /admin/test.
+      // a plain-text message.
+      //
+      // Authorised by the deal's own token, not ADMIN_KEY. It authorises this
+      // one deal and nothing else, and it is burned on approval, so a link that
+      // resurfaces from a forward or a synced chat backup is already inert.
+      //
+      // A wrong token, an unknown id, and an already-decided deal are all 404,
+      // deliberately indistinguishable: anything else lets the endpoint be used
+      // to discover which deal ids exist and what state they are in. The cost is
+      // that a second tap says "not found" rather than "already approved" — the
+      // first tap already reported the outcome, and the map shows it.
+      //
+      // Rows created before the token column exists have token '' and are
+      // refused outright rather than matching an empty ?t=.
       if (url.pathname === '/flash-deal/approve') {
-        if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) return new Response('unauthorized', { status: 401 });
         const id = url.searchParams.get('id') || '';
-        if (!id) return new Response('bad request', { status: 400 });
+        const t = url.searchParams.get('t') || '';
+        if (!id || !t) return new Response('bad request', { status: 400 });
         await ensureSchema(env);
         const row = await env.DB.prepare('SELECT * FROM flash_deals WHERE id = ?').bind(id).first();
-        if (!row) return new Response('not found', { status: 404 });
-        if (row.status !== 'pending') return new Response(`already ${row.status}`, { status: 200 });
+        if (!row || !row.token || !safeEqual(t, row.token)) return new Response('not found', { status: 404 });
+        if (row.status !== 'pending') return new Response('not found', { status: 404 });
         try {
           await dispatchMapPatch(env, row.store_id, {
             flashDeal: { text: row.text, startsAt: row.starts_at, expiresAt: row.expires_at, alert: !!row.alert },
@@ -1195,12 +1227,14 @@ export default {
         } catch (e) {
           return new Response('dispatch failed — check GH_PAT and the map-update workflow logs', { status: 502 });
         }
-        await env.DB.prepare("UPDATE flash_deals SET status = 'approved' WHERE id = ?").bind(id).run();
+        // Token cleared in the same statement that settles the status, so there
+        // is no window in which an approved deal still has a live token.
+        await env.DB.prepare("UPDATE flash_deals SET status = 'approved', token = '' WHERE id = ?").bind(id).run();
         if (row.alert) await broadcastFlashDeal(env, ctx, row.store_id, row.text, row.expires_at);
         return new Response(`✅ Flash deal approved and published for ${row.store_id}.`, { status: 200 });
       }
       // Owner taps the approve link on a queued Instagram advertisement. Same
-      // GET-so-Telegram-linkifies-it shape and same ADMIN_KEY gate as
+      // GET-so-Telegram-linkifies-it shape and same per-item token as
       // /flash-deal/approve above. This is the ONLY route from a paid ad to the
       // public feed — nothing in the queue publishes without a human here.
       if (url.pathname === '/ad/approve' || url.pathname === '/ad/reject') {
@@ -1278,7 +1312,10 @@ export default {
       }
       // Owner taps this from the "1 of 2" restock notification to publish a
       // single report without waiting for a second one. Same GET-so-Telegram-
-      // linkifies-it and same ADMIN_KEY gate as /flash-deal/approve above.
+      // linkifies-it shape, but still on the older ADMIN_KEY-in-the-URL gate
+      // (like /submit/approve) rather than a per-item token — this link travels
+      // through Telegram too, so it deserves the same treatment as the ad and
+      // flash-deal links have had.
       if (url.pathname === '/restock/approve') {
         if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) return new Response('unauthorized', { status: 401 });
         const store = url.searchParams.get('store') || '';
@@ -1717,7 +1754,9 @@ export default {
       return json({ status: 'pending', storeId: row.store_id }, 200, origin);
     }
     // Step 3: a moderator taps ✅/❌ in Telegram — the bot Worker relays it
-    // here (it holds no D1 itself). Same ADMIN_KEY gate as /flash-deal/approve.
+    // here (it holds no D1 itself). ADMIN_KEY-gated like /admin/test, but the
+    // key rides in a POST body between two Workers rather than in a URL a
+    // person taps, which is why it is not on the per-item token pattern.
     if (url.pathname === '/api/edit/resolve') {
       const id = body && body.id;
       const action = body && body.action;

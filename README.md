@@ -324,6 +324,38 @@ An offer line is required because inventing copy for someone else's paid adverti
 
 A missing `BOT_TOKEN`/`OWNER_ID` **fails the run**, deliberately: this workflow's job is to queue *and ask*, and an ad nobody can be asked about would otherwise sit in the queue behind a green tick.
 
+### Featuring a store without claiming it paid
+
+Not every store post is an ad. `Feature a store on Instagram (not an ad)`
+(`.github/workflows/instagram-feature.yml`) renders a card for any store on the
+map and posts it — with **no** sponsorship claim on it.
+
+The differences from the paid template are deliberate:
+
+| | Paid ad | Feature |
+| --- | --- | --- |
+| Trigger | a completed payment | you, typing a store id |
+| Says | `РЕКЛАМА · SPONSORED`, `Розміщення оплачене магазином` | `Не реклама. Магазин не платив за це розміщення.` |
+| Look | dark green ground, acid slab | paper ground, green ink |
+| Copy | the store's own offer line, buyer-supplied | nothing but `stores.json` fields |
+
+Saying nothing would have been the wrong default. Once *some* store posts are
+paid, an unlabelled one is ambiguous rather than neutral — so the feature card
+states the negative outright, and the whole visual identity is inverted so the
+two are told apart at thumbnail size, where nobody reads a disclosure line.
+
+There is **no text input**: the headline is derived from `restockDay` or
+`cycle`, and the rest is name, address, phone and hours. Nothing on the card can
+be bought, and no sentence can be put in a shop's mouth. A store with neither a
+restock day nor a cycle gets no schedule claim at all rather than a
+plausible-sounding guess.
+
+`publish` is **false by default** — the first run renders, commits and sends the
+card to Telegram to look at; run it again with `publish` ticked to post that same
+committed file. There is no approval queue here because there is nothing to
+approve against: a payment triggers an ad, but a person triggers a feature, and
+adding a token endpoint would guard a decision that was never automatic.
+
 ### Why approval links carry a token, not the admin key
 
 The approval link travels through Telegram — where it is screenshot, forwarded, and stored on servers you do not control. It must therefore not carry a credential that also opens `/orders` (which returns buyer email addresses), `/admin/test`, or `/billing-selftest`.
@@ -336,7 +368,15 @@ So each queued ad gets its own random token, stored on its row:
 
 `ADMIN_KEY` is still what authorises *creating* a queue row (`POST /api/ad/register`), but that call is machine-to-machine with the key in a header.
 
-> `/flash-deal/approve` still uses the older `?key=ADMIN_KEY` pattern and has the same weakness. Moving it to per-deal tokens is the same change and has not been made yet.
+`/flash-deal/approve` now works the same way: each paid flash deal gets its own
+token, minted with its row and burned on approval. A wrong token, an unknown
+id and an already-decided deal are all `404` — indistinguishable on purpose,
+since anything else turns the endpoint into a way to discover which deals
+exist. The cost is that a second tap reads "not found" rather than "already
+approved"; the first tap already reported the outcome.
+
+> `/restock/approve` and `/submit/approve` still put `ADMIN_KEY` in a URL that
+> travels through Telegram. They are the same change and have not been made yet.
 
 Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The app tells shoppers "paid placements are always labelled", and an ad that quietly drops the mark to perform better would break that promise.
 
