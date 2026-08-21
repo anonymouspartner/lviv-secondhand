@@ -110,7 +110,7 @@ jobs:
           printf '%s' "$GH_PAT" | npx wrangler secret put GH_PAT
 
       # Crowdsourced moderation (Feature 6) — MUST match the metrics Worker's
-      # ADMIN_KEY exactly (already used there by /admin/test, /flash-deal/approve).
+      # ADMIN_KEY exactly (already used there by /admin/test, /submit/approve).
       - name: Set ADMIN_KEY on the worker
         working-directory: telegram-bot
         env:

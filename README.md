@@ -368,7 +368,15 @@ So each queued ad gets its own random token, stored on its row:
 
 `ADMIN_KEY` is still what authorises *creating* a queue row (`POST /api/ad/register`), but that call is machine-to-machine with the key in a header.
 
-> `/flash-deal/approve` still uses the older `?key=ADMIN_KEY` pattern and has the same weakness. Moving it to per-deal tokens is the same change and has not been made yet.
+`/flash-deal/approve` now works the same way: each paid flash deal gets its own
+token, minted with its row and burned on approval. A wrong token, an unknown
+id and an already-decided deal are all `404` — indistinguishable on purpose,
+since anything else turns the endpoint into a way to discover which deals
+exist. The cost is that a second tap reads "not found" rather than "already
+approved"; the first tap already reported the outcome.
+
+> `/restock/approve` and `/submit/approve` still put `ADMIN_KEY` in a URL that
+> travels through Telegram. They are the same change and have not been made yet.
 
 Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The app tells shoppers "paid placements are always labelled", and an ad that quietly drops the mark to perform better would break that promise.
 
