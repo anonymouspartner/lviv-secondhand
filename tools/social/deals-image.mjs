@@ -7,9 +7,14 @@
 // image_url with a generic container error. The card background is opaque, so
 // there is no alpha to lose.
 //
-// The ranking mirrors telegram-bot/worker.js cheapText(): by-weight stores with
-// a fixed weekly restock day, ranked by how many days they are into their weekly
-// cycle (furthest in = deepest discount today).
+// The ranking mirrors telegram-bot/worker.js cheapText(): stores with a fixed
+// weekly restock day, ranked by how many days they are into their weekly cycle
+// (furthest in = deepest into the discount cycle today).
+//
+// It carries NO prices, so nothing here may claim any. Per-kilogram rates differ
+// per store and move with the exchange rate, so a figure baked into a JPEG is
+// wrong somewhere the day it posts. Days since restock is the true measurement
+// and is the one that actually decides when to go.
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -58,7 +63,7 @@ const sponsoredRow = sponsored ? `<div class="row sponsored">
 const rankedShown = sponsored ? ranked.slice(0, 5) : ranked;
 const rows = sponsoredRow + rankedShown.map(({ s, days }, i) => {
   const label = days === 0 ? 'Restocked today · full selection'
-    : `${days} day${days > 1 ? 's' : ''} into the cycle · cheaper`;
+    : `${days} day${days > 1 ? 's' : ''} into the cycle`;
   return `<div class="row">
     <div class="rank">${i + 1}</div>
     <div class="info"><div class="name">${esc(s.name)}</div>
@@ -96,10 +101,10 @@ const page_html = `<!doctype html><html><head><meta charset="utf-8"><style>
   <div class="card">
     <div class="top"><img src="data:image/png;base64,${iconB64}"/><b>Lviv Second Hand</b>
       <span class="date">${esc(dateEN)}</span></div>
-    <h1>Best by-weight deals right now
-      <span class="ua">Найкращі ціни на вагу зараз</span></h1>
+    <h1>Longest since a restock
+      <span class="ua">Найдовше без завозу</span></h1>
     <div class="list">${rows || "<div class='row'><div class='info'><div class='name'>Open the map for today's stores</div></div></div>"}</div>
-    <div class="foot"><span>Prices drop daily after each restock · Ціни падають щодня</span>
+    <div class="foot"><span>Deepest into the discount cycle today · Найглибше в циклі знижок</span>
       <span><b>www.lvivsecondhand.com</b></span></div>
   </div>
 </body></html>`;
@@ -115,14 +120,14 @@ await browser.close();
 // week's ranking rather than repeating a generic line. The workflow reads this
 // file rather than hardcoding text that would drift from the picture.
 const top = ranked[0];
-const lead = top
-  ? `Цього тижня найдешевше: ${top.s.name}${top.days ? ` — ${top.days} ${top.days === 1 ? 'день' : top.days < 5 ? 'дні' : 'днів'} після завозу.` : '.'}`
-  : 'Ціни на вагу падають щодня після завозу.';
+const lead = top && top.days
+  ? `${top.s.name} — ${top.days} ${top.days === 1 ? 'день' : top.days < 5 ? 'дні' : 'днів'} від останнього завозу. Найдовше серед усіх на карті.`
+  : 'Карта рахує дні від останнього завозу в кожному магазині.';
 const caption = [
-  '🧥 Найкращі ціни на вагу зараз',
+  '🧥 Найдовше без завозу — саме зараз',
   '',
   lead,
-  'У секонд-хенді ціна падає з кожним днем після завозу — карта показує, де кожен магазин у своєму циклі.',
+  'У секонд-хенді ціна падає з кожним днем після завозу. Карта не називає цін — вона рахує дні, а це те, що визначає, коли йти.',
   '',
   'Оновлюється щопонеділка → www.lvivsecondhand.com',
   '',

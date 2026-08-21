@@ -80,7 +80,7 @@ const POSTS = [
     body: `
       <div class="big display">${N}</div>
       <h1 class="display">${plural(N, 'секонд-хенд', 'секонд-хенди', 'секонд-хендів')}<br>Львова<br><em>на одній карті</em></h1>
-      <p class="lede body">Адреси, години роботи, ціни на вагу та поштучно —
+      <p class="lede body">Адреси, години роботи, на вагу чи поштучно —
         і дні, коли завозять новий товар.</p>
       <p class="en body">Every secondhand store in Lviv, on one map.</p>`,
   },
@@ -115,7 +115,7 @@ const POSTS = [
       <h1 class="display">Безкоштовно.<br>Без реєстрації.<br><em>Без стеження.</em></h1>
       <ul class="checks body">
         <li>${N} ${plural(N, 'магазин', 'магазини', 'магазинів')} · ${N_CHAINS} ${plural(N_CHAINS, 'мережа', 'мережі', 'мереж')}</li>
-        <li>${N_KG} ${plural(N_KG, 'магазин', 'магазини', 'магазинів')} на вагу</li>
+        <li>Дні завозу — рахуємо за вас</li>
         <li>Години роботи та дні завезення</li>
         <li>Встановлюється як застосунок</li>
       </ul>

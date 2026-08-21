@@ -45,7 +45,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🤝 **Contribute** additions/edits for review, and **back up** everything on your device
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
 - 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): a tap-through menu plus `/today`, `/day` (any weekday), `/rare` and `/cheap`
-- 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): the week's best by-weight prices, posted automatically every Monday
+- 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): which stores have gone longest since a restock, posted automatically every Monday
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
 - ⚡ **Flash deals** — a store can run a short paid sale (3h / 24h) with a live countdown banner and toast; follow a store on Telegram to hear the moment one goes live
 - ✏️ **Suggest a correction** — send a fix via Telegram; a moderator reviews it, or a trusted contributor's own edit publishes instantly
@@ -293,7 +293,7 @@ Images must be **JPEG** — the API rejects PNG with a generic container error t
 | `/today` | Stores getting new stock today |
 | `/day` | Pick any weekday and see what restocks then |
 | `/rare` | Stores that restock rarely — worth a special trip |
-| `/cheap` | Best by-weight prices right now |
+| `/cheap` | Which stores have gone longest since a restock |
 | `/submit` | Submit your own store (for shop owners) |
 | `/materials` | Printable flyers, posters and QR stickers |
 | `/feedback` | Send the maintainer a note about the bot or the map |
@@ -415,7 +415,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - 🌐 Перемикач мови **EN / UA**
 - ✅ Позначення магазинів як **відвіданих**
 - 🔔 **Сповіщення про завезення** — стежте за магазином і дізнавайтеся про завіз того ж ранку. Через push там, де браузер це вміє; де не вміє (iOS без встановленого застосунку) та сама кнопка пропонує Telegram, тож сповіщення доступні на будь-якому пристрої
-- 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): найкращі ціни на вагу тижня, автоматично щопонеділка
+- 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): хто найдовше без завозу, автоматично щопонеділка
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
@@ -600,7 +600,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | `/today` | Магазини із завезенням сьогодні |
 | `/day` | Обрати будь-який день тижня і побачити, що завозять тоді |
 | `/rare` | Магазини, які оновлюються рідко — варті окремої поїздки |
-| `/cheap` | Найкращі ціни на вагу зараз |
+| `/cheap` | Хто найдовше без завозу |
 | `/submit` | Додати свій магазин (для власників) |
 | `/materials` | Матеріали для друку: флаєри, постери, QR-наліпки |
 | `/feedback` | Надіслати власнику відгук про бота чи карту |
