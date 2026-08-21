@@ -12,7 +12,8 @@
     "sellsheet": "node sell-sheet.mjs",
     "flyer": "node flyer.mjs",
     "stickers": "node qr-stickers.mjs",
-    "promo": "node promo.mjs"
+    "promo": "node promo.mjs",
+    "avatar": "node avatar.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",
