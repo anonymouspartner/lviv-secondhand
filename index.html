@@ -1132,7 +1132,7 @@ const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','
 const DAY_NAMES_UA = ['Неділя','Понеділок','Вівторок','Середа','Четвер','П\'ятниця','Субота'];
 function dayName(d){ const i = DAYS.indexOf(d); return (lang==='ua' ? DAY_NAMES_UA : DAY_NAMES)[i] || d; }
 // DAYS key ('mon'..'sun') for a "YYYY-MM-DD" string. JS getDay() is 0=Sun..6=Sat.
-function weekdayOf(str){ const d = parseLocalDate(str); return d ? DAYS[(d.getDay()+6)%7] : ''; }
+function weekdayOf(str){ const d = parseLocalDate(str); return d ? DAYS[d.getDay()] : ''; }
 // First restock on/after today, given a last-restock date and cycle length (days).
 // (Kept distinct from the storeId-keyed nextRestockDate() below — they used to
 // share a name, which meant this one silently never ran: the later function
@@ -1142,7 +1142,11 @@ function nextRestockFromAnchor(str, cycle){
   const d = parseLocalDate(str); if(!d || !cycle) return '';
   const today = new Date(); today.setHours(0,0,0,0); d.setHours(0,0,0,0);
   while(d < today){ d.setDate(d.getDate() + cycle); }
-  return d.toISOString().slice(0,10);
+  // Local fields, not toISOString(): the date was normalised to LOCAL midnight,
+  // and serialising that as UTC rolls it back a day everywhere east of
+  // Greenwich — so this returned yesterday for every user in Kyiv while being
+  // correct in CI, which runs in UTC.
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 let currentFilter = 'all';
 let currentTab = 'map';   // v3: the map is the app's front door

@@ -113,7 +113,7 @@ async function ensureSchema(env) {
   // rendered by a GitHub Action (Workers cannot rasterize) at a path derived
   // from the id, so no callback is needed to learn where it landed.
   await env.DB.prepare(
-    "CREATE TABLE IF NOT EXISTS instagram_ads (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, ad_text TEXT NOT NULL, tier TEXT NOT NULL DEFAULT '', image_path TEXT NOT NULL, caption_path TEXT NOT NULL, token TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'rendering', created TEXT NOT NULL DEFAULT (datetime('now')), decided TEXT)"
+    "CREATE TABLE IF NOT EXISTS instagram_ads (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, ad_text TEXT NOT NULL, tier TEXT NOT NULL DEFAULT '', image_path TEXT NOT NULL, caption_path TEXT NOT NULL, token TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', created TEXT NOT NULL DEFAULT (datetime('now')), decided TEXT)"
   ).run();
   // Older rows predate the per-ad token. Same try/catch shape as the promos
   // ALTER above (SQLite has no ADD COLUMN IF NOT EXISTS), deliberately, rather
@@ -355,7 +355,7 @@ async function createAdRow(env, { storeId, text, tier }) {
   const captionPath = `marketing/instagram/ads/${id}.txt`;
   await env.DB.prepare(
     'INSERT INTO instagram_ads (id, store_id, ad_text, tier, image_path, caption_path, token, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, storeId, text, tier || '', imagePath, captionPath, token, 'rendering').run();
+  ).bind(id, storeId, text, tier || '', imagePath, captionPath, token, 'pending').run();
   return { id, token, imagePath, captionPath };
 }
 
@@ -650,7 +650,7 @@ async function applyFlashDealEvent(env, ev, ctx) {
   }
 
   // A paid flash deal also queues an Instagram advertisement. Queued, not
-  // posted: it lands in instagram_ads as 'rendering' and reaches the feed only
+  // posted: it lands in instagram_ads as 'pending' and reaches the feed only
   // if the owner approves it, which is deliberately a separate decision from
   // approving the deal for the map — the same words can be fine on a store
   // page and wrong on a public feed.
@@ -1249,7 +1249,17 @@ export default {
         // Idempotent: tapping an old link twice, or after deciding, says so
         // rather than double-posting. Telegram link previews can and do fetch
         // these URLs, so a second GET must never be a second publish.
-        if (row.status !== 'pending') return new Response(`already ${row.status}`, { status: 200 });
+        //
+        // Tested for DECIDED, not for 'pending'. The previous form demanded
+        // 'pending' while createAdRow wrote 'rendering' and nothing ever
+        // transitioned between them, so every approve tap on every real ad
+        // returned 200 "already rendering" and published nothing — the whole
+        // paid-ad queue had no exit. Checking the decided states instead also
+        // means rows created before this fix stay approvable, with no data
+        // migration on a path that runs per request.
+        if (row.status === 'published' || row.status === 'rejected') {
+          return new Response(`already ${row.status}`, { status: 200 });
+        }
 
         // Single use: the token is cleared on decision, so a link that leaks
         // later — from a forward, a screenshot, a synced chat backup — cannot
@@ -1566,6 +1576,16 @@ export default {
       return json({ ok: true, ...made }, 200, origin);
     }
     if (url.pathname === '/api/sub') {
+      // Bot-only: the Telegram Worker is the sole caller, over a service
+      // binding. Gated on ADMIN_KEY because these write and delete another
+      // person's subscriptions from a chat id supplied in the body, and
+      // Telegram chat ids are enumerable integers — ungated, /api/unsub-all
+      // let anyone unsubscribe anyone from everything, and its siblings let
+      // anyone subscribe an arbitrary chat. Same header gate as
+      // /api/ad/register; the browser never calls any of the three.
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
       const storeId = body && body.storeId;
       const chatId = body && body.chatId;
       if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)
@@ -1581,6 +1601,16 @@ export default {
     // data and posts them here, because this Worker has the D1 binding and the
     // bot has the store list — neither has both.
     if (url.pathname === '/api/rsub') {
+      // Bot-only: the Telegram Worker is the sole caller, over a service
+      // binding. Gated on ADMIN_KEY because these write and delete another
+      // person's subscriptions from a chat id supplied in the body, and
+      // Telegram chat ids are enumerable integers — ungated, /api/unsub-all
+      // let anyone unsubscribe anyone from everything, and its siblings let
+      // anyone subscribe an arbitrary chat. Same header gate as
+      // /api/ad/register; the browser never calls any of the three.
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
       const storeId = body && body.storeId;
       const chatId = body && body.chatId;
       if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)
@@ -1604,6 +1634,16 @@ export default {
       return new Response(null, { status: 204, headers: cors(origin) });
     }
     if (url.pathname === '/api/unsub-all') {
+      // Bot-only: the Telegram Worker is the sole caller, over a service
+      // binding. Gated on ADMIN_KEY because these write and delete another
+      // person's subscriptions from a chat id supplied in the body, and
+      // Telegram chat ids are enumerable integers — ungated, /api/unsub-all
+      // let anyone unsubscribe anyone from everything, and its siblings let
+      // anyone subscribe an arbitrary chat. Same header gate as
+      // /api/ad/register; the browser never calls any of the three.
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
       const chatId = body && body.chatId;
       if (typeof chatId !== 'string' && typeof chatId !== 'number') {
         return new Response('bad request', { status: 400, headers: cors(origin) });

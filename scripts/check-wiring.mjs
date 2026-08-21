@@ -23,6 +23,22 @@
 //      D1-backed route at once. The statement was valid JavaScript, so
 //      `node --check` passed it; only executing the chain finds it.
 //
+//   5. The app's date helpers are right OUTSIDE UTC.
+//      nextRestockFromAnchor() normalised to local midnight and serialised
+//      with toISOString(), so it returned yesterday for every user in Kyiv
+//      while being correct in CI. A check that only ever runs in UTC cannot
+//      see that class of bug, so this one sets TZ deliberately.
+//
+//   6. A queued Instagram ad can actually be approved.
+//      createAdRow wrote status 'rendering' while /ad/approve demanded
+//      'pending' and nothing transitioned between them, so every approve tap
+//      published nothing. Both halves were valid code; only executing the
+//      route together with the row it creates reveals it.
+//
+//   7. The bot ranks by day-in-cycle, not by elapsed days.
+//      cheapText() reported days since the restock anchor without reducing
+//      modulo the cycle, inverting its own "longest since a restock" list.
+//
 // Exit code 1 on any violation.
 
 import fs from 'node:fs';
@@ -127,15 +143,23 @@ const errors = [];
   };
   try {
     const worker_mod = await import('../worker/worker.js');
+    // /api/sub is bot-only and ADMIN_KEY-gated, so the probe has to
+    // authenticate — otherwise it 401s before ensureSchema is ever reached and
+    // this check reports "0 of 19 statements", blaming the schema for an
+    // authorization change. That is exactly what happened when the gate landed.
+    const ADMIN_KEY = 'check-wiring-probe-key';
     const res = await worker_mod.default.fetch(
       new Request('https://x/api/sub', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY },
         body: JSON.stringify({ storeId: 's10', chatId: '1' }),
       }),
-      { DB },
+      { DB, ADMIN_KEY },
       { waitUntil() {} },
     );
+    if (res.status === 401) {
+      errors.push('ensureSchema probe was rejected before reaching the schema — /api/sub\'s gate changed and this check needs its credentials updated.');
+    }
     if (res.status >= 500) {
       errors.push(`ensureSchema left the Worker answering HTTP ${res.status} on a D1 route.`);
     }
@@ -150,6 +174,137 @@ const errors = [];
     console.log(`ensureSchema: ${schemaRan.length}/${wanted} schema statements executed, ALTER rejection absorbed`);
   } catch (e) {
     errors.push(`ensureSchema threw: ${(e && e.message) || e}`);
+  }
+}
+
+// ── 5 · the app's date helpers, executed outside UTC ─────────────────────────
+{
+  // Pulled out of index.html's inline <script> the same way check-inline-js.mjs
+  // extracts it, then RUN — not syntax-checked. The bug this exists for was a
+  // correct-in-UTC, wrong-in-Kyiv date rollover, invisible to any check that
+  // does not deliberately leave UTC.
+  const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const html = fs.readFileSync('index.html', 'utf8');
+  const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+  if (blocks.length !== 1) {
+    errors.push(`index.html: expected one inline <script>, found ${blocks.length}.`);
+  } else {
+    const code = blocks[0][1];
+    const grab = (n) => {
+      const i = code.indexOf(`function ${n}(`);
+      if (i < 0) return null;
+      const j = code.indexOf('\nfunction ', i + 1);
+      return code.slice(i, j < 0 ? undefined : j);
+    };
+    const names = ['parseLocalDate', 'weekdayOf', 'nextRestockFromAnchor'];
+    const parts = names.map(grab);
+    if (parts.some((x) => x === null)) {
+      errors.push(`index.html: date helpers renamed or removed (${names.join(', ')}) — this check needs updating.`);
+    } else {
+      const api = {};
+      new Function('DAYS', 'api', `${parts.join('\n')}\napi.weekdayOf = weekdayOf; api.nextRestockFromAnchor = nextRestockFromAnchor;`)(DAYS, api);
+
+      // Node re-reads process.env.TZ on the next Date operation, so this is
+      // enough to leave UTC without spawning a second process.
+      const prevTZ = process.env.TZ;
+      process.env.TZ = 'Europe/Kyiv';
+      try {
+        // A weekday name must match what the calendar says, in any timezone.
+        for (const [iso, want] of [['2026-08-21', 'fri'], ['2026-08-23', 'sun'], ['2026-08-17', 'mon']]) {
+          const got = api.weekdayOf(iso);
+          if (got !== want) errors.push(`weekdayOf("${iso}") = "${got}", expected "${want}".`);
+        }
+        // An anchor exactly one cycle back must land on today, not yesterday.
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const anchor = new Date(today); anchor.setDate(anchor.getDate() - 7);
+        const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const got = api.nextRestockFromAnchor(isoLocal(anchor), 7);
+        if (got !== isoLocal(today)) {
+          errors.push(`nextRestockFromAnchor() returned ${got}, expected ${isoLocal(today)} (TZ=Europe/Kyiv) — a local/UTC mismatch.`);
+        }
+      } finally {
+        if (prevTZ === undefined) delete process.env.TZ; else process.env.TZ = prevTZ;
+      }
+      console.log('date helpers: correct under TZ=Europe/Kyiv, not just UTC');
+    }
+  }
+}
+
+// ── 6 · a queued Instagram ad can be approved ────────────────────────────────
+{
+  // Drives the real route against the status createAdRow really writes. The two
+  // were inconsistent for the whole life of the feature, and nothing that reads
+  // either file in isolation can tell.
+  const TOKEN = 'c'.repeat(40);
+  let row, published;
+  const envFor = (status) => {
+    published = 0;
+    row = { id: 'ad_x', image_path: 'marketing/instagram/ads/ad_x.jpg',
+            caption_path: 'marketing/instagram/ads/ad_x.txt', token: TOKEN, status };
+    return { ADMIN_KEY: 'k', GH_PAT: 'x', DB: { prepare(sql) { return {
+      _a: [],
+      bind(...a) { this._a = a; return this; },
+      async run() {
+        if (/^\s*ALTER TABLE/.test(sql)) throw new Error('duplicate column');
+        if (/UPDATE instagram_ads/.test(sql)) { row.status = sql.match(/status = '(\w+)'/)[1]; row.token = ''; }
+        return { success: true };
+      },
+      async first() { return /FROM instagram_ads WHERE id/.test(sql) ? (row.id === this._a[0] ? row : null) : null; },
+      async all() { return { results: [] }; },
+    }; } } };
+  };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { published++; return new Response(null, { status: 204 }); };
+  try {
+    const mod = await import('../worker/worker.js');
+    const tap = async (env) => mod.default.fetch(
+      new Request(`https://x/ad/approve?id=ad_x&t=${TOKEN}`), env, { waitUntil() {} });
+
+    // The status a real queued ad actually carries.
+    const statusInCode = /captionPath, token, '(\w+)'/.exec(fs.readFileSync('worker/worker.js', 'utf8'));
+    const created = statusInCode ? statusInCode[1] : '(not found)';
+    const env = envFor(created);
+    const res = await tap(env);
+    if (published === 0) {
+      errors.push(`/ad/approve does not publish an ad createAdRow created (status '${created}') — HTTP ${res.status} "${(await res.text()).slice(0, 40)}". The queue has no exit.`);
+    }
+    // A second tap of a spent link must not publish again.
+    const before = published;
+    await tap(env);
+    if (published > before) errors.push('/ad/approve published twice for one ad — the spent link is not inert.');
+
+    // An already-decided ad must be refused.
+    const decided = envFor('published');
+    await tap(decided);
+    if (published > before) errors.push('/ad/approve acted on an already-published ad.');
+
+    console.log(`ad approval: a '${created}' ad publishes once, re-taps and decided ads refused`);
+  } catch (e) {
+    errors.push(`ad approval check could not run: ${(e && e.message) || e}`);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+// ── 7 · the bot ranks by day-in-cycle, not elapsed days ──────────────────────
+{
+  // Static, because cheapText() reaches for module-level STORES and Telegram
+  // helpers a stub cannot supply cheaply. The invariant is narrow enough to
+  // state as a shape: the restockDate branch must reduce modulo the cycle.
+  // Sliced rather than matched with a regex — the branch spans comment lines,
+  // and a pattern loose enough to survive editing them is loose enough to match
+  // the wrong block.
+  const i = bot.indexOf('if (s.restockDate) {');
+  if (i < 0) {
+    errors.push("telegram-bot/worker.js: cheapText's restockDate branch not found — this check needs updating.");
+  } else {
+    const branch = bot.slice(i, i + 900);
+    const modulo = /%\s*cyc\b/.test(branch) || /%\s*cycle\b/.test(branch);
+    if (!modulo) {
+      errors.push('telegram-bot/worker.js: cheapText reports elapsed days since the restock anchor without reducing modulo the cycle, which inverts its own "longest since a restock" ranking.');
+    } else {
+      console.log('bot ranking: day-in-cycle, reduced modulo the cycle');
+    }
   }
 }
 

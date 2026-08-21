@@ -9,7 +9,7 @@
 //
 // The ranking mirrors telegram-bot/worker.js cheapText(): stores with a fixed
 // weekly restock day, ranked by how many days they are into their weekly cycle
-// (furthest in = deepest into the discount cycle today).
+// (furthest in = longest since that store last restocked).
 //
 // It carries NO prices, so nothing here may claim any. Per-kilogram rates differ
 // per store and move with the exchange rate, so a figure baked into a JPEG is
@@ -47,7 +47,8 @@ const dateEN = new Intl.DateTimeFormat('en-GB',
   { timeZone: 'Europe/Kyiv', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
 
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-// Heat: more days into the cycle → hotter (cheaper). 0 days = fresh (green).
+// Heat: more days since the last restock → hotter. 0 days = fresh (green).
+// Days, not prices: the map holds no per-kilogram cost and cannot claim one.
 const heat = (d) => d === 0 ? '#1b7a45' : ['#c98a00', '#d97706', '#e0590a', '#dc4a1e', '#dc2626', '#c81e1e'][Math.min(d, 6) - 1] || '#dc2626';
 // Paid sponsored slot (clearly labelled). Rotates daily if several are featured.
 const activeP = (s) => (s.promo && (!s.promo.until || new Date(s.promo.until + 'T23:59:59') >= new Date())) ? s.promo : null;
@@ -104,7 +105,7 @@ const page_html = `<!doctype html><html><head><meta charset="utf-8"><style>
     <h1>Longest since a restock
       <span class="ua">Найдовше без завозу</span></h1>
     <div class="list">${rows || "<div class='row'><div class='info'><div class='name'>Open the map for today's stores</div></div></div>"}</div>
-    <div class="foot"><span>Deepest into the discount cycle today · Найглибше в циклі знижок</span>
+    <div class="foot"><span>Найдовше без завозу · Longest since a restock</span>
       <span><b>www.lvivsecondhand.com</b></span></div>
   </div>
 </body></html>`;

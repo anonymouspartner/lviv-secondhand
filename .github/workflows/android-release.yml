@@ -89,9 +89,29 @@ jobs:
         run: npx cap add android
 
       - name: Set versionName / versionCode
+        env:
+          # Via env, never interpolated into the script body. A dispatch input
+          # written as ${{ }} inside `run:` is pasted into the shell before bash
+          # parses it, so a value carrying a quote or a semicolon runs as its own
+          # command — in a job that holds the signing keystore and both of its
+          # passwords. Only collaborators can dispatch this, but every other
+          # workflow here already routes inputs through env, and a benign value
+          # broke it anyway: a version_name containing "/" ends the sed
+          # expression and fails with "unknown option to `s'".
+          VERSION_NAME: ${{ github.event.inputs.version_name }}
+          VERSION_CODE: ${{ github.event.inputs.version_code }}
         run: |
-          sed -i "s/versionCode 1/versionCode ${{ github.event.inputs.version_code }}/" android/app/build.gradle
-          sed -i "s/versionName \"1.0\"/versionName \"${{ github.event.inputs.version_name }}\"/" android/app/build.gradle
+          # Shape-checked before use: a versionCode must be an integer and a
+          # versionName must look like one, which also keeps sed's delimiter and
+          # every shell metacharacter out of the substitution.
+          case "$VERSION_CODE" in
+            ''|*[!0-9]*) echo "::error::version_code must be a positive integer, got '$VERSION_CODE'."; exit 1 ;;
+          esac
+          case "$VERSION_NAME" in
+            ''|*[!0-9.]*) echo "::error::version_name must be digits and dots, e.g. 1.0.0 — got '$VERSION_NAME'."; exit 1 ;;
+          esac
+          sed -i "s/versionCode 1/versionCode ${VERSION_CODE}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"${VERSION_NAME}\"/" android/app/build.gradle
           grep -nE "versionCode|versionName" android/app/build.gradle
 
       - name: Sync web assets & config

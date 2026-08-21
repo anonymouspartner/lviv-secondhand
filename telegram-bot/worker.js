@@ -106,6 +106,17 @@ function metricsFetch(env, path, init) {
 //
 // Returning an explicit ok flag forces the caller to decide what to say when
 // the call did not happen. A 204 with no body is a success with data: null.
+// Headers for the metrics Worker's bot-only routes (/api/sub, /api/rsub,
+// /api/unsub-all). They are ADMIN_KEY-gated there because they act on a chat id
+// taken from the body, and this Worker is their only caller. Returns the plain
+// content-type alone when no key is configured, so the failure is a clean 401
+// from the Worker rather than a confusing half-authenticated request.
+function adminJsonHeaders(env) {
+  const h = { 'Content-Type': 'application/json' };
+  if (env.ADMIN_KEY) h['X-Admin-Key'] = env.ADMIN_KEY;
+  return h;
+}
+
 async function metricsCall(env, path, init) {
   try {
     const res = await metricsFetch(env, path, init);
@@ -122,6 +133,18 @@ async function metricsCall(env, path, init) {
 // this apart from a refusal and knows retrying is worth it.
 const METRICS_DOWN = '⚠️ Сервіс тимчасово недоступний — спробуйте ще раз за хвилину.\n'
   + '⚠️ The service is temporarily unavailable — please try again in a minute.';
+// Ukrainian counts take three forms, and 11–14 behave like "many" despite
+// ending 1–4. Same helper tools/social/stories.mjs and promo.mjs already carry;
+// the bot had none, which is why its day counts were written around rather than
+// declined.
+function plural(n, one, few, many) {
+  const d = n % 10, h = n % 100;
+  if (h >= 11 && h <= 14) return many;
+  if (d === 1) return one;
+  if (d >= 2 && d <= 4) return few;
+  return many;
+}
+
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_NAMES = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 // Same Ukrainian labels as scripts/build-store-pages.mjs's DAYS list — kept in
@@ -308,8 +331,16 @@ function cheapText() {
         return { s, days: Math.round((Date.parse(today) - Date.parse(last)) / 86400000) };
       }
       if (s.restockDate) {
-        const days = Math.round((Date.parse(today) - Date.parse(s.restockDate)) / 86400000);
-        return days >= 0 ? { s, days } : null;
+        // Days INTO THE CURRENT CYCLE, not days since the anchor. Without the
+        // modulo this reported elapsed time since a fixed date, so a store that
+        // restocked today ranked as the longest without a restock: c72 and c84
+        // (cycle 7, anchor 2026-08-07) read "14 days" on 2026-08-21 and headed
+        // the list, while the app showed them at day 0 of 7. 19 of 25 dated
+        // stores were overstated. getDayInfo() in index.html does this right.
+        const raw = Math.round((Date.parse(today) - Date.parse(s.restockDate)) / 86400000);
+        if (raw < 0) return null;
+        const cyc = (s.cycle >= 1 && s.cycle <= 90) ? s.cycle : 7;
+        return { s, days: raw % cyc };
       }
       if (s.restockDay) return { s, days: (idx - DAYS.indexOf(s.restockDay) + 7) % 7 };
       return null;
@@ -320,20 +351,22 @@ function cheapText() {
   if (!scored.length) return cheapEmpty();
   const blocks = scored
     .map(({ s, days }) => {
-      const label = days === 0 ? '🆕 Restocked today — full selection' : `🔥 ${days} day${days > 1 ? 's' : ''} since restock — deeper discounts`;
+      const label = days === 0
+        ? '🆕 Завіз сьогодні · Restocked today'
+        : `🔥 ${days} ${plural(days, 'день', 'дні', 'днів')} від завозу · ${days} day${days > 1 ? 's' : ''} since restock`;
       return storeBlock(s, label);
     })
     .join('\n\n');
   return featuredBlock() + [
     '💸 <b>Найдовше без завозу · Longest since a restock</b>',
-    'By-weight prices drop each day after a restock, so the stores furthest into their weekly cycle have the deepest discounts today:',
+    'Скільки днів минуло від останнього завозу. Карта не називає цін — вона рахує дні · Days since each store last restocked. The map counts days, not prices:',
     '',
     blocks,
   ].join('\n');
 }
 
 function cheapEmpty() {
-  return `No by-weight stores are tracked yet. Open the full map: ${APP_URL}`;
+  return `Поки немає даних про завози. · No restock dates tracked yet. Open the full map: ${APP_URL}`;
 }
 
 // Stores with a fixed weekly restock day — any day, not just today. This is a
@@ -412,7 +445,7 @@ function submitText() {
 // as bare /feedback already does.
 // ─────────────────────────────────────────────────────────────────────────────
 const MENU_DAY = '📅 За днем тижня';
-const MENU_CHEAP = '💰 Найдешевше зараз';
+const MENU_CHEAP = '🕒 Найдовше без завозу';
 const MENU_RARE = '🐢 Рідко оновлюють';
 const MENU_ADD = '➕ Додати магазин';
 const MENU_FEEDBACK = '💬 Залишити відгук';
@@ -676,7 +709,7 @@ async function handleFlashSubStart(env, ctx) {
   if (!/^[a-z0-9]{1,12}$/i.test(storeId)) return false;
   const store = STORES.find((s) => s.id === storeId);
   const saved = await metricsCall(env, '/api/sub', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: adminJsonHeaders(env),
     body: JSON.stringify({ storeId, chatId }),
   });
   if (!saved.ok) {
@@ -766,7 +799,7 @@ async function handleRestockSubStart(env, ctx) {
   }
 
   const saved = await metricsCall(env, '/api/rsub', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: adminJsonHeaders(env),
     body: JSON.stringify({ storeId, chatId, name, next: pred.next, cycle: pred.cycle }),
   });
   if (!saved.ok) {
@@ -789,7 +822,7 @@ async function handleStopCommand(env, ctx) {
   const { chatId, text } = ctx;
   if (!/^\/stop\b/i.test(String(text || '').trim())) return false;
   const cleared = await metricsCall(env, '/api/unsub-all', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: adminJsonHeaders(env),
     body: JSON.stringify({ chatId }),
   });
   if (!cleared.ok) {
