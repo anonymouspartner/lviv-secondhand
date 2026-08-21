@@ -69,7 +69,7 @@ permissions:
 
 env:
   SITE: https://www.lvivsecondhand.com
-  GRAPH: https://graph.instagram.com/v25.0
+  GRAPH: https://graph.instagram.com/v26.0
 
 jobs:
   post:

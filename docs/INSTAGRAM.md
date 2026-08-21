@@ -98,7 +98,7 @@ path it does *not* come from a Facebook Page lookup. In the
 app and an **Instagram** token, then:
 
 ```
-GET https://graph.instagram.com/v25.0/me?fields=user_id,username
+GET https://graph.instagram.com/v26.0/me?fields=user_id,username
 ```
 
 **`IG_ACCESS_TOKEN`** — an Instagram User access token. The Explorer issues a
