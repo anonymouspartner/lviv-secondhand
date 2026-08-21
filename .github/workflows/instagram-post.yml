@@ -10,6 +10,11 @@ name: Post to Instagram
 # live at https://www.lvivsecondhand.com/... the moment it is committed. So the
 # workflow just points Meta at a URL that already exists.
 #
+# CHECKING CONFIG WITHOUT POSTING
+# Tick `dry_run` to run the three pre-flights and stop. Use it after changing a
+# secret or refreshing the token — verifying those by posting costs a real post
+# on a real feed, which is a bad way to test a config change.
+#
 # SAFE UNTIL CONFIGURED
 # workflow_dispatch only — there is no schedule, so this never fires on its own.
 # It also exits cleanly (not red) when the secrets are missing, so an
@@ -60,6 +65,11 @@ on:
           Безкоштовно, без реєстрації → www.lvivsecondhand.com
 
           #секондхенд #секондхендльвів #львів #lviv #сектор #шопінгльвів #thrifting #secondhand #вінтаж #ukraine
+      dry_run:
+        description: "Check config only — run the pre-flights and stop before posting"
+        type: boolean
+        required: false
+        default: false
   # Uncomment once a manual run has succeeded and you want it automatic.
   # schedule:
   #   - cron: "0 9 * * 1"   # Mondays 09:00 UTC (~12:00 Europe/Kyiv)
@@ -163,7 +173,7 @@ jobs:
 
       # Step 1 of 2: create the media container. Meta downloads the image here.
       - name: Create media container
-        if: steps.guard.outputs.ready == 'true'
+        if: steps.guard.outputs.ready == 'true' && github.event.inputs.dry_run != 'true'
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
@@ -186,7 +196,7 @@ jobs:
       # Images are usually ready immediately, but publishing a container that is
       # still processing fails — so wait for FINISHED rather than assuming.
       - name: Wait for the container to finish processing
-        if: steps.guard.outputs.ready == 'true'
+        if: steps.guard.outputs.ready == 'true' && github.event.inputs.dry_run != 'true'
         env:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
         run: |
@@ -206,9 +216,22 @@ jobs:
           echo "::error::Container never reached FINISHED after ~2 minutes."
           exit 1
 
+      # Without this a dry run ends green with no output, which reads exactly
+      # like a successful post — the one confusion this feature must not create.
+      - name: Dry run — report and stop
+        if: steps.guard.outputs.ready == 'true' && github.event.inputs.dry_run == 'true'
+        run: |
+          {
+            echo "### Dry run — nothing was posted"
+            echo ""
+            echo "Pre-flights passed: the image is reachable and the token is valid."
+            echo "Re-run with **dry_run unchecked** to publish."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Dry run complete — config is good, nothing posted."
+
       # Step 2 of 2: publish. This is the irreversible one — it goes live.
       - name: Publish
-        if: steps.guard.outputs.ready == 'true'
+        if: steps.guard.outputs.ready == 'true' && github.event.inputs.dry_run != 'true'
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
