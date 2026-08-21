@@ -282,7 +282,7 @@ A store buying a flash deal now also queues an **Instagram advertisement**. It i
 
 1. Stripe webhook → `queueInstagramAd()` writes a row to `instagram_ads` as `rendering` and fires a `repository_dispatch`.
 2. **`instagram-ad.yml`** renders the ad, writes its caption, commits both, waits for Pages to serve the image, and sends it to you on Telegram as a photo with ✅ / ❌ links. **It publishes nothing.**
-3. Tapping ✅ hits the Worker's `/ad/approve` (same `ADMIN_KEY` link pattern as `/flash-deal/approve`), which fires a second dispatch.
+3. Tapping ✅ hits the Worker's `/ad/approve?id=…&t=…`, authorised by a **per-ad token**, which fires a second dispatch.
 4. **`instagram-ad-publish.yml`** reads the committed caption back off disk and hands it to `instagram-post.yml`.
 
 Reading the caption back from the committed file is what makes "you approve exactly what publishes" true rather than merely intended — the file quoted in your Telegram message is the same file the publisher reads.
@@ -313,11 +313,25 @@ An offer line is required because inventing copy for someone else's paid adverti
 
 | Secret | Value | Without it |
 | --- | --- | --- |
-| `WORKER_ADMIN_KEY` | same string as the Worker's `ADMIN_KEY` | the approve link returns `unauthorized` |
+| `WORKER_ADMIN_KEY` | same string as the Worker's `ADMIN_KEY` | a hand-run test cannot register its ad (sent as a header, never in a URL) |
 | `BOT_TOKEN` | the Telegram bot token (BotFather → *My bots* → *API Token*) | no approval request is sent, and the token watchdog cannot warn you either |
 | `OWNER_ID` | your Telegram chat id — `1212541015`, already a plain var in both `wrangler.toml` files | same |
 
 A missing `BOT_TOKEN`/`OWNER_ID` **fails the run**, deliberately: this workflow's job is to queue *and ask*, and an ad nobody can be asked about would otherwise sit in the queue behind a green tick.
+
+### Why approval links carry a token, not the admin key
+
+The approval link travels through Telegram — where it is screenshot, forwarded, and stored on servers you do not control. It must therefore not carry a credential that also opens `/orders` (which returns buyer email addresses), `/admin/test`, or `/billing-selftest`.
+
+So each queued ad gets its own random token, stored on its row:
+
+- It authorises **one ad** and nothing else.
+- It is **burned on decision** — cleared from the row — so a link that surfaces later from a forward or a chat backup is inert even before the status check would catch it.
+- A wrong token and a nonexistent ad both return `404`, so the endpoint cannot be used to discover which ad ids exist.
+
+`ADMIN_KEY` is still what authorises *creating* a queue row (`POST /api/ad/register`), but that call is machine-to-machine with the key in a header.
+
+> `/flash-deal/approve` still uses the older `?key=ADMIN_KEY` pattern and has the same weakness. Moving it to per-deal tokens is the same change and has not been made yet.
 
 Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The app tells shoppers "paid placements are always labelled", and an ad that quietly drops the mark to perform better would break that promise.
 

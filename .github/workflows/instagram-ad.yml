@@ -52,27 +52,50 @@ jobs:
           D_STORE: ${{ github.event.client_payload.store_id }}
           D_TEXT:  ${{ github.event.client_payload.text }}
           D_TIER:  ${{ github.event.client_payload.tier }}
+          D_TOKEN: ${{ github.event.client_payload.token }}
+          ADMIN_KEY: ${{ secrets.WORKER_ADMIN_KEY }}
           W_STORE: ${{ inputs.store_id }}
           W_TEXT:  ${{ inputs.text }}
           W_TIER:  ${{ inputs.tier }}
         run: |
           if [ -n "$D_ID" ]; then
-            AD_ID="$D_ID"; STORE="$D_STORE"; TEXT="$D_TEXT"; TIER="$D_TIER"
+            AD_ID="$D_ID"; STORE="$D_STORE"; TEXT="$D_TEXT"; TIER="$D_TIER"; TOKEN="$D_TOKEN"
+            IMG="marketing/instagram/ads/$AD_ID.jpg"; CAP="marketing/instagram/ads/$AD_ID.txt"
           else
-            # Hand-run ids are prefixed so a test never collides with a real
-            # queued row, and so they are obvious in the ads directory.
-            AD_ID="ad_manual_$(date +%s)"; STORE="$W_STORE"; TEXT="$W_TEXT"; TIER="$W_TIER"
+            STORE="$W_STORE"; TEXT="$W_TEXT"; TIER="$W_TIER"
+            if [ -z "$STORE" ] || [ -z "$TEXT" ]; then
+              echo "::error::store id and offer text are both required."
+              exit 1
+            fi
+            # Register with the Worker so a hand-run produces a REAL queue row.
+            # Previously it invented an id locally, so its approve link hit a
+            # row that did not exist and 404'd — meaning the approve→publish
+            # half could not be tested without taking an actual payment.
+            R=$(curl -s -X POST "$WORKER/api/ad/register" \
+              -H "X-Admin-Key: $ADMIN_KEY" -H 'Content-Type: application/json' \
+              -d "$(jq -nc --arg s "$STORE" --arg t "$TEXT" --arg r "$TIER" \
+                    '{storeId:$s, text:$t, tier:$r}')" || echo '{}')
+            if [ "$(echo "$R" | jq -r '.ok // false')" != "true" ]; then
+              echo "::error::Worker refused to register the ad: $(echo "$R" | jq -c '.reason // .' 2>/dev/null)"
+              exit 1
+            fi
+            AD_ID=$(echo "$R" | jq -r '.id')
+            TOKEN=$(echo "$R" | jq -r '.token')
+            IMG=$(echo "$R" | jq -r '.imagePath')
+            CAP=$(echo "$R" | jq -r '.captionPath')
           fi
-          if [ -z "$STORE" ] || [ -z "$TEXT" ]; then
-            echo "::error::store id and offer text are both required."
+          if [ -z "$AD_ID" ] || [ -z "$TOKEN" ]; then
+            echo "::error::no ad id or approval token — cannot build an approvable link."
             exit 1
           fi
           {
             echo "ad_id=$AD_ID"
             echo "store=$STORE"
             echo "tier=$TIER"
-            echo "img=marketing/instagram/ads/$AD_ID.jpg"
-            echo "cap=marketing/instagram/ads/$AD_ID.txt"
+            echo "img=$IMG"
+            echo "cap=$CAP"
+            echo "::add-mask::$TOKEN"
+            echo "token=$TOKEN"
           } >> "$GITHUB_OUTPUT"
           # Multi-line safe, and keeps the buyer's text out of the log line.
           {
@@ -154,7 +177,7 @@ jobs:
           # nothing.
           BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
           OWNER_ID: ${{ secrets.OWNER_ID }}
-          ADMIN_KEY: ${{ secrets.WORKER_ADMIN_KEY }}
+          TOKEN: ${{ steps.cfg.outputs.token }}
           AD_ID: ${{ steps.cfg.outputs.ad_id }}
           IMG: ${{ steps.cfg.outputs.img }}
           CAP: ${{ steps.cfg.outputs.cap }}
@@ -175,12 +198,11 @@ jobs:
             echo "::error::No Telegram bot token (BOT_TOKEN or TELEGRAM_BOT_TOKEN) or no OWNER_ID, so the approval request cannot be sent and this ad can never be approved."
             exit 1
           fi
-          if [ -z "$ADMIN_KEY" ]; then
-            echo "::error::WORKER_ADMIN_KEY not set — an approval link without it cannot work."
-            exit 1
-          fi
-          APPROVE="$WORKER/ad/approve?id=$AD_ID&key=$ADMIN_KEY"
-          REJECT="$WORKER/ad/reject?id=$AD_ID&key=$ADMIN_KEY"
+          # Per-ad token, not ADMIN_KEY. This link goes through Telegram, where
+          # it is screenshot, forwarded and stored on someone else's servers —
+          # so it must not carry the credential that also opens /orders.
+          APPROVE="$WORKER/ad/approve?id=$AD_ID&t=$TOKEN"
+          REJECT="$WORKER/ad/reject?id=$AD_ID&t=$TOKEN"
           # The caption is quoted in full, because this message IS the approval:
           # the publish step reads back this same committed file.
           CAPTION_BODY=$(cat "$CAP")
