@@ -60,12 +60,38 @@ API). Link it from the Instagram professional dashboard, or from the Page's
 **Linked accounts** settings.
 
 ### 3. Create a Meta app
-[developers.facebook.com](https://developers.facebook.com/) → **My Apps →
-Create App** → type **Business**. Add the **Instagram** product.
 
-**Leave it in Development mode** (the toggle at the top of the dashboard). Then
-add yourself under **App roles → Roles** as an admin or tester, and accept the
-invite. That's what makes publishing work without App Review.
+**3a — create it.** [developers.facebook.com](https://developers.facebook.com/)
+→ **My Apps → Create app**.
+
+Meta replaced app *types* with *use cases*, so you will likely be asked "What do
+you want your app to do?" rather than shown a type list. None of the use cases
+describe content publishing — pick **Other → Next**, and the old type list
+appears on the following screen. Choose **Business** there.
+
+**3b — add the Instagram product.** On the app dashboard, find **Instagram** in
+the product list and click **Set up**. Depending on the entry point this is
+labelled *Instagram*, *Instagram Graph API*, or *Instagram Basic Display* —
+you want the first two, **not** Basic Display, which cannot publish.
+
+**3c — leave it in Development mode.** The toggle sits at the top of the app
+dashboard. Do not switch to Live and do not submit for App Review: review only
+governs publishing to accounts you don't own.
+
+**3d — add the Instagram Tester, then accept the invite.** This is two separate
+roles and conflating them is the usual reason a correct-looking setup fails at
+the token step:
+
+| Role | Where | What it does |
+| --- | --- | --- |
+| App admin/developer | **App roles → Roles** | Lets *you* administer the app |
+| **Instagram Tester** | **App roles → Roles → Instagram Testers** | Lets the app *act on your Instagram account* |
+
+Add your Instagram handle as an **Instagram Tester** — then open Instagram
+itself and accept it: **Settings → Apps and websites → Tester invites →
+Accept**. The invite is pending by default and nothing in the Meta dashboard
+warns you it is unaccepted, so this failure surfaces much later as a token that
+inexplicably won't publish.
 
 The permissions to grant on the token are `instagram_basic`,
 `instagram_content_publish`, `pages_show_list`, and `pages_read_engagement`.
