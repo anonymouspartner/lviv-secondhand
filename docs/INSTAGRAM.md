@@ -17,9 +17,12 @@ absent, so an unconfigured repo produces no failed runs.
 Instagram has no simple "post this file" API. Publishing requires:
 
 1. the account to be **Business or Creator**, not personal;
-2. it to be **linked to a Facebook Page**;
-3. a **Meta app** with content-publishing permission;
+2. a **Meta app** set up for Instagram login, with content-publishing permission;
+3. your Instagram account added to it as an **Instagram Tester**;
 4. a **long-lived access token**.
+
+(A linked Facebook Page is *not* required on this path — that's the other one.
+Having a Page does no harm if you already made one, it just isn't used.)
 
 > **You do not need App Review.** Meta's docs lead with a review process that
 > wants a screencast submission, which makes this look like a two-week project.
@@ -31,7 +34,7 @@ Instagram has no simple "post this file" API. Publishing requires:
 There are two paths, and mixing them up is the most common way to get stuck,
 because the permission names differ:
 
-| | **Facebook Login** (what this repo uses) | Instagram Login |
+| | Facebook Login | **Instagram Login** (what this repo uses) |
 | --- | --- | --- |
 | Host | `graph.facebook.com` | `graph.instagram.com` |
 | Facebook Page | **required** | not needed |
@@ -54,50 +57,76 @@ so anything committed under `marketing/` is immediately live at
 Instagram app → **Settings → Account type and tools → Switch to professional
 account** → Business or Creator.
 
-### 2. Link it to a Facebook Page
-Create a Page if there isn't one (it can be minimal — it exists to satisfy the
-API). Link it from the Instagram professional dashboard, or from the Page's
-**Linked accounts** settings.
+### 2. Link it to a Facebook Page — *optional on this path*
+Only the Facebook Login path needs this. Skip it unless you're switching paths.
+If you already linked a Page, leave it; it's unused, not harmful.
 
 ### 3. Create a Meta app
-[developers.facebook.com](https://developers.facebook.com/) → **My Apps →
-Create App** → type **Business**. Add the **Instagram** product.
 
-**Leave it in Development mode** (the toggle at the top of the dashboard). Then
-add yourself under **App roles → Roles** as an admin or tester, and accept the
-invite. That's what makes publishing work without App Review.
+**3a — create it.** [developers.facebook.com](https://developers.facebook.com/)
+→ **My Apps → Create app**.
 
-The permissions to grant on the token are `instagram_basic`,
-`instagram_content_publish`, `pages_show_list`, and `pages_read_engagement`.
-`pages_show_list` is the one people miss — without it `/me/accounts` comes back
-empty and step 4 looks broken when the token is the actual problem.
+Meta replaced app *types* with *use cases*, so you will likely be asked "What do
+you want your app to do?" rather than shown a type list. None of the use cases
+describe content publishing — pick **Other → Next**, and the old type list
+appears on the following screen. Choose **Business** there.
 
-> Meta renames these product flows fairly often. Follow their current
-> [Content Publishing guide](https://developers.facebook.com/docs/instagram-platform/content-publishing)
-> rather than any fixed click-path written here — the four things you need
-> (professional account, linked Page, app, long-lived token) are stable even
-> when the UI moves.
+**3b — add the Instagram product.** On the app dashboard, find **Instagram** in
+the product list and click **Set up**. Depending on the entry point this is
+labelled *Instagram*, *Instagram Graph API*, or *Instagram Basic Display* —
+you want the first two, **not** Basic Display, which cannot publish.
+
+**3c — leave it in Development mode.** The toggle sits at the top of the app
+dashboard. Do not switch to Live and do not submit for App Review: review only
+governs publishing to accounts you don't own.
+
+**3d — add yourself as an Instagram Tester and accept the invite.**
+
+Under **App roles → Roles → Instagram Testers**, add your Instagram handle. Then
+open Instagram, log in, and accept it: **Settings → Apps and websites → Tester
+invites → Accept**.
+
+The invite sits pending by default and nothing in the Meta dashboard says so, so
+skipping it surfaces two steps later as a token that looks correctly scoped but
+won't publish.
 
 ### 4. Get the two values
 
-**`IG_USER_ID`** — the Instagram *Business account* id, a number. Not the
-handle. The Graph API Explorer returns it from:
+**Do not use the Graph API Explorer.** It is a Facebook tool and mints Facebook
+tokens; on this path it returns
 
 ```
-GET /me/accounts                       → find the Page, note its id
-GET /{page-id}?fields=instagram_business_account
+"An active access token must be used to query information about the current
+ user." (code 2500)
 ```
 
-**`IG_ACCESS_TOKEN`** — start from a User token in the Graph API Explorer, then
-exchange it for a long-lived one:
+which reads like a missing token but actually means *this token has no Instagram
+user context*. Both values come from the app dashboard instead.
+
+**App Dashboard → Instagram → API setup with Instagram login → 1. Generate
+access tokens.**
+
+- **Add an Instagram account** and log in with the Instagram Business/Creator
+  account, if it isn't listed already.
+- **`IG_USER_ID`** is shown next to the connected account.
+- Click **Generate token** for **`IG_ACCESS_TOKEN`**.
+
+**Copy the token immediately.** The dashboard will not show it again — generating
+a replacement is easy, but there is no "view existing token".
+
+This token is already long-lived (60 days), so no exchange step is needed — the
+`ig_exchange_token` call belongs to the OAuth flow, not to this one. If the token
+stops working after about an hour, it was short-lived and you're on the OAuth
+route instead; exchange it as described under token expiry below.
+
+To confirm before saving it anywhere:
 
 ```
-GET /oauth/access_token
-  ?grant_type=fb_exchange_token
-  &client_id={app-id}
-  &client_secret={app-secret}
-  &fb_exchange_token={short-lived-token}
+GET https://graph.instagram.com/v26.0/me?fields=user_id,username
+  &access_token={the-token}
 ```
+
+`username` should be your handle, and `user_id` should equal `IG_USER_ID`.
 
 ### 5. Add them as repo secrets
 **Settings → Secrets and variables → Actions → New repository secret.**
@@ -128,17 +157,32 @@ only after a few successful manual runs.
 
 ## The failure mode to plan for
 
-**Long-lived tokens expire in about 60 days.** An automated poster that is
-working fine today will simply stop, quietly, roughly two months later.
+**Long-lived tokens expire 60 days after issue.** An automated poster working
+fine today will simply stop, quietly, two months later.
 
-The workflow guards against the silent version of that: every run prints the
-days remaining, and warns loudly under 10 days. When it warns, repeat step 4's
-exchange and update the `IG_ACCESS_TOKEN` secret.
+This path gives no way to check how long is left — `debug_token` is a
+`graph.facebook.com` endpoint with no equivalent on `graph.instagram.com`. So
+the workflow verifies the token still *works* and prints a standing reminder,
+rather than reporting days-remaining the way the other path can.
 
-Fully unattended posting would need the token refreshed and written back
-automatically, which means a PAT with secrets-write permission — more moving
-parts, and worth adding only if manual refresh every couple of months proves
-annoying.
+Refresh it roughly every 50 days — the token must be at least 24 hours old, and
+refreshing resets the clock to 60 days from the refresh date:
+
+```
+GET https://graph.instagram.com/refresh_access_token
+  ?grant_type=ig_refresh_token
+  &access_token={current-long-lived-token}
+```
+
+Then update the `IG_ACCESS_TOKEN` secret with what it returns. Note this one
+needs no app secret, so it's a much lighter operation than the initial exchange.
+
+Miss the 60-day window entirely and there's no refresh path — you start again
+from step 4.
+
+Fully unattended posting would need the refresh automated and written back to
+the secret, which means a PAT with secrets-write permission — more moving parts,
+worth adding only if the manual refresh proves annoying.
 
 ## Other limits worth knowing
 
