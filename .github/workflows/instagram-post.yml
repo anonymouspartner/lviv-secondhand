@@ -116,26 +116,53 @@ jobs:
         env:
           IMG: ${{ inputs.image }}
         run: |
-          if [ ! -f "$IMG" ]; then
-            echo "::error::$IMG is not in the repo. Commit it first — Meta fetches it over HTTP."
+          # Path containment first: this value can arrive from a caller
+          # workflow, and it becomes a public URL below.
+          case "$IMG" in
+            *..*) echo "::error::image path $IMG contains '..' — refusing."; exit 1 ;;
+          esac
+          case "$IMG" in
+            marketing/*) ;;
+            *) echo "::error::$IMG is outside marketing/."; exit 1 ;;
+          esac
+
+          # What gets verified is the file Meta will actually fetch, not the one
+          # in this checkout.
+          #
+          # This step used to require `-f "$IMG"` locally. That is the wrong
+          # test for any caller that commits the image in an earlier job of the
+          # same run: a reusable workflow checks out the SHA that triggered the
+          # run, which predates that commit. instagram-feature.yml hit it on its
+          # first real use. deals-image.yml has the identical shape and passed
+          # only because marketing/deals-this-week.jpg is a fixed path already
+          # present at the older revision — the guard was succeeding for a
+          # reason unrelated to what it claimed to check, and would have failed
+          # the first time that pipeline emitted a new filename.
+          URL="$SITE/$IMG"
+          CODE=$(curl -s -o /tmp/ig-probe.bin -w '%{http_code}' -L "$URL")
+          if [ "$CODE" != "200" ]; then
+            echo "::error::$URL returned HTTP $CODE. It must be publicly reachable before Meta can fetch it (Pages may lag a commit by a minute)."
             exit 1
           fi
-          # Meta's content-publishing API accepts JPEG only. Caught here because
-          # the API's own rejection is a generic container error that says
-          # nothing about the format.
+
+          # Meta's content-publishing API accepts JPEG only, and its own
+          # rejection is a generic container error that names no format. The
+          # extension is checked because it is what the URL advertises, and the
+          # magic bytes because that is what Meta will actually parse — a PNG
+          # renamed .jpg passes every check but the last one.
           case "$IMG" in
             *.jpg|*.jpeg) ;;
             *) echo "::error::$IMG is not a JPEG. Instagram's API accepts JPEG only — use marketing/instagram/*.jpg."
                exit 1 ;;
           esac
-          URL="$SITE/$IMG"
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' -L "$URL")
-          if [ "$CODE" != "200" ]; then
-            echo "::error::$URL returned HTTP $CODE. It must be publicly reachable before Meta can fetch it (Pages may lag a commit by a minute)."
+          MAGIC=$(od -An -N3 -tx1 /tmp/ig-probe.bin | tr -d ' \n')
+          if [ "$MAGIC" != "ffd8ff" ]; then
+            echo "::error::$URL does not serve a JPEG (first bytes: ${MAGIC:-none}). Instagram's API accepts JPEG only, and rejects anything else with a generic container error."
             exit 1
           fi
+          SIZE=$(wc -c < /tmp/ig-probe.bin)
           echo "IMAGE_URL=$URL" >> "$GITHUB_ENV"
-          echo "Image OK: $URL"
+          echo "Image OK: $URL (${SIZE} bytes, JPEG confirmed from the served bytes)"
 
       # /debug_token lives on graph.facebook.com and has no equivalent here, so
       # this path cannot report days-remaining. `me` is the substitute: it fails
