@@ -106,7 +106,14 @@ async function ensureSchema(env) {
   // rendered by a GitHub Action (Workers cannot rasterize) at a path derived
   // from the id, so no callback is needed to learn where it landed.
   await env.DB.prepare(
-    "CREATE TABLE IF NOT EXISTS instagram_ads (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, ad_text TEXT NOT NULL, tier TEXT NOT NULL DEFAULT '', image_path TEXT NOT NULL, caption_path TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'rendering', created TEXT NOT NULL DEFAULT (datetime('now')), decided TEXT)"
+    "CREATE TABLE IF NOT EXISTS instagram_ads (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, ad_text TEXT NOT NULL, tier TEXT NOT NULL DEFAULT '', image_path TEXT NOT NULL, caption_path TEXT NOT NULL, token TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'rendering', created TEXT NOT NULL DEFAULT (datetime('now')), decided TEXT)"
+  ).run();
+  // Older rows predate the per-ad token; ALTER is a no-op once applied and
+  // errors harmlessly if the column is already there, so it stays idempotent
+  // alongside the CREATE IF NOT EXISTS above.
+  await env.DB.prepare(
+    "ALTER TABLE instagram_ads ADD COLUMN token TEXT NOT NULL DEFAULT ''"
+  ).run().catch(() => {}
   ).run();
   // Crowdsourced moderation (Feature 6). A web-submitted correction sits as a
   // 'draft' (no contributor identity yet — the web app has no login) until
@@ -319,19 +326,46 @@ async function dispatchGitHub(env, eventType, payload) {
 // Worker only knows store ids. Committing the caption beside the image is what
 // makes "you approve exactly what publishes" true: the Telegram message quotes
 // that file, and the publish step reads the same file back.
-async function queueInstagramAd(env, { storeId, text, tier }) {
+// Creates the queue row and its approval token. Split out from
+// queueInstagramAd so the hand-run test path (POST /api/ad/register) can make a
+// real, approvable row without also firing the render dispatch it is already
+// inside of.
+//
+// The token is what authorises approval, INSTEAD of ADMIN_KEY. The approval link
+// travels through Telegram, where it is screenshot, forwarded and stored on
+// someone else's servers — so it must not carry a credential that also opens
+// /orders (buyer emails), /admin/test and every other admin route. A leaked
+// token approves one already-known ad and nothing else.
+async function createAdRow(env, { storeId, text, tier }) {
   await ensureSchema(env);
   const id = 'ad_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '').slice(0, 8);
   const imagePath = `marketing/instagram/ads/${id}.jpg`;
   const captionPath = `marketing/instagram/ads/${id}.txt`;
   await env.DB.prepare(
-    'INSERT INTO instagram_ads (id, store_id, ad_text, tier, image_path, caption_path, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).bind(id, storeId, text, tier || '', imagePath, captionPath, 'rendering').run();
+    'INSERT INTO instagram_ads (id, store_id, ad_text, tier, image_path, caption_path, token, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, storeId, text, tier || '', imagePath, captionPath, token, 'rendering').run();
+  return { id, token, imagePath, captionPath };
+}
+
+// Length-independent comparison. The token is 128+ bits of randomness so
+// guessing is not the threat, but comparing secrets in constant time costs
+// nothing and removes the question.
+function safeEqual(a, b) {
+  const x = String(a || ''), y = String(b || '');
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
+async function queueInstagramAd(env, { storeId, text, tier }) {
+  const { id, token, imagePath, captionPath } = await createAdRow(env, { storeId, text, tier });
   // The Action renders, commits, waits for Pages, then messages the owner with
   // the approve/reject links below. It publishes nothing.
   await dispatchGitHub(env, 'instagram_ad', {
     ad_id: id, store_id: storeId, text, tier: tier || '',
-    image_path: imagePath, caption_path: captionPath,
+    image_path: imagePath, caption_path: captionPath, token,
   });
   return id;
 }
@@ -1161,24 +1195,50 @@ export default {
         if (row.alert) await broadcastFlashDeal(env, ctx, row.store_id, row.text, row.expires_at);
         return new Response(`✅ Flash deal approved and published for ${row.store_id}.`, { status: 200 });
       }
+      // Creates a queue row for an ad the workflow is already rendering — the
+      // hand-run test path. Without it a hand-queued ad has no row, so its
+      // approve link 404s and the whole approve→publish half cannot be
+      // exercised without taking a real payment.
+      //
+      // POST with the key in a header, not a URL: this one IS the admin
+      // credential, and it travels machine-to-machine, never through Telegram.
+      if (url.pathname === '/api/ad/register' && request.method === 'POST') {
+        if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+          return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+        }
+        const storeId = body && body.storeId;
+        const text = body && body.text;
+        if (typeof storeId !== 'string' || !/^[a-z0-9_]{1,24}$/i.test(storeId) || typeof text !== 'string' || !text.trim()) {
+          return json({ ok: false, reason: 'bad_request' }, 400, origin);
+        }
+        const made = await createAdRow(env, {
+          storeId, text: text.slice(0, 120), tier: (body && body.tier) || '',
+        });
+        return json({ ok: true, ...made }, 200, origin);
+      }
       // Owner taps the approve link on a queued Instagram advertisement. Same
       // GET-so-Telegram-linkifies-it shape and same ADMIN_KEY gate as
       // /flash-deal/approve above. This is the ONLY route from a paid ad to the
       // public feed — nothing in the queue publishes without a human here.
       if (url.pathname === '/ad/approve' || url.pathname === '/ad/reject') {
-        if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) return new Response('unauthorized', { status: 401 });
         const id = url.searchParams.get('id') || '';
-        if (!id) return new Response('bad request', { status: 400 });
+        const t = url.searchParams.get('t') || '';
+        if (!id || !t) return new Response('bad request', { status: 400 });
         await ensureSchema(env);
         const row = await env.DB.prepare('SELECT * FROM instagram_ads WHERE id = ?').bind(id).first();
-        if (!row) return new Response('not found', { status: 404 });
+        // Same 404 for a missing row and a wrong token, so the endpoint cannot
+        // be used to enumerate which ad ids exist.
+        if (!row || !row.token || !safeEqual(t, row.token)) return new Response('not found', { status: 404 });
         // Idempotent: tapping an old link twice, or after deciding, says so
         // rather than double-posting. Telegram link previews can and do fetch
         // these URLs, so a second GET must never be a second publish.
         if (row.status !== 'pending') return new Response(`already ${row.status}`, { status: 200 });
 
+        // Single use: the token is cleared on decision, so a link that leaks
+        // later — from a forward, a screenshot, a synced chat backup — cannot
+        // act on the ad even before the status check would catch it.
         if (url.pathname === '/ad/reject') {
-          await env.DB.prepare("UPDATE instagram_ads SET status = 'rejected', decided = datetime('now') WHERE id = ?").bind(id).run();
+          await env.DB.prepare("UPDATE instagram_ads SET status = 'rejected', token = '', decided = datetime('now') WHERE id = ?").bind(id).run();
           return new Response(`❌ Ad ${id} rejected. Nothing was posted.`, { status: 200 });
         }
         try {
@@ -1186,7 +1246,7 @@ export default {
         } catch (e) {
           return new Response('dispatch failed — check GH_PAT and the instagram-ad workflow logs', { status: 502 });
         }
-        await env.DB.prepare("UPDATE instagram_ads SET status = 'published', decided = datetime('now') WHERE id = ?").bind(id).run();
+        await env.DB.prepare("UPDATE instagram_ads SET status = 'published', token = '', decided = datetime('now') WHERE id = ?").bind(id).run();
         return new Response(`✅ Ad ${id} approved — publishing to Instagram now.`, { status: 200 });
       }
       // Owner taps ✅ / ❌ in Telegram on a community submission. Approval is
