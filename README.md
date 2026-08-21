@@ -309,13 +309,18 @@ Renewal is deliberately excluded. A subscription bills every month, so queueing 
 
 An offer line is required because inventing copy for someone else's paid advertisement is not ours to write. A tier bought without one still gets every on-map placement it paid for.
 
-**Three repository secrets** are needed — all under *Settings → Secrets and variables → Actions*, and note these are GitHub secrets, separate from the Cloudflare Worker secrets of the same name:
+**No new repository secrets are needed** — every value this workflow wants is one the repo already holds, under *Settings → Secrets and variables → Actions*. Each row below reads an existing name first and only falls back to an alias, so there is nothing to add and nothing to keep in sync:
 
-| Secret | Value | Without it |
+| Reads | Value | Without it |
 | --- | --- | --- |
-| `WORKER_ADMIN_KEY` | same string as the Worker's `ADMIN_KEY` | a hand-run test cannot register its ad (sent as a header, never in a URL) |
-| `BOT_TOKEN` | the Telegram bot token (BotFather → *My bots* → *API Token*) | no approval request is sent, and the token watchdog cannot warn you either |
-| `OWNER_ID` | your Telegram chat id — `1212541015`, already a plain var in both `wrangler.toml` files | same |
+| `ADMIN_KEY`, else `WORKER_ADMIN_KEY` | the admin key. `deploy-worker.yml` installs `ADMIN_KEY` on the Worker with `wrangler secret put`, so the two match by construction — which is exactly why a second name for it is a liability, not a spare | a hand-run test cannot register its ad, and fails with HTTP 401 (sent as a header, never in a URL) |
+| `BOT_TOKEN`, else `TELEGRAM_BOT_TOKEN` | the Telegram bot token (BotFather → *My bots* → *API Token*). This repo has held it under the second name since before the first existed | no approval request is sent, and the token watchdog cannot warn you either |
+| `OWNER_ID`, else `worker/wrangler.toml` | your Telegram chat id — `1212541015`, already a plain var in both `wrangler.toml` files, so the secret is optional. A chat id is not a credential | same |
+
+> Resist adding a second secret for a value the repo already stores. It has now
+> gone wrong twice — `WORKER_ADMIN_KEY` beside `ADMIN_KEY`, and `BOT_TOKEN`
+> beside `TELEGRAM_BOT_TOKEN` — and both times the duplicate silently held a
+> different value while looking correct in the settings list.
 
 A missing `BOT_TOKEN`/`OWNER_ID` **fails the run**, deliberately: this workflow's job is to queue *and ask*, and an ad nobody can be asked about would otherwise sit in the queue behind a green tick.
 
