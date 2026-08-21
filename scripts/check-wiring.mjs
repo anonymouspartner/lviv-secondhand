@@ -17,6 +17,12 @@
 //      Cloudflare answers such a subrequest with HTTP 404 "error code: 1042".
 //      Six bot features failed this way, invisibly, for months.
 //
+//   4. ensureSchema actually runs to completion.
+//      A stray `.run()` chained onto `.catch()` made every call to it throw
+//      TypeError, so the Worker answered HTTP 500 "error code: 1101" on every
+//      D1-backed route at once. The statement was valid JavaScript, so
+//      `node --check` passed it; only executing the chain finds it.
+//
 // Exit code 1 on any violation.
 
 import fs from 'node:fs';
@@ -92,6 +98,59 @@ const errors = [];
     }
   }
   console.log('worker-to-worker: no unbound public-URL calls');
+}
+
+// ── 4 · ensureSchema survives execution ───────────────────────────────
+{
+  // Checks 1–3 read the source as text. This one runs it, because the bug it
+  // exists for was invisible to any amount of reading: `.run().catch(() => {}
+  // ).run()` is syntactically perfect and throws on every invocation.
+  //
+  // The stub rejects ALTER, which is what D1 really does once the column is
+  // there — so the idempotent-ALTER pattern is exercised in its failing case,
+  // the only case that matters after the first deploy.
+  const wanted = [...worker.matchAll(/(?:CREATE TABLE IF NOT EXISTS|ALTER TABLE) [a-z_]+/g)].length;
+  const ran = [];
+  const DB = {
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async run() {
+          ran.push(sql);
+          if (/^\s*ALTER TABLE/.test(sql)) throw new Error('duplicate column name');
+          return { success: true };
+        },
+        async first() { return null; },
+        async all() { return { results: [] }; },
+      };
+    },
+  };
+  try {
+    const worker_mod = await import('../worker/worker.js');
+    const res = await worker_mod.default.fetch(
+      new Request('https://x/api/sub', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: 's10', chatId: '1' }),
+      }),
+      { DB },
+      { waitUntil() {} },
+    );
+    if (res.status >= 500) {
+      errors.push(`ensureSchema left the Worker answering HTTP ${res.status} on a D1 route.`);
+    }
+    // Compare schema statements only — the probe route runs its own INSERT on
+    // top, which is not what this check is counting. A throw partway through
+    // stops the rest, so a short count localises the failure even when nothing
+    // propagates out as a 500.
+    const schemaRan = ran.filter((q) => /^\s*(?:CREATE TABLE IF NOT EXISTS|ALTER TABLE)\b/.test(q));
+    if (schemaRan.length !== wanted) {
+      errors.push(`ensureSchema ran ${schemaRan.length} of ${wanted} schema statements — it threw partway. Last: ${(schemaRan[schemaRan.length - 1] || '(none)').slice(0, 70)}`);
+    }
+    console.log(`ensureSchema: ${schemaRan.length}/${wanted} schema statements executed, ALTER rejection absorbed`);
+  } catch (e) {
+    errors.push(`ensureSchema threw: ${(e && e.message) || e}`);
+  }
 }
 
 if (errors.length) {

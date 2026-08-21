@@ -108,13 +108,17 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS instagram_ads (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, ad_text TEXT NOT NULL, tier TEXT NOT NULL DEFAULT '', image_path TEXT NOT NULL, caption_path TEXT NOT NULL, token TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'rendering', created TEXT NOT NULL DEFAULT (datetime('now')), decided TEXT)"
   ).run();
-  // Older rows predate the per-ad token; ALTER is a no-op once applied and
-  // errors harmlessly if the column is already there, so it stays idempotent
-  // alongside the CREATE IF NOT EXISTS above.
-  await env.DB.prepare(
-    "ALTER TABLE instagram_ads ADD COLUMN token TEXT NOT NULL DEFAULT ''"
-  ).run().catch(() => {}
-  ).run();
+  // Older rows predate the per-ad token. Same try/catch shape as the promos
+  // ALTER above (SQLite has no ADD COLUMN IF NOT EXISTS), deliberately, rather
+  // than a second idiom for the same job: the version written as
+  // `.run().catch(() => {} ).run()` carried a stray second .run(), which made
+  // ensureSchema throw TypeError on every call and took every D1-backed route
+  // down with HTTP 500 until it was found.
+  try {
+    await env.DB.prepare(
+      "ALTER TABLE instagram_ads ADD COLUMN token TEXT NOT NULL DEFAULT ''"
+    ).run();
+  } catch {}
   // Crowdsourced moderation (Feature 6). A web-submitted correction sits as a
   // 'draft' (no contributor identity yet — the web app has no login) until
   // claimed by whoever opens the Telegram deep link, which is the first
