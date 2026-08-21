@@ -205,7 +205,7 @@ function poster(s) {
   <div class="mid">
     <div class="qr">${svg}</div>
     <div class="cta">Скануй — дізнайся,<br>коли завезення і які ціни</div>
-    <div class="sub">Безкоштовний застосунок: години роботи, ціни на вагу та поштучно, дні завезення й коли найдешевше.</div>
+    <div class="sub">Безкоштовний застосунок: адреси, години роботи й дні завезення — щоб знати, коли йти.</div>
   </div>
   <div class="foot">www.lvivsecondhand.com</div>
 </div>

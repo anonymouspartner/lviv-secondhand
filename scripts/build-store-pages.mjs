@@ -376,7 +376,7 @@ function chainPage(chain, todayIso) {
   const withHours = branches.filter((s) => Object.values(s.hours || {}).some((v) => v && v !== '?')).length;
 
   const title = `${brand} у Львові — ${n} ${nWord}: адреси та години`;
-  const description = `Усі ${n} ${nWord} мережі ${brand} у Львові на одній карті: адреси, години роботи, ціни${kg ? ' на вагу' : ''} та дні завезення товару.`;
+  const description = `Усі ${n} ${nWord} мережі ${brand} у Львові на одній карті: адреси, години роботи та дні завезення товару.`;
 
   // Organization + its locations, each @id-linked to that branch's own store
   // page entity, so the chain and its shops resolve as one connected graph
@@ -504,7 +504,7 @@ ${rows}
 function indexPage(stores, chains) {
   const url = `${ORIGIN}/store/`;
   const title = 'Усі секонд-хенди Львова — список магазинів';
-  const description = `Повний список секонд-хендів Львова (${stores.length} магазинів): адреси, години роботи, ціни на вагу та поштучно, дні завезення.`;
+  const description = `Повний список секонд-хендів Львова (${stores.length} магазинів): адреси, години роботи та дні завезення.`;
   const items = stores.map((s) => {
     const addr = s.address ? `<span class="dim"> — ${esc(s.address)}</span>` : '';
     return `      <li><a href="${ORIGIN}/store/${esc(s.id)}/">${esc(s.name)}</a>${addr}</li>`;
