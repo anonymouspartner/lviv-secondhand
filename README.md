@@ -309,7 +309,15 @@ Renewal is deliberately excluded. A subscription bills every month, so queueing 
 
 An offer line is required because inventing copy for someone else's paid advertisement is not ours to write. A tier bought without one still gets every on-map placement it paid for.
 
-Needs one secret beyond the Instagram pair: **`WORKER_ADMIN_KEY`**, matching the Worker's `ADMIN_KEY` — it is what makes your approve link work and everyone else's fail.
+**Three repository secrets** are needed — all under *Settings → Secrets and variables → Actions*, and note these are GitHub secrets, separate from the Cloudflare Worker secrets of the same name:
+
+| Secret | Value | Without it |
+| --- | --- | --- |
+| `WORKER_ADMIN_KEY` | same string as the Worker's `ADMIN_KEY` | the approve link returns `unauthorized` |
+| `BOT_TOKEN` | the Telegram bot token (BotFather → *My bots* → *API Token*) | no approval request is sent, and the token watchdog cannot warn you either |
+| `OWNER_ID` | your Telegram chat id — `1212541015`, already a plain var in both `wrangler.toml` files | same |
+
+A missing `BOT_TOKEN`/`OWNER_ID` **fails the run**, deliberately: this workflow's job is to queue *and ask*, and an ad nobody can be asked about would otherwise sit in the queue behind a green tick.
 
 Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The app tells shoppers "paid placements are always labelled", and an ad that quietly drops the mark to perform better would break that promise.
 

@@ -156,9 +156,13 @@ jobs:
           CAP: ${{ steps.cfg.outputs.cap }}
           STORE: ${{ steps.cfg.outputs.store }}
         run: |
+          # An error, not a warning. This workflow's job is "queue AND ask" —
+          # an ad nobody can be asked about sits in the queue forever, and the
+          # run going green would say the opposite. The image and caption are
+          # already committed at this point, so nothing is lost by failing here.
           if [ -z "$BOT_TOKEN" ] || [ -z "$OWNER_ID" ]; then
-            echo "::warning::BOT_TOKEN / OWNER_ID not set — the ad is queued but nobody was told. Approve manually via the Worker."
-            exit 0
+            echo "::error::BOT_TOKEN / OWNER_ID are not set as repository secrets, so the approval request cannot be sent and this ad can never be approved. Add both under Settings → Secrets and variables → Actions."
+            exit 1
           fi
           if [ -z "$ADMIN_KEY" ]; then
             echo "::error::WORKER_ADMIN_KEY not set — an approval link without it cannot work."
@@ -177,8 +181,19 @@ jobs:
             "✅ Опублікувати · Publish:" "$APPROVE" \
             "❌ Відхилити · Reject:" "$REJECT")
           # sendPhoto so the owner decides on the actual image, not a filename.
-          curl -s -o /dev/null -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendPhoto" \
+          #
+          # The response is checked. The first version discarded it with
+          # `-o /dev/null || true`, so the step went green whether Telegram
+          # accepted the message or not — and when BOT_TOKEN was missing it
+          # reported success for an ad nobody was ever told about. A send that
+          # does not arrive is a failed run, because approval is the feature.
+          RESP=$(curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendPhoto" \
             -H 'Content-Type: application/json' \
             -d "$(jq -nc --arg c "$OWNER_ID" --arg p "$SITE/$IMG" --arg cap "$MSG" \
-                  '{chat_id:$c, photo:$p, caption:$cap}')" || true
+                  '{chat_id:$c, photo:$p, caption:$cap}')" || echo '{}')
+          if [ "$(echo "$RESP" | jq -r '.ok // false')" != "true" ]; then
+            echo "::error::Telegram rejected the approval request: $(echo "$RESP" | jq -c '{error_code, description}' 2>/dev/null || echo "$RESP")"
+            echo "The ad is committed at $IMG but nobody was asked about it."
+            exit 1
+          fi
           echo "::notice::Ad $AD_ID queued and sent for approval. Nothing has been posted."

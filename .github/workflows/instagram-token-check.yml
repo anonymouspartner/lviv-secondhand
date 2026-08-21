@@ -51,11 +51,16 @@ jobs:
           # quiet, since the run log still records what happened either way.
           notify() {
             [ -n "$BOT_TOKEN" ] && [ -n "$OWNER_ID" ] || return 0
-            curl -s -o /dev/null -X POST \
+            R=$(curl -s -X POST \
               "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
               -H 'Content-Type: application/json' \
               -d "$(jq -nc --arg c "$OWNER_ID" --arg t "$1" \
-                    '{chat_id:$c, text:$t, disable_web_page_preview:true}')" || true
+                    '{chat_id:$c, text:$t, disable_web_page_preview:true}')" || echo '{}')
+            # Still best-effort — a watchdog must not die because its own
+            # alerting is misconfigured — but the failure is now logged rather
+            # than swallowed, so a silent watchdog is visible in the run.
+            [ "$(echo "$R" | jq -r '.ok // false')" = "true" ] \
+              || echo "::warning::Telegram did not accept the alert: $(echo "$R" | jq -c '.description // .' 2>/dev/null)"
           }
 
           RESP=$(curl -sG "$GRAPH/me" \
