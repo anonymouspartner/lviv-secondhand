@@ -43,6 +43,8 @@ its bundled browser.
   rule is silently ignored. Uppercase Cyrillic (Й, Ї) needs more leading than
   that Latin-tuned default or the diacritics clip into the line above.
 
+Posting the Instagram set is manual by default; [`.github/workflows/instagram-post.yml`](../../.github/workflows/instagram-post.yml) can publish one via the Meta Graph API once the account is set up for it — see [`docs/INSTAGRAM.md`](../../docs/INSTAGRAM.md). It is `workflow_dispatch`-only and no-ops without the secrets, so it never fires on its own.
+
 The deals image is also refreshed automatically every Monday by
 [`.github/workflows/deals-image.yml`](../../.github/workflows/deals-image.yml),
 which commits it so GitHub Pages serves an always-current copy at
