@@ -17,9 +17,12 @@ absent, so an unconfigured repo produces no failed runs.
 Instagram has no simple "post this file" API. Publishing requires:
 
 1. the account to be **Business or Creator**, not personal;
-2. it to be **linked to a Facebook Page**;
-3. a **Meta app** with content-publishing permission;
+2. a **Meta app** set up for Instagram login, with content-publishing permission;
+3. your Instagram account added to it as an **Instagram Tester**;
 4. a **long-lived access token**.
+
+(A linked Facebook Page is *not* required on this path — that's the other one.
+Having a Page does no harm if you already made one, it just isn't used.)
 
 > **You do not need App Review.** Meta's docs lead with a review process that
 > wants a screencast submission, which makes this look like a two-week project.
@@ -31,7 +34,7 @@ Instagram has no simple "post this file" API. Publishing requires:
 There are two paths, and mixing them up is the most common way to get stuck,
 because the permission names differ:
 
-| | **Facebook Login** (what this repo uses) | Instagram Login |
+| | Facebook Login | **Instagram Login** (what this repo uses) |
 | --- | --- | --- |
 | Host | `graph.facebook.com` | `graph.instagram.com` |
 | Facebook Page | **required** | not needed |
@@ -54,10 +57,9 @@ so anything committed under `marketing/` is immediately live at
 Instagram app → **Settings → Account type and tools → Switch to professional
 account** → Business or Creator.
 
-### 2. Link it to a Facebook Page
-Create a Page if there isn't one (it can be minimal — it exists to satisfy the
-API). Link it from the Instagram professional dashboard, or from the Page's
-**Linked accounts** settings.
+### 2. Link it to a Facebook Page — *optional on this path*
+Only the Facebook Login path needs this. Skip it unless you're switching paths.
+If you already linked a Page, leave it; it's unused, not harmful.
 
 ### 3. Create a Meta app
 
@@ -78,45 +80,39 @@ you want the first two, **not** Basic Display, which cannot publish.
 dashboard. Do not switch to Live and do not submit for App Review: review only
 governs publishing to accounts you don't own.
 
-**3d — check your Page role. There is no Instagram Tester step.**
+**3d — add yourself as an Instagram Tester and accept the invite.**
 
-On the Facebook Login path the grant is *Page-based*, not Instagram-based. Meta's
-requirement is that the Instagram professional account is connected to a Facebook
-Page, and that you "be able to perform admin-equivalent tasks on the linked
-Facebook Page" — specifically the `PROFILE_PLUS_CREATE_CONTENT` task, which is
-what backs the `instagram_content_publish` permission.
+Under **App roles → Roles → Instagram Testers**, add your Instagram handle. Then
+open Instagram, log in, and accept it: **Settings → Apps and websites → Tester
+invites → Accept**.
 
-So all you need is: a role on the app (3c) **and** admin on the Page. If you
-created the Page, you already have both, and step 3 is done.
-
-> **The `Instagram Tester` role is not part of this path.** It belongs to
-> Instagram Login / Basic Display, where the app authenticates *as* the Instagram
-> user rather than through the Page. If you go looking for
-> *Instagram → Settings → Apps and websites → Tester invites*, you will not find a
-> pending invite, because none was ever sent — and there is nothing wrong with
-> your setup. This doc previously said to accept one; that was wrong, and it is
-> an easy mistake to make because most tutorials online cover the other path.
+The invite sits pending by default and nothing in the Meta dashboard says so, so
+skipping it surfaces two steps later as a token that looks correctly scoped but
+won't publish.
 
 ### 4. Get the two values
 
-**`IG_USER_ID`** — the Instagram *Business account* id, a number. Not the
-handle. The Graph API Explorer returns it from:
+**`IG_USER_ID`** — your Instagram user id, a number, not the handle. On this
+path it does *not* come from a Facebook Page lookup. In the
+[Graph API Explorer](https://developers.facebook.com/tools/explorer/), pick your
+app and an **Instagram** token, then:
 
 ```
-GET /me/accounts                       → find the Page, note its id
-GET /{page-id}?fields=instagram_business_account
+GET https://graph.instagram.com/v25.0/me?fields=user_id,username
 ```
 
-**`IG_ACCESS_TOKEN`** — start from a User token in the Graph API Explorer, then
-exchange it for a long-lived one:
+**`IG_ACCESS_TOKEN`** — an Instagram User access token. The Explorer issues a
+short-lived one (1 hour); exchange it for a 60-day token server-side:
 
 ```
-GET /oauth/access_token
-  ?grant_type=fb_exchange_token
-  &client_id={app-id}
+GET https://graph.instagram.com/access_token
+  ?grant_type=ig_exchange_token
   &client_secret={app-secret}
-  &fb_exchange_token={short-lived-token}
+  &access_token={short-lived-token}
 ```
+
+The exchange includes your app secret, so run it from a terminal — never from a
+browser page you've shared or a client-side script.
 
 ### 5. Add them as repo secrets
 **Settings → Secrets and variables → Actions → New repository secret.**
@@ -147,17 +143,32 @@ only after a few successful manual runs.
 
 ## The failure mode to plan for
 
-**Long-lived tokens expire in about 60 days.** An automated poster that is
-working fine today will simply stop, quietly, roughly two months later.
+**Long-lived tokens expire 60 days after issue.** An automated poster working
+fine today will simply stop, quietly, two months later.
 
-The workflow guards against the silent version of that: every run prints the
-days remaining, and warns loudly under 10 days. When it warns, repeat step 4's
-exchange and update the `IG_ACCESS_TOKEN` secret.
+This path gives no way to check how long is left — `debug_token` is a
+`graph.facebook.com` endpoint with no equivalent on `graph.instagram.com`. So
+the workflow verifies the token still *works* and prints a standing reminder,
+rather than reporting days-remaining the way the other path can.
 
-Fully unattended posting would need the token refreshed and written back
-automatically, which means a PAT with secrets-write permission — more moving
-parts, and worth adding only if manual refresh every couple of months proves
-annoying.
+Refresh it roughly every 50 days — the token must be at least 24 hours old, and
+refreshing resets the clock to 60 days from the refresh date:
+
+```
+GET https://graph.instagram.com/refresh_access_token
+  ?grant_type=ig_refresh_token
+  &access_token={current-long-lived-token}
+```
+
+Then update the `IG_ACCESS_TOKEN` secret with what it returns. Note this one
+needs no app secret, so it's a much lighter operation than the initial exchange.
+
+Miss the 60-day window entirely and there's no refresh path — you start again
+from step 4.
+
+Fully unattended posting would need the refresh automated and written back to
+the secret, which means a PAT with secrets-write permission — more moving parts,
+worth adding only if the manual refresh proves annoying.
 
 ## Other limits worth knowing
 

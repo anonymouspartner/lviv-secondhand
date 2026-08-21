@@ -16,10 +16,19 @@ name: Post to Instagram
 # unconfigured repo does not accumulate failed runs. Add a schedule below only
 # once you have posted successfully by hand a few times.
 #
+# WHICH API PATH THIS TARGETS
+# Meta ships two incompatible Instagram APIs. This targets **Instagram API with
+# Instagram Login** — host graph.instagram.com, permissions instagram_business_*,
+# no Facebook Page involved in the calls. The other path (Facebook Login, host
+# graph.facebook.com, permissions instagram_basic/instagram_content_publish)
+# needs different endpoints and will not work with these secrets. Your app
+# dashboard names which one you set up.
+#
 # SETUP: see docs/INSTAGRAM.md. In short you need an Instagram Business or
-# Creator account linked to a Facebook Page, a Meta app, and two repo secrets:
-#   IG_USER_ID       — the Instagram *Business* account id (not the handle)
-#   IG_ACCESS_TOKEN  — a long-lived token with content-publishing permission
+# Creator account, a Meta app set up for Instagram login, and two repo secrets:
+#   IG_USER_ID       — the Instagram user id from `me?fields=user_id`
+#   IG_ACCESS_TOKEN  — a long-lived Instagram User token with
+#                      instagram_business_content_publish
 #
 # NO APP REVIEW NEEDED. Meta's docs push you toward App Review with a screencast
 # submission, but that gate only applies to publishing on behalf of accounts you
@@ -28,9 +37,10 @@ name: Post to Instagram
 # the case here.
 #
 # TOKEN EXPIRY IS THE THING THAT BITES
-# Long-lived tokens last ~60 days. The pre-flight step below reports days
-# remaining on every run so it fails loudly and early rather than silently
-# going quiet two months from now.
+# Long-lived tokens last 60 days. Unlike the Facebook Login path there is no
+# debug_token endpoint here, so days-remaining cannot be reported — the
+# pre-flight verifies the token still works and prints a standing reminder
+# instead. Refresh roughly every 50 days; see docs/INSTAGRAM.md.
 
 on:
   workflow_dispatch:
@@ -59,7 +69,7 @@ permissions:
 
 env:
   SITE: https://www.lvivsecondhand.com
-  GRAPH: https://graph.facebook.com/v25.0
+  GRAPH: https://graph.instagram.com/v25.0
 
 jobs:
   post:
@@ -109,33 +119,36 @@ jobs:
           echo "IMAGE_URL=$URL" >> "$GITHUB_ENV"
           echo "Image OK: $URL"
 
-      # Surfaces days-remaining so the ~60-day expiry is visible on every run
-      # instead of discovered when a post silently stops going out.
+      # /debug_token lives on graph.facebook.com and has no equivalent here, so
+      # this path cannot report days-remaining. `me` is the substitute: it fails
+      # on an expired or wrong-scoped token, and the user_id it returns is
+      # checked against IG_USER_ID — catching the case where the two secrets
+      # come from different accounts, which otherwise fails much later with a
+      # permissions error that points at the wrong thing.
       - name: Pre-flight — token validity
         if: steps.guard.outputs.ready == 'true'
         env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
         run: |
-          RESP=$(curl -sG "$GRAPH/debug_token" \
-            --data-urlencode "input_token=$IG_ACCESS_TOKEN" \
+          RESP=$(curl -sG "$GRAPH/me" \
+            --data-urlencode "fields=user_id,username" \
             --data-urlencode "access_token=$IG_ACCESS_TOKEN")
-          EXP=$(echo "$RESP" | jq -r '.data.expires_at // empty')
-          VALID=$(echo "$RESP" | jq -r '.data.is_valid // empty')
-          if [ "$VALID" != "true" ]; then
-            echo "::error::Token rejected by Meta: $(echo "$RESP" | jq -c '.data.error // .error // .')"
+          # Not UID: that name is readonly in bash and the assignment fails.
+          TOKEN_UID=$(echo "$RESP" | jq -r '.user_id // empty')
+          NAME=$(echo "$RESP" | jq -r '.username // empty')
+          if [ -z "$TOKEN_UID" ]; then
+            echo "::error::Token rejected by Instagram: $(echo "$RESP" | jq -c '.error // .')"
             exit 1
           fi
-          if [ -n "$EXP" ] && [ "$EXP" != "0" ]; then
-            DAYS=$(( (EXP - $(date +%s)) / 86400 ))
-            echo "Token valid — about $DAYS day(s) left."
-            # A real if, not `[ ... ] && echo`: under `set -e` a false trailing
-            # test returns 1 and fails the step on every *healthy* run.
-            if [ "$DAYS" -lt 10 ]; then
-              echo "::warning::Token expires in $DAYS day(s). Refresh it (docs/INSTAGRAM.md) or posting will start failing."
-            fi
-          else
-            echo "Token valid — no expiry reported (long-lived / never-expiring)."
+          if [ "$TOKEN_UID" != "$IG_USER_ID" ]; then
+            echo "::error::Token belongs to Instagram user $TOKEN_UID but IG_USER_ID is set to $IG_USER_ID. The two secrets are from different accounts."
+            exit 1
           fi
+          echo "Token valid — authenticated as @$NAME ($TOKEN_UID)."
+          # Instagram Login tokens last 60 days and this path exposes no expiry
+          # to check, so the reminder is unconditional rather than a threshold.
+          echo "::notice::Instagram Login tokens expire 60 days after issue and cannot be inspected here. Refresh via the refresh_access_token endpoint (docs/INSTAGRAM.md) roughly every 50 days."
 
       # Step 1 of 2: create the media container. Meta downloads the image here.
       - name: Create media container
