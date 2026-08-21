@@ -1195,27 +1195,6 @@ export default {
         if (row.alert) await broadcastFlashDeal(env, ctx, row.store_id, row.text, row.expires_at);
         return new Response(`✅ Flash deal approved and published for ${row.store_id}.`, { status: 200 });
       }
-      // Creates a queue row for an ad the workflow is already rendering — the
-      // hand-run test path. Without it a hand-queued ad has no row, so its
-      // approve link 404s and the whole approve→publish half cannot be
-      // exercised without taking a real payment.
-      //
-      // POST with the key in a header, not a URL: this one IS the admin
-      // credential, and it travels machine-to-machine, never through Telegram.
-      if (url.pathname === '/api/ad/register' && request.method === 'POST') {
-        if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
-          return json({ ok: false, reason: 'unauthorized' }, 401, origin);
-        }
-        const storeId = body && body.storeId;
-        const text = body && body.text;
-        if (typeof storeId !== 'string' || !/^[a-z0-9_]{1,24}$/i.test(storeId) || typeof text !== 'string' || !text.trim()) {
-          return json({ ok: false, reason: 'bad_request' }, 400, origin);
-        }
-        const made = await createAdRow(env, {
-          storeId, text: text.slice(0, 120), tier: (body && body.tier) || '',
-        });
-        return json({ ok: true, ...made }, 200, origin);
-      }
       // Owner taps the approve link on a queued Instagram advertisement. Same
       // GET-so-Telegram-linkifies-it shape and same ADMIN_KEY gate as
       // /flash-deal/approve above. This is the ONLY route from a paid ad to the
@@ -1524,6 +1503,27 @@ export default {
     // or sends /stop. Low-stakes (opting a chat id into a marketing message,
     // nothing sensitive), so no signature — the per-IP rate limit above and
     // basic shape validation are enough.
+      // Creates a queue row for an ad the workflow is already rendering — the
+    // hand-run test path. Without it a hand-queued ad has no row, so its
+    // approve link 404s and the whole approve→publish half cannot be
+    // exercised without taking a real payment.
+    //
+    // POST with the key in a header, not a URL: this one IS the admin
+    // credential, and it travels machine-to-machine, never through Telegram.
+    if (url.pathname === '/api/ad/register') {
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
+      const storeId = body && body.storeId;
+      const text = body && body.text;
+      if (typeof storeId !== 'string' || !/^[a-z0-9_]{1,24}$/i.test(storeId) || typeof text !== 'string' || !text.trim()) {
+        return json({ ok: false, reason: 'bad_request' }, 400, origin);
+      }
+      const made = await createAdRow(env, {
+        storeId, text: text.slice(0, 120), tier: (body && body.tier) || '',
+      });
+      return json({ ok: true, ...made }, 200, origin);
+    }
     if (url.pathname === '/api/sub') {
       const storeId = body && body.storeId;
       const chatId = body && body.chatId;
