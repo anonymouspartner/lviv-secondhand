@@ -59,9 +59,9 @@ jobs:
       - name: Check store pages are in sync with stores.json
         run: |
           node scripts/build-store-pages.mjs
-          if [ -n "$(git status --porcelain -- store sitemap.xml)" ]; then
-            echo "::error::store/ or sitemap.xml is stale. Run: node scripts/build-store-pages.mjs"
-            git status --porcelain -- store sitemap.xml
+          if [ -n "$(git status --porcelain -- store chain sitemap.xml)" ]; then
+            echo "::error::store/, chain/ or sitemap.xml is stale. Run: node scripts/build-store-pages.mjs"
+            git status --porcelain -- store chain sitemap.xml
             exit 1
           fi
           echo "Store pages are in sync."

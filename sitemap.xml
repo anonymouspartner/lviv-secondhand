@@ -25,6 +25,46 @@
     <priority>0.1</priority>
   </url>
   <url>
+    <loc>https://www.lvivsecondhand.com/chain/economclass/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/chain/svit-sekond-khendu/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/chain/yevro-trend-sekond-khend/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/chain/humana/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/chain/stok-ta-sekond-khend/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/chain/birka-lux/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/chain/yevrobrend/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/chain/myunkhen/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://www.lvivsecondhand.com/store/c62/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
