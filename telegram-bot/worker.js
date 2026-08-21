@@ -308,8 +308,16 @@ function cheapText() {
         return { s, days: Math.round((Date.parse(today) - Date.parse(last)) / 86400000) };
       }
       if (s.restockDate) {
-        const days = Math.round((Date.parse(today) - Date.parse(s.restockDate)) / 86400000);
-        return days >= 0 ? { s, days } : null;
+        // Days INTO THE CURRENT CYCLE, not days since the anchor. Without the
+        // modulo this reported elapsed time since a fixed date, so a store that
+        // restocked today ranked as the longest without a restock: c72 and c84
+        // (cycle 7, anchor 2026-08-07) read "14 days" on 2026-08-21 and headed
+        // the list, while the app showed them at day 0 of 7. 19 of 25 dated
+        // stores were overstated. getDayInfo() in index.html does this right.
+        const raw = Math.round((Date.parse(today) - Date.parse(s.restockDate)) / 86400000);
+        if (raw < 0) return null;
+        const cyc = (s.cycle >= 1 && s.cycle <= 90) ? s.cycle : 7;
+        return { s, days: raw % cyc };
       }
       if (s.restockDay) return { s, days: (idx - DAYS.indexOf(s.restockDay) + 7) % 7 };
       return null;
