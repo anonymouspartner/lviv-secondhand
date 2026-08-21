@@ -296,6 +296,19 @@ Approving the ad is **deliberately separate** from approving the flash deal for 
 | Queue for approval | `.github/workflows/instagram-ad.yml` (also hand-runnable for a test render) |
 | Publish after approval | `.github/workflows/instagram-ad-publish.yml` |
 
+**What queues an ad, and what doesn't:**
+
+| Event | Queues an ad? |
+| --- | --- |
+| Flash deal paid | Yes — the deal text is a required checkout field |
+| Tier bought (Verified+ / Featured / Spotlight, monthly, annual or one-off run) | Yes, **if** the store supplied the optional offer line |
+| Tier bought with no offer line | No — the Telegram notification says so, so you can ask the store for one |
+| **Subscription renewal** | **No** |
+
+Renewal is deliberately excluded. A subscription bills every month, so queueing there would hand you one approval per paying store per month, forever, each showing the same offer as the last. Recurring presence is what the weekly deals post already provides.
+
+An offer line is required because inventing copy for someone else's paid advertisement is not ours to write. A tier bought without one still gets every on-map placement it paid for.
+
 Needs one secret beyond the Instagram pair: **`WORKER_ADMIN_KEY`**, matching the Worker's `ADMIN_KEY` — it is what makes your approve link work and everyone else's fail.
 
 Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The app tells shoppers "paid placements are always labelled", and an ad that quietly drops the mark to perform better would break that promise.

@@ -511,6 +511,24 @@ async function applyPromoEvent(env, ev, ctx) {
       "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
       "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
     ).bind(storeId, tier, offer, until, o.subscription || null, cadence, run ? null : (o.customer || null)).run();
+    // A paid tier also queues an Instagram advertisement — on PURCHASE only.
+    //
+    // Deliberately not on renewal (invoice.paid, below). A subscription bills
+    // every month, so queueing there would hand you one approval per paying
+    // store per month, forever, each showing the same offer the last one did.
+    // That is a chore rather than a feature, and recurring presence is what the
+    // weekly deals post already provides.
+    //
+    // And only when the store supplied an offer line. It is optional at
+    // checkout, and inventing copy for someone else's paid advertisement is not
+    // ours to do — so a tier bought without one gets the on-map placement it
+    // paid for, and the notification below says why no ad appeared.
+    if (offer) {
+      ctx.waitUntil(
+        queueInstagramAd(env, { storeId, text: offer, tier })
+          .catch((e) => tgNotify(env, ctx, `⚠️ Could not queue the Instagram ad for ${storeId}: ${e.message}`))
+      );
+    }
     // A promotion fulfils itself, so this is information rather than a task.
     tgNotify(env, ctx,
       `💸 PROMOTION PAID — already live, nothing to do\n\n` +
@@ -519,8 +537,13 @@ async function applyPromoEvent(env, ev, ctx) {
       `Paid:  ${uah(o.amount_total)}\n` +
       (offer ? `Offer: ${offer}\n` : '') +
       `Until: ${until}\n` +
-      `\n${storeLink(storeId)}`);
+      (offer
+        ? `\n📣 An Instagram ad is being prepared — you'll get it here to approve.`
+        : `\n📣 No Instagram ad: this purchase carried no offer line. Ask the store for one and queue it by hand (Actions → Queue an Instagram ad).`) +
+      `\n\n${storeLink(storeId)}`);
   } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
+    // Renewal: extends the placement, queues no advertisement. See the comment
+    // at the purchase branch above for why.
     const subId = o.subscription;
     if (!subId) return;
     const row = await env.DB.prepare('SELECT cadence FROM promos WHERE sub_id = ?').bind(subId).first();
