@@ -1,0 +1,78 @@
+name: Publish an approved Instagram ad
+
+# The second half of the ad pipeline, and the only thing that can put a paid ad
+# on the feed. It fires solely from a repository_dispatch that the Worker sends
+# after a human opened /ad/approve with the admin key — there is no schedule and
+# no way to trigger this from a payment.
+#
+# It exists as a separate file rather than another trigger on instagram-post.yml
+# because a reusable workflow cannot also carry repository_dispatch. This is the
+# thin adapter: read the approved caption back off disk, hand both to the one
+# publisher that talks to Meta.
+#
+# client_payload: { ad_id, image, caption_path }
+
+on:
+  repository_dispatch:
+    types: [instagram_ad_publish]
+
+permissions:
+  contents: read
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.load.outputs.image }}
+      caption: ${{ steps.load.outputs.caption }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # The caption comes off disk, not out of the dispatch payload: the file is
+      # what the owner was shown in Telegram, so reading it back is what makes
+      # "you approve exactly what publishes" literally true.
+      - name: Load the approved image and caption
+        id: load
+        env:
+          IMG: ${{ github.event.client_payload.image }}
+          CAP: ${{ github.event.client_payload.caption_path }}
+          AD_ID: ${{ github.event.client_payload.ad_id }}
+        run: |
+          if [ -z "$IMG" ] || [ -z "$CAP" ]; then
+            echo "::error::dispatch payload is missing image or caption_path."
+            exit 1
+          fi
+          # Path containment: the payload arrives over the network, and this
+          # workflow reads whatever path it names. Confine it to the ads
+          # directory so a malformed or forged dispatch cannot make the job
+          # publish some other file from the repository.
+          # The prefix test alone is not containment: marketing/instagram/ads/../../x
+          # satisfies it while pointing anywhere in the tree, so `..` is rejected
+          # outright before the prefix is even considered.
+          for P in "$IMG" "$CAP"; do
+            case "$P" in *..*)
+              echo "::error::path $P contains '..' — refusing."; exit 1 ;; esac
+          done
+          case "$IMG" in marketing/instagram/ads/*.jpg) ;; *)
+            echo "::error::image path $IMG is outside marketing/instagram/ads/."; exit 1 ;; esac
+          case "$CAP" in marketing/instagram/ads/*.txt) ;; *)
+            echo "::error::caption path $CAP is outside marketing/instagram/ads/."; exit 1 ;; esac
+          if [ ! -f "$IMG" ] || [ ! -f "$CAP" ]; then
+            echo "::error::$IMG or $CAP is not in the repository — was the queue commit pushed?"
+            exit 1
+          fi
+          echo "image=$IMG" >> "$GITHUB_OUTPUT"
+          {
+            echo 'caption<<AD_CAPTION_EOF'
+            cat "$CAP"
+            echo 'AD_CAPTION_EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing approved ad $AD_ID"
+
+  publish:
+    needs: read
+    uses: ./.github/workflows/instagram-post.yml
+    secrets: inherit
+    with:
+      image: ${{ needs.read.outputs.image }}
+      caption: ${{ needs.read.outputs.caption }}

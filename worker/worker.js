@@ -100,6 +100,14 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS tg_restock_subs (chat_id TEXT NOT NULL, store_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', next TEXT NOT NULL, cycle INTEGER NOT NULL DEFAULT 7, created TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (chat_id, store_id))"
   ).run();
+  // Instagram advertisements awaiting the owner's approval. Nothing here ever
+  // publishes on its own: a row reaches 'published' only after a human opens
+  // the approve link, which is the whole point of the queue. The image is
+  // rendered by a GitHub Action (Workers cannot rasterize) at a path derived
+  // from the id, so no callback is needed to learn where it landed.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS instagram_ads (id TEXT PRIMARY KEY, store_id TEXT NOT NULL, ad_text TEXT NOT NULL, tier TEXT NOT NULL DEFAULT '', image_path TEXT NOT NULL, caption_path TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'rendering', created TEXT NOT NULL DEFAULT (datetime('now')), decided TEXT)"
+  ).run();
   // Crowdsourced moderation (Feature 6). A web-submitted correction sits as a
   // 'draft' (no contributor identity yet — the web app has no login) until
   // claimed by whoever opens the Telegram deep link, which is the first
@@ -282,6 +290,50 @@ async function dispatchMapPatch(env, storeId, updates) {
     body: JSON.stringify({ event_type: 'update_map_data', client_payload: { store_id: storeId, updates } }),
   });
   if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
+}
+
+// Same GitHub dispatch mechanism as dispatchMapPatch, different event. Split
+// rather than parameterised because the two carry unrelated payloads and are
+// consumed by different workflows; folding them together would only hide which
+// one a caller meant.
+async function dispatchGitHub(env, eventType, payload) {
+  if (!env.GH_PAT) throw new Error('GH_PAT not configured');
+  const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GH_PAT}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'lviv-secondhand-worker',
+    },
+    body: JSON.stringify({ event_type: eventType, client_payload: payload }),
+  });
+  if (res.status !== 204) throw new Error(`dispatch ${eventType} failed: ${res.status}`);
+}
+
+// Queues one paid advertisement for the owner's approval. Returns the row id.
+//
+// Both artefacts live at paths derived from the id and are written by the
+// GitHub Action, which has stores.json and so can name the shop properly — this
+// Worker only knows store ids. Committing the caption beside the image is what
+// makes "you approve exactly what publishes" true: the Telegram message quotes
+// that file, and the publish step reads the same file back.
+async function queueInstagramAd(env, { storeId, text, tier }) {
+  await ensureSchema(env);
+  const id = 'ad_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  const imagePath = `marketing/instagram/ads/${id}.jpg`;
+  const captionPath = `marketing/instagram/ads/${id}.txt`;
+  await env.DB.prepare(
+    'INSERT INTO instagram_ads (id, store_id, ad_text, tier, image_path, caption_path, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, storeId, text, tier || '', imagePath, captionPath, 'rendering').run();
+  // The Action renders, commits, waits for Pages, then messages the owner with
+  // the approve/reject links below. It publishes nothing.
+  await dispatchGitHub(env, 'instagram_ad', {
+    ad_id: id, store_id: storeId, text, tier: tier || '',
+    image_path: imagePath, caption_path: captionPath,
+  });
+  return id;
 }
 
 // Stripe renders its hosted checkout in the buyer's browser locale unless told
@@ -519,6 +571,16 @@ async function applyFlashDealEvent(env, ev, ctx) {
     }
     return;
   }
+
+  // A paid flash deal also queues an Instagram advertisement. Queued, not
+  // posted: it lands in instagram_ads as 'rendering' and reaches the feed only
+  // if the owner approves it, which is deliberately a separate decision from
+  // approving the deal for the map — the same words can be fine on a store
+  // page and wrong on a public feed.
+  ctx.waitUntil(
+    queueInstagramAd(env, { storeId, text, tier: 'flash' })
+      .catch((e) => tgNotify(env, ctx, `⚠️ Could not queue the Instagram ad for ${storeId}: ${e.message}`))
+  );
 
   const approveLink = env.ADMIN_KEY
     ? `${WORKER_URL}/flash-deal/approve?id=${encodeURIComponent(id)}&key=${encodeURIComponent(env.ADMIN_KEY)}`
@@ -1075,6 +1137,34 @@ export default {
         await env.DB.prepare("UPDATE flash_deals SET status = 'approved' WHERE id = ?").bind(id).run();
         if (row.alert) await broadcastFlashDeal(env, ctx, row.store_id, row.text, row.expires_at);
         return new Response(`✅ Flash deal approved and published for ${row.store_id}.`, { status: 200 });
+      }
+      // Owner taps the approve link on a queued Instagram advertisement. Same
+      // GET-so-Telegram-linkifies-it shape and same ADMIN_KEY gate as
+      // /flash-deal/approve above. This is the ONLY route from a paid ad to the
+      // public feed — nothing in the queue publishes without a human here.
+      if (url.pathname === '/ad/approve' || url.pathname === '/ad/reject') {
+        if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) return new Response('unauthorized', { status: 401 });
+        const id = url.searchParams.get('id') || '';
+        if (!id) return new Response('bad request', { status: 400 });
+        await ensureSchema(env);
+        const row = await env.DB.prepare('SELECT * FROM instagram_ads WHERE id = ?').bind(id).first();
+        if (!row) return new Response('not found', { status: 404 });
+        // Idempotent: tapping an old link twice, or after deciding, says so
+        // rather than double-posting. Telegram link previews can and do fetch
+        // these URLs, so a second GET must never be a second publish.
+        if (row.status !== 'pending') return new Response(`already ${row.status}`, { status: 200 });
+
+        if (url.pathname === '/ad/reject') {
+          await env.DB.prepare("UPDATE instagram_ads SET status = 'rejected', decided = datetime('now') WHERE id = ?").bind(id).run();
+          return new Response(`❌ Ad ${id} rejected. Nothing was posted.`, { status: 200 });
+        }
+        try {
+          await dispatchGitHub(env, 'instagram_ad_publish', { image: row.image_path, caption_path: row.caption_path, ad_id: id });
+        } catch (e) {
+          return new Response('dispatch failed — check GH_PAT and the instagram-ad workflow logs', { status: 502 });
+        }
+        await env.DB.prepare("UPDATE instagram_ads SET status = 'published', decided = datetime('now') WHERE id = ?").bind(id).run();
+        return new Response(`✅ Ad ${id} approved — publishing to Instagram now.`, { status: 200 });
       }
       // Owner taps ✅ / ❌ in Telegram on a community submission. Approval is
       // the only path to GitHub (or to a PIN) — nothing the app POSTs reaches
