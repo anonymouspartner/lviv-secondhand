@@ -142,7 +142,11 @@ function parseHours(hours) {
     if (raw === 'closed') { rows.push({ key, ua, value: 'Зачинено', closed: true }); known = true; continue; }
     const m = HOURS_RE.exec(raw);
     if (m) { rows.push({ key, ua, value: `${m[1]}–${m[2]}`, open: m[1], close: m[2] }); known = true; continue; }
-    rows.push({ key, ua, value: 'Невідомо', unknown: true });
+    // Placeholder rather than "Невідомо", to fill the row without asserting
+    // anything. It stays flagged unknown:true, which keeps it out of
+    // openingHoursSpecification below and renders it dimmed — a guessed hour in
+    // structured data is worse than none, and this is a space-filler, not data.
+    rows.push({ key, ua, value: 'звичайно', unknown: true });
   }
   return { known, rows };
 }
