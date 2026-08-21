@@ -1,0 +1,85 @@
+name: Check the Instagram token
+
+# Instagram Login tokens expire 60 days after issue, and this API path has no
+# way to ask how long is left — /debug_token lives on graph.facebook.com and has
+# no equivalent on graph.instagram.com. So an automated poster that works
+# perfectly today just stops, silently, about two months later.
+#
+# This is the watchdog for that. It calls `me` weekly and, when the token stops
+# working, messages the owner on Telegram — which is the point: the bot is
+# already the channel you actually read, so Instagram's health lands somewhere
+# you'll see it rather than in a run log nobody opens.
+#
+# It cannot report days-remaining — nothing on this path can — so it answers the
+# only question that is actually answerable: does the token still work right
+# now. That turns a silent two-month failure into a message the same week.
+#
+# SECRETS (all optional — absent means this quietly does nothing):
+#   IG_USER_ID / IG_ACCESS_TOKEN  — same two the poster uses
+#   BOT_TOKEN / OWNER_ID          — same names the Workers use, so there is one
+#                                   set of Telegram credentials, not two
+
+on:
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC (~10:00 Europe/Kyiv)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GRAPH: https://graph.instagram.com/v26.0
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the token, and shout on Telegram if it is dead
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          OWNER_ID: ${{ secrets.OWNER_ID }}
+        run: |
+          if [ -z "$IG_ACCESS_TOKEN" ]; then
+            echo "::notice::IG_ACCESS_TOKEN not set — nothing to check."
+            exit 0
+          fi
+
+          # Telegram is best-effort throughout: a watchdog that fails because
+          # its own alerting is misconfigured is worse than one that stays
+          # quiet, since the run log still records what happened either way.
+          notify() {
+            [ -n "$BOT_TOKEN" ] && [ -n "$OWNER_ID" ] || return 0
+            curl -s -o /dev/null -X POST \
+              "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+              -H 'Content-Type: application/json' \
+              -d "$(jq -nc --arg c "$OWNER_ID" --arg t "$1" \
+                    '{chat_id:$c, text:$t, disable_web_page_preview:true}')" || true
+          }
+
+          RESP=$(curl -sG "$GRAPH/me" \
+            --data-urlencode "fields=user_id,username" \
+            --data-urlencode "access_token=$IG_ACCESS_TOKEN" || echo '{}')
+          NAME=$(echo "$RESP" | jq -r '.username // empty')
+
+          if [ -n "$NAME" ]; then
+            echo "Token OK — @$NAME."
+            echo "### Instagram token OK" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Authenticated as \`@$NAME\`. Tokens last 60 days from issue; refresh via \`refresh_access_token\` (docs/INSTAGRAM.md)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          ERR=$(echo "$RESP" | jq -c '.error // .' 2>/dev/null || echo 'no response')
+          echo "::error::Instagram token is not working: $ERR"
+
+          # printf, not a multi-line quoted string: unindented continuation
+          # lines terminate the YAML block scalar and break the whole file.
+          MSG=$(printf '%s\n\n%s\n\n%s\n\n%s' \
+            "⚠️ Instagram token is not working." \
+            "The weekly deals post will not go out until it is refreshed." \
+            "Fix: Meta app dashboard → Instagram → API setup with Instagram login → Generate token, then update the IG_ACCESS_TOKEN repo secret." \
+            "Meta said: $ERR")
+          notify "$MSG"
+          exit 1

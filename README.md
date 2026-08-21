@@ -40,11 +40,12 @@ No app store, no install required to use it in a browser — but adding it to yo
 - ⚖️ Supports both **by-KG** and **itemized** stores
 - 🌐 **EN / UA** language toggle
 - ✅ Mark stores as **visited**
-- 🔔 **Restock alerts** — follow a store and get a push notification the morning it restocks (opt-in; installed PWA required on iOS 16.4+)
+- 🔔 **Restock alerts** — follow a store and hear the morning it restocks. Browser push where the browser supports it; where it doesn't (iOS without the app installed) the same button hands you a Telegram link instead, so the alert is available on every device
 - ➕ **Add**, ✏️ **edit**, and 🗑️ **remove/hide** stores
 - 🤝 **Contribute** additions/edits for review, and **back up** everything on your device
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
 - 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): a tap-through menu plus `/today`, `/day` (any weekday), `/rare` and `/cheap`
+- 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): the week's best by-weight prices, posted automatically every Monday
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
 - ⚡ **Flash deals** — a store can run a short paid sale (3h / 24h) with a live countdown banner and toast; follow a store on Telegram to hear the moment one goes live
 - ✏️ **Suggest a correction** — send a fix via Telegram; a moderator reviews it, or a trusted contributor's own edit publishes instantly
@@ -174,7 +175,7 @@ A **short, paid sale window** — separate from the ongoing promotion tiers abov
 
 **Shoppers see it two ways**: a high-contrast banner with a live countdown on the store's own page, and a floating toast shown once per app load for any store with a deal currently running — both disappear on their own the moment the deal expires, nothing to clean up.
 
-**🔔 Follow a store's flash deals on Telegram** — tap the link on any store page to open [@Secondhandlvivbot](https://t.me/Secondhandlvivbot) and subscribe (`/stop` to unsubscribe from everything). This is separate from the restock-alert 🔔 above: it only ever fires for a paid "+ Telegram alert" deal, and it reaches you on Telegram directly, which works everywhere (no browser notification permission needed — the restock alerts need one, and iOS Safari in particular makes that a real hurdle).
+**🔔 Follow a store's flash deals on Telegram** — tap the link on any store page to open [@Secondhandlvivbot](https://t.me/Secondhandlvivbot) and subscribe (`/stop` to unsubscribe from everything). This is separate from the restock-alert 🔔 above: it only ever fires for a paid "+ Telegram alert" deal, never for an ordinary restock. Both are now available on Telegram — restock alerts use `rsub_<id>`, flash deals use `sub_<id>`, and `/stop` clears both at once.
 
 ### For maintainers
 
@@ -184,6 +185,7 @@ A **short, paid sale window** — separate from the ongoing promotion tiers abov
 | Webhook → publish/queue | `applyFlashDealEvent()`, `GET /flash-deal/approve` |
 | Owner PIN (no UI yet — set directly) | D1 table `store_pins` |
 | Subscribers + broadcast | D1 table `store_subs`, `broadcastFlashDeal()`, bot `/start sub_<id>` · `/stop` |
+| Restock alerts (Telegram) | D1 table `tg_restock_subs`, `/api/rsub`, bot `/start rsub_<id>`, swept by the daily cron beside `push_subs` |
 | Shopper-facing banner/toast | `index.html` (`activeFlashDeal()`, `tickFlashCountdowns()`) |
 
 Needs `GH_PAT` (on both Workers — publishing a deal dispatches through the same pipeline as everything else below) and, for the owner-review path, the existing `ADMIN_KEY`. Both optional; the feature stays inert without them.
@@ -250,6 +252,30 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 
 **Where it is now.** The purchase path is live end to end and self-fulfils. The owner is closing the first deals by hand to validate pricing before the agent starts selling. Full rate card, unit economics and rollout plan: **[`docs/ADVERTISING.md`](docs/ADVERTISING.md)**.
 
+## 📸 Instagram
+
+[@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/) — the same data the map renders, in a form people scroll past on a phone.
+
+**The weekly deals post is automatic.** `.github/workflows/deals-image.yml` regenerates `marketing/deals-this-week.jpg` every Monday from the same `/cheap` ranking the bot uses, commits it (GitHub Pages then serves it at a stable URL), and calls `instagram-post.yml` to publish it with a caption written from that week's actual ranking. It only posts when the ranking has **changed** — reposting an identical image every week trains people to scroll past it.
+
+Anything else is posted by hand: **Actions → Post to Instagram → Run workflow**, picking one of the images in `marketing/instagram/`. Tick **`dry_run`** to run the pre-flights and stop before posting — use it after changing a secret, so verifying a config change doesn't cost a real post.
+
+### For maintainers
+
+| Piece | What it is |
+| --- | --- |
+| `tools/social/promo.mjs` | 4 evergreen posts about the app × 2 sizes, counts read live from `stores.json` |
+| `tools/social/avatar.mjs` | Profile photo, 3 variants, drawn from `favicon.svg`'s vector geometry |
+| `.github/workflows/instagram-post.yml` | Publishes one image. `workflow_dispatch` + `workflow_call`; no-ops without secrets |
+| `.github/workflows/instagram-token-check.yml` | Weekly token check that **messages the owner on Telegram** when it breaks |
+
+Setup lives in **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Two things that will bite otherwise:
+
+- **This uses the *Instagram Login* API path** (`graph.instagram.com`), not Facebook Login. The two are incompatible and most tutorials online document the other one — the permission names, the token source and the endpoints all differ.
+- **Tokens expire 60 days after issue, and this path cannot report how long is left.** That's what the token-check workflow is for: it turns a silent two-month failure into a Telegram message the same week. Refresh with `refresh_access_token` (no app secret needed).
+
+Images must be **JPEG** — the API rejects PNG with a generic container error that never mentions the format.
+
 ## 💬 Telegram bot
 
 **[@Secondhandlvivbot](https://t.me/Secondhandlvivbot)** — the app's companion. Every result links back into the map, so a shopper can go from a Telegram message to directions in two taps. The interface is Ukrainian.
@@ -257,6 +283,8 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 **Tap-through menu.** `/start` attaches a persistent reply-keyboard, so the common paths need no typed commands at all: 📅 by weekday (opens a day submenu), 💰 cheapest now, 🐢 rarely restocked, ➕ add a store, 💬 leave feedback, ❓ help. Each button just sends its own label back as ordinary text, which keeps the whole menu in the stateless tier — no bot token required to answer it.
 
 > Telegram never pushes a changed keyboard into an existing chat on its own; it only updates when the bot sends a message carrying one. After a menu change, send `/start` to see it.
+
+**Two deep links the app hands out** (not typed commands): `?start=rsub_<storeId>` follows a store for **restock** alerts — the fallback the app offers wherever browser push is unavailable, which is most iPhones — and `?start=sub_<storeId>` follows it for paid **flash deals**. The bot computes the restock prediction itself from the chain's published calendar, then a dated restock, then a bare weekday; daily-drop stores decline politely, since they have no cycle to predict.
 
 **Anyone can use:**
 
@@ -270,7 +298,7 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 | `/materials` | Printable flyers, posters and QR stickers |
 | `/feedback` | Send the maintainer a note about the bot or the map |
 | `/leaderboard` | Top 10 community contributors by points |
-| `/stop` | Unsubscribe from every store's flash-deal alerts |
+| `/stop` | Unsubscribe from everything — restock alerts *and* flash-deal alerts |
 | `/help` | Command list and info |
 
 **Field agent & owner only** — these appear in the menu only for authorised Telegram IDs, and are refused for anyone else. For those users the reply-keyboard also grows a row: **🧭 Agent menu** (agents and the owner) and **⚙️ Admin menu** (owner only), which are just one-tap aliases for `/agent` and `/admin` and go through the same authorization checks.
@@ -386,7 +414,8 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - ⚖️ Підтримка магазинів **на кіло** та **поштучно**
 - 🌐 Перемикач мови **EN / UA**
 - ✅ Позначення магазинів як **відвіданих**
-- 🔔 **Сповіщення про завезення** — відстежуйте магазин і отримуйте push-сповіщення того ранку, коли буде завезення (за згодою; на iOS 16.4+ потрібен встановлений застосунок)
+- 🔔 **Сповіщення про завезення** — стежте за магазином і дізнавайтеся про завіз того ж ранку. Через push там, де браузер це вміє; де не вміє (iOS без встановленого застосунку) та сама кнопка пропонує Telegram, тож сповіщення доступні на будь-якому пристрої
+- 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): найкращі ціни на вагу тижня, автоматично щопонеділка
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
@@ -495,7 +524,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **Покупці бачать це двома способами**: яскравий банер з таймером на сторінці магазину та плаваюче повідомлення, що показується раз на завантаження застосунку для будь-якого магазину з активною знижкою — обидва зникають самі, щойно знижка завершується.
 
-**🔔 Стежте за спалах-знижками магазину в Telegram** — натисніть посилання на сторінці будь-якого магазину, щоб відкрити [@Secondhandlvivbot](https://t.me/Secondhandlvivbot) і підписатися (`/stop`, щоб відписатися від усього). Це окремо від сповіщень про завезення 🔔 вище — тут повідомлення надходить лише для платної знижки «+ сповіщення в Telegram», і приходить прямо в Telegram, що працює всюди (дозвіл браузера на сповіщення не потрібен — на відміну від сповіщень про завезення, де він потрібен, а на iOS Safari це особливо відчутне обмеження).
+**🔔 Стежте за спалах-знижками магазину в Telegram** — натисніть посилання на сторінці будь-якого магазину, щоб відкрити [@Secondhandlvivbot](https://t.me/Secondhandlvivbot) і підписатися (`/stop`, щоб відписатися від усього). Це окремо від сповіщень про завезення 🔔 вище — тут повідомлення надходить лише для платної знижки «+ сповіщення в Telegram», а не для звичайного завозу. Обидва тепер доступні в Telegram: завіз — `rsub_<id>`, знижки — `sub_<id>`, а `/stop` вимикає одразу обидва.
 
 ## ✏️ Спільнотні правки та рейтинг
 
@@ -543,6 +572,18 @@ PWA (прогресивний веб-додаток) для пошуку та в
 **Чому магазин платить.** Покупці вже на карті й шукають саме те, що продає цей магазин, а рядок з пропозицією (`-10% із застосунком`) робить віддачу вимірюваною — магазин може рахувати, хто його згадав.
 
 **Де це зараз.** Шлях оплати працює повністю й виконується автоматично. Власник закриває перші угоди вручну, щоб перевірити ціни, перш ніж продажем займеться агент. Повний прайс і план: **[`docs/ADVERTISING.md`](docs/ADVERTISING.md)** (англійською).
+
+## 📸 Instagram
+
+[@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/) — ті самі дані, що й на карті, лише у формі, яку гортають у телефоні.
+
+**Щотижневий пост із цінами — автоматичний.** `.github/workflows/deals-image.yml` щопонеділка перебудовує `marketing/deals-this-week.jpg` за тим самим рейтингом `/cheap`, що й бот, комітить його (далі GitHub Pages віддає його за сталою адресою) і викликає `instagram-post.yml`, щоб опублікувати з підписом, згенерованим із рейтингу саме цього тижня. Публікується лише тоді, коли рейтинг **змінився**.
+
+Решта — вручну: **Actions → Post to Instagram → Run workflow**. Позначка **`dry_run`** проганяє перевірки й зупиняється перед публікацією — зручно після зміни секрета, щоб перевірка налаштувань не коштувала справжнього допису.
+
+Налаштування — у **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Два підводні камені: використовується шлях **Instagram Login** (`graph.instagram.com`), а не Facebook Login — вони несумісні, і більшість інструкцій в інтернеті описують саме інший; і **токен діє 60 днів**, а дізнатися залишок цим шляхом неможливо, тому щотижневий `instagram-token-check.yml` пише власнику в Telegram, щойно токен перестає працювати.
+
+Зображення мають бути у форматі **JPEG** — PNG API відхиляє.
 
 ## 💬 Телеграм-бот
 

@@ -91,6 +91,15 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS store_subs (store_id TEXT NOT NULL, chat_id TEXT NOT NULL, created TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (store_id, chat_id))"
   ).run();
+  // Telegram chat ids following a store for RESTOCK alerts — the Telegram twin
+  // of push_subs. It exists because web push is unavailable on iOS unless the
+  // PWA is installed, which left a large share of shoppers with no restock
+  // alert at all; store_subs next door is a different thing (paid flash deals).
+  // Each row carries its own next/cycle so the daily sweep can roll it forward
+  // without needing the store list, exactly as push_subs.stores does.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS tg_restock_subs (chat_id TEXT NOT NULL, store_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', next TEXT NOT NULL, cycle INTEGER NOT NULL DEFAULT 7, created TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (chat_id, store_id))"
+  ).run();
   // Crowdsourced moderation (Feature 6). A web-submitted correction sits as a
   // 'draft' (no contributor identity yet — the web app has no login) until
   // claimed by whoever opens the Telegram deep link, which is the first
@@ -1354,6 +1363,32 @@ export default {
         .bind(storeId, String(chatId)).run();
       return new Response(null, { status: 204, headers: cors(origin) });
     }
+    // Telegram restock follow. The bot computes next/cycle from its own store
+    // data and posts them here, because this Worker has the D1 binding and the
+    // bot has the store list — neither has both.
+    if (url.pathname === '/api/rsub') {
+      const storeId = body && body.storeId;
+      const chatId = body && body.chatId;
+      if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)
+          || (typeof chatId !== 'string' && typeof chatId !== 'number')) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      const next = body && body.next;
+      if (typeof next !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(next)) {
+        return new Response('bad request', { status: 400, headers: cors(origin) });
+      }
+      const cycleRaw = Number(body && body.cycle);
+      const cycle = (cycleRaw >= 1 && cycleRaw <= 90) ? Math.round(cycleRaw) : 7;
+      const name = String((body && body.name) || '').slice(0, 120);
+      await ensureSchema(env);
+      // REPLACE, not DO NOTHING: following again should refresh a stale
+      // next/cycle rather than silently keep the old prediction.
+      await env.DB.prepare(
+        'INSERT INTO tg_restock_subs (chat_id, store_id, name, next, cycle) VALUES (?, ?, ?, ?, ?) ' +
+        'ON CONFLICT(chat_id, store_id) DO UPDATE SET name = excluded.name, next = excluded.next, cycle = excluded.cycle'
+      ).bind(String(chatId), storeId, name, next, cycle).run();
+      return new Response(null, { status: 204, headers: cors(origin) });
+    }
     if (url.pathname === '/api/unsub-all') {
       const chatId = body && body.chatId;
       if (typeof chatId !== 'string' && typeof chatId !== 'number') {
@@ -1361,6 +1396,8 @@ export default {
       }
       await ensureSchema(env);
       await env.DB.prepare('DELETE FROM store_subs WHERE chat_id = ?').bind(String(chatId)).run();
+      // /stop says "unsubscribe from everything", so it has to mean both lists.
+      await env.DB.prepare('DELETE FROM tg_restock_subs WHERE chat_id = ?').bind(String(chatId)).run();
       return new Response(null, { status: 204, headers: cors(origin) });
     }
 
@@ -1664,6 +1701,41 @@ export default {
         tag: 'restock-' + today,
       });
       ctx.waitUntil(sendPush(r, payload, env).catch(() => {}));
+    }
+
+    // Same sweep for Telegram restock followers. Kept as a separate loop rather
+    // than merged into the one above because the two stores are shaped
+    // differently — push_subs packs every follow into one JSON column keyed by
+    // endpoint, tg_restock_subs is one row per (chat, store) — and forcing them
+    // through one code path would obscure both.
+    const tgRes = await env.DB.prepare(
+      'SELECT chat_id, store_id, name, next, cycle FROM tg_restock_subs WHERE next <= ?'
+    ).bind(today).all();
+    const due = (tgRes && tgRes.results) || [];
+    // Group by chat so someone following four stores that restock today gets
+    // one message, not four.
+    const byChat = new Map();
+    for (const row of due) {
+      if (!byChat.has(row.chat_id)) byChat.set(row.chat_id, []);
+      byChat.get(row.chat_id).push(row);
+    }
+    for (const [chatId, rows] of byChat) {
+      const names = rows.map((r) => r.name || r.store_id);
+      const text = names.length === 1
+        ? `🛍️ ${names[0]} — сьогодні завіз!\n\nНайбільший вибір саме зараз.\n${storeLink(rows[0].store_id)}\n\n${names[0]} restocks today — best choice right now.\n\nВідписатися · unsubscribe — /stop`
+        : `🛍️ Сьогодні завіз у ${names.length} магазинах, за якими ви стежите:\n\n${names.map((n) => '• ' + n).join('\n')}\n\n${APP_URL}\n\nВідписатися · unsubscribe — /stop`;
+      ctx.waitUntil(tgSend(env, chatId, text).catch(() => {}));
+      // Roll each row forward past today so it fires again next cycle rather
+      // than every day from now on.
+      for (const r of rows) {
+        const c = (r.cycle >= 1 && r.cycle <= 90) ? r.cycle : 7;
+        let n = r.next;
+        while (n <= today) n = addDaysStr(n, c);
+        ctx.waitUntil(
+          env.DB.prepare('UPDATE tg_restock_subs SET next = ? WHERE chat_id = ? AND store_id = ?')
+            .bind(n, r.chat_id, r.store_id).run().catch(() => {})
+        );
+      }
     }
   },
 };

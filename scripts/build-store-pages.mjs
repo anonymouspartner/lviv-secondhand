@@ -351,6 +351,8 @@ ${nearby.map(({ store: o, m }) =>
   </ul>
 ` : ''}
   <footer>
+    <a href="https://www.instagram.com/secondhandlvivbot/">Instagram</a> ·
+    <a href="https://t.me/Secondhandlvivbot">Telegram</a><br>
     Дані оновлюються спільнотою. Помітили помилку — виправте у
     <a href="${esc(appUrl)}">застосунку</a>.<br>
     <a href="${ORIGIN}/">← Усі секонд-хенди Львова на карті</a>
@@ -487,6 +489,8 @@ ${rows}
   </table>
 
   <footer>
+    <a href="https://www.instagram.com/secondhandlvivbot/">Instagram</a> ·
+    <a href="https://t.me/Secondhandlvivbot">Telegram</a><br>
     Дані оновлюються спільнотою. Помітили помилку — виправте у
     <a href="${ORIGIN}/">застосунку</a>.<br>
     <a href="${ORIGIN}/store/">← Усі секонд-хенди Львова списком</a>

@@ -1,9 +1,9 @@
 name: Refresh weekly deals image
 
-# Regenerates marketing/deals-this-week.png from the app's /cheap ranking (read
+# Regenerates marketing/deals-this-week.jpg from the app's /cheap ranking (read
 # out of index.html) and commits it if it changed. Because it's committed to the
 # repo root, GitHub Pages serves it at a stable, always-current URL:
-#   https://www.lvivsecondhand.com/marketing/deals-this-week.png
+#   https://www.lvivsecondhand.com/marketing/deals-this-week.jpg
 # — handy for a weekly Instagram/Telegram post. Also runnable on demand.
 on:
   schedule:
@@ -16,6 +16,9 @@ permissions:
 jobs:
   deals:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+      caption: ${{ steps.caption.outputs.text }}
     defaults:
       run:
         working-directory: tools/social
@@ -36,14 +39,46 @@ jobs:
         run: node deals-image.mjs
 
       - name: Commit if changed
+        id: commit
         run: |
           cd "$GITHUB_WORKSPACE"
-          if git diff --quiet -- marketing/deals-this-week.png; then
-            echo "Ranking unchanged — nothing to commit."
+          if git diff --quiet -- marketing/deals-this-week.jpg marketing/deals-caption.txt; then
+            echo "Ranking unchanged — nothing to commit, nothing to post."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add marketing/deals-this-week.png
+          git add marketing/deals-this-week.jpg marketing/deals-caption.txt
           git commit -m "Refresh weekly deals image [skip ci]"
           git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # Meta fetches image_url over HTTP, so the commit above has to land and
+      # Pages has to serve it before the post job runs. Pages usually publishes
+      # within a minute; the poster's own pre-flight fails loudly if it hasn't.
+      - name: Let Pages publish the new image
+        if: steps.commit.outputs.changed == 'true'
+        run: sleep 90
+
+      - name: Hand the caption to the post job
+        id: caption
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo 'text<<CAPTION_EOF'
+            cat marketing/deals-caption.txt
+            echo 'CAPTION_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  # Only when the ranking actually moved: reposting an identical image every
+  # Monday trains people to scroll past it.
+  post:
+    needs: deals
+    if: needs.deals.outputs.changed == 'true'
+    uses: ./.github/workflows/instagram-post.yml
+    secrets: inherit
+    with:
+      image: marketing/deals-this-week.jpg
+      caption: ${{ needs.deals.outputs.caption }}
