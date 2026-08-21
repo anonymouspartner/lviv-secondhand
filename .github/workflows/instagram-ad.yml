@@ -12,8 +12,9 @@ name: Queue an Instagram ad for approval
 # client_payload: { ad_id, store_id, text, tier, image_path, caption_path }
 #
 # SECRETS: BOT_TOKEN / OWNER_ID (same pair the token watchdog uses),
-#          WORKER_ADMIN_KEY (must equal the Worker's ADMIN_KEY — it is what
-#          makes the approve link work, and what stops anyone else's)
+#          ADMIN_KEY (the same repo secret deploy-worker.yml installs on the
+#          Worker, so the two match by construction — it is what lets this
+#          workflow register a queue row, and what stops anyone else's)
 
 on:
   repository_dispatch:
@@ -53,7 +54,15 @@ jobs:
           D_TEXT:  ${{ github.event.client_payload.text }}
           D_TIER:  ${{ github.event.client_payload.tier }}
           D_TOKEN: ${{ github.event.client_payload.token }}
-          ADMIN_KEY: ${{ secrets.WORKER_ADMIN_KEY }}
+          # ADMIN_KEY first, and it is the authoritative name: deploy-worker.yml
+          # pipes secrets.ADMIN_KEY into the Worker with `wrangler secret put
+          # ADMIN_KEY`, so that secret IS the value the Worker compares against.
+          # WORKER_ADMIN_KEY was a second name for the same thing, asked for after
+          # the repo already had one — the same duplicate-secret mistake as
+          # BOT_TOKEN vs TELEGRAM_BOT_TOKEN below. Kept as a fallback so an
+          # existing WORKER_ADMIN_KEY still works, but it can never be the one
+          # that is right when the two disagree.
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY || secrets.WORKER_ADMIN_KEY }}
           W_STORE: ${{ inputs.store_id }}
           W_TEXT:  ${{ inputs.text }}
           W_TIER:  ${{ inputs.tier }}
@@ -80,11 +89,11 @@ jobs:
             # key would be "right" everywhere a human looked and still 401.
             CLEAN_KEY=$(printf '%s' "$ADMIN_KEY" | tr -d '\r\n')
             if [ -z "$CLEAN_KEY" ]; then
-              echo "::error::WORKER_ADMIN_KEY is empty. It must hold the same value as the metrics Worker's ADMIN_KEY."
+              echo "::error::No admin key. Set the repo secret ADMIN_KEY — deploy-worker.yml installs that same value on the Worker."
               exit 1
             fi
             if [ "${#CLEAN_KEY}" -ne "${#ADMIN_KEY}" ]; then
-              echo "::warning::WORKER_ADMIN_KEY contained a line break; it was stripped before sending."
+              echo "::warning::The admin key contained a line break; it was stripped before sending."
             fi
             R=$(curl -s -w '\n%{http_code}' -X POST "$WORKER/api/ad/register" \
               -H "X-Admin-Key: $CLEAN_KEY" -H 'Content-Type: application/json' \
@@ -99,7 +108,7 @@ jobs:
               # 401, which reads as "the route is missing" when the route in
               # fact answered correctly and only rejected the credential.
               case "$CODE" in
-                401) echo "401 means the route matched and the Worker rejected the key. The GitHub secret WORKER_ADMIN_KEY must equal the metrics Worker ADMIN_KEY exactly. To confirm the Worker has one set, open /admin in the bot and tap the visitors button - that call uses the same key from the bot side." ;;
+                401) echo "401 means the route matched and the Worker rejected the key. The repo secret ADMIN_KEY is the one the Worker holds - deploy-worker.yml installs it there. If only a stale WORKER_ADMIN_KEY is set, that is the wrong value; set ADMIN_KEY instead." ;;
                 204|000) echo "An empty body means the route did not match, or the Worker was unreachable - check /api/ad/register sits in the POST section of worker.js and that the Worker has deployed." ;;
                 400) echo "400 means the store id or offer text failed validation - the id must exist in stores.json and the text must be non-empty." ;;
               esac
