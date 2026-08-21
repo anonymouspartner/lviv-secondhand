@@ -29,7 +29,7 @@ its bundled browser.
 | `npm run flyer` | `marketing/flyer.pdf` + `.png` (A4 → 4× A6) | Bilingual shopper **handout flyer**, 4-up on one A4 to print and cut. The QR opens the app. |
 | `npm run stickers` | `marketing/qr-stickers.pdf` + `.png` (A4 → 24) | Sheet of small **QR stickers** (4×6) for the agent to place in/around stores. Print on label paper and cut. |
 | `npm run avatar` | `marketing/instagram/avatar-*.png` (1080×1080) + `avatar-preview.png` | **Instagram profile photo**, 3 variants, drawn from `favicon.svg`'s vector geometry rather than upscaling the app icon. Tuned for the circle crop: the hanger scales ~46%→60% of the width so it fills the circle instead of floating in a square with dead corners, and stroke weight rides the transform so it stays legible at 32px. `avatar-preview.png` shows each circle-cropped at 320/110/32px on light and dark feeds — the only view that settles the choice. |
-| `npm run promo` | `marketing/instagram/*.png` (8 files) | **Instagram posts advertising the app itself** — 4 messages (coverage, the price-cycle idea, restock alerts, free/no-account) × 2 sizes (1080×1080 square, 1080×1350 portrait). Every post ends on the site URL. Override with `PROMO_URL=…`. |
+| `npm run promo` | `marketing/instagram/*.jpg` (8 files) | **Instagram posts advertising the app itself** — 4 messages (coverage, the price-cycle idea, restock alerts, free/no-account) × 2 sizes (1080×1080 square, 1080×1350 portrait). Emitted as **JPEG**, not PNG — Instagram's publishing API accepts JPEG only. Every post ends on the site URL. Override with `PROMO_URL=…`. |
 
 ### Notes on the Instagram set
 

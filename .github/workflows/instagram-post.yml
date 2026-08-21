@@ -21,6 +21,12 @@ name: Post to Instagram
 #   IG_USER_ID       — the Instagram *Business* account id (not the handle)
 #   IG_ACCESS_TOKEN  — a long-lived token with content-publishing permission
 #
+# NO APP REVIEW NEEDED. Meta's docs push you toward App Review with a screencast
+# submission, but that gate only applies to publishing on behalf of accounts you
+# do NOT own. An app left in Development mode can publish to accounts that hold a
+# role on it (admin/developer/tester) — which, posting to your own account, is
+# the case here.
+#
 # TOKEN EXPIRY IS THE THING THAT BITES
 # Long-lived tokens last ~60 days. The pre-flight step below reports days
 # remaining on every run so it fails loudly and early rather than silently
@@ -30,9 +36,9 @@ on:
   workflow_dispatch:
     inputs:
       image:
-        description: "Image path in this repo (must be committed and served)"
+        description: "Image path in this repo (must be committed, served, and JPEG)"
         required: true
-        default: "marketing/instagram/2-cycle-portrait.png"
+        default: "marketing/instagram/2-cycle-portrait.jpg"
       caption:
         description: "Caption (max 2200 chars, up to 30 hashtags)"
         required: true
@@ -53,7 +59,7 @@ permissions:
 
 env:
   SITE: https://www.lvivsecondhand.com
-  GRAPH: https://graph.facebook.com/v21.0
+  GRAPH: https://graph.facebook.com/v25.0
 
 jobs:
   post:
@@ -86,6 +92,14 @@ jobs:
             echo "::error::$IMG is not in the repo. Commit it first — Meta fetches it over HTTP."
             exit 1
           fi
+          # Meta's content-publishing API accepts JPEG only. Caught here because
+          # the API's own rejection is a generic container error that says
+          # nothing about the format.
+          case "$IMG" in
+            *.jpg|*.jpeg) ;;
+            *) echo "::error::$IMG is not a JPEG. Instagram's API accepts JPEG only — use marketing/instagram/*.jpg."
+               exit 1 ;;
+          esac
           URL="$SITE/$IMG"
           CODE=$(curl -s -o /dev/null -w '%{http_code}' -L "$URL")
           if [ "$CODE" != "200" ]; then

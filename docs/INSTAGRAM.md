@@ -21,6 +21,26 @@ Instagram has no simple "post this file" API. Publishing requires:
 3. a **Meta app** with content-publishing permission;
 4. a **long-lived access token**.
 
+> **You do not need App Review.** Meta's docs lead with a review process that
+> wants a screencast submission, which makes this look like a two-week project.
+> That gate only applies to publishing on behalf of accounts you *don't* own. An
+> app left in **Development mode** can publish to any account holding a role on
+> it — admin, developer, or tester. Posting to your own account, that's you, so
+> leave the app in Development mode and skip review entirely.
+
+There are two paths, and mixing them up is the most common way to get stuck,
+because the permission names differ:
+
+| | **Facebook Login** (what this repo uses) | Instagram Login |
+| --- | --- | --- |
+| Host | `graph.facebook.com` | `graph.instagram.com` |
+| Facebook Page | **required** | not needed |
+| Permissions | `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement` | `instagram_business_basic`, `instagram_business_content_publish` |
+
+The workflow uses the Facebook Login path. If you follow a tutorial that names
+`instagram_business_content_publish`, you're on the other path and the token
+won't work here.
+
 And the API never receives the file — you give it a **public image URL** and Meta
 fetches it. That part is already solved here: GitHub Pages serves the repo root,
 so anything committed under `marketing/` is immediately live at
@@ -41,9 +61,16 @@ API). Link it from the Instagram professional dashboard, or from the Page's
 
 ### 3. Create a Meta app
 [developers.facebook.com](https://developers.facebook.com/) → **My Apps →
-Create App** → type **Business**. Add the **Instagram** product, and request the
-permissions for content publishing (`instagram_basic`,
-`instagram_content_publish`, plus the Page permissions Meta prompts for).
+Create App** → type **Business**. Add the **Instagram** product.
+
+**Leave it in Development mode** (the toggle at the top of the dashboard). Then
+add yourself under **App roles → Roles** as an admin or tester, and accept the
+invite. That's what makes publishing work without App Review.
+
+The permissions to grant on the token are `instagram_basic`,
+`instagram_content_publish`, `pages_show_list`, and `pages_read_engagement`.
+`pages_show_list` is the one people miss — without it `/me/accounts` comes back
+empty and step 4 looks broken when the token is the actual problem.
 
 > Meta renames these product flows fairly often. Follow their current
 > [Content Publishing guide](https://developers.facebook.com/docs/instagram-platform/content-publishing)
@@ -87,7 +114,7 @@ Pages, and a leaked token can post as you until it expires.
 
 | Input | Notes |
 | --- | --- |
-| `image` | Repo-relative path, e.g. `marketing/instagram/2-cycle-portrait.png`. Must already be committed — Meta fetches it over HTTP. |
+| `image` | Repo-relative path, e.g. `marketing/instagram/2-cycle-portrait.jpg`. Must already be committed — Meta fetches it over HTTP. |
 | `caption` | Max 2200 characters, up to 30 hashtags. A Ukrainian default is pre-filled. |
 
 The run pre-checks that the file exists, that its public URL returns 200, and
@@ -116,7 +143,13 @@ annoying.
 ## Other limits worth knowing
 
 - **~25 posts per 24 hours** per account via the API.
-- **Images must be JPEG or PNG**, publicly reachable, no redirect chain.
+- **JPEG only.** Not PNG — the API rejects it at container creation with a
+  generic error that never mentions the format. `tools/social/promo.mjs` emits
+  `.jpg` for exactly this reason, and the workflow refuses a non-JPEG path up
+  front rather than letting Meta produce the confusing version.
+- Images must be **publicly reachable with no redirect chain**, and under 8 MB.
+- **Aspect ratio** must be between 4:5 and 1.91:1. The generated 1080×1080 and
+  1080×1350 are both inside that (1350 is exactly the 4:5 limit).
 - The API publishes **feed posts**; Stories and Reels use different endpoints and
   are not wired up here.
 - Meta's image aspect-ratio rules apply — the generated 1080×1080 and 1080×1350
