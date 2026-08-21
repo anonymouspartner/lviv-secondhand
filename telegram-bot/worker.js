@@ -133,6 +133,18 @@ async function metricsCall(env, path, init) {
 // this apart from a refusal and knows retrying is worth it.
 const METRICS_DOWN = '⚠️ Сервіс тимчасово недоступний — спробуйте ще раз за хвилину.\n'
   + '⚠️ The service is temporarily unavailable — please try again in a minute.';
+// Ukrainian counts take three forms, and 11–14 behave like "many" despite
+// ending 1–4. Same helper tools/social/stories.mjs and promo.mjs already carry;
+// the bot had none, which is why its day counts were written around rather than
+// declined.
+function plural(n, one, few, many) {
+  const d = n % 10, h = n % 100;
+  if (h >= 11 && h <= 14) return many;
+  if (d === 1) return one;
+  if (d >= 2 && d <= 4) return few;
+  return many;
+}
+
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_NAMES = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
 // Same Ukrainian labels as scripts/build-store-pages.mjs's DAYS list — kept in
@@ -339,20 +351,22 @@ function cheapText() {
   if (!scored.length) return cheapEmpty();
   const blocks = scored
     .map(({ s, days }) => {
-      const label = days === 0 ? '🆕 Restocked today — full selection' : `🔥 ${days} day${days > 1 ? 's' : ''} since restock — deeper discounts`;
+      const label = days === 0
+        ? '🆕 Завіз сьогодні · Restocked today'
+        : `🔥 ${days} ${plural(days, 'день', 'дні', 'днів')} від завозу · ${days} day${days > 1 ? 's' : ''} since restock`;
       return storeBlock(s, label);
     })
     .join('\n\n');
   return featuredBlock() + [
     '💸 <b>Найдовше без завозу · Longest since a restock</b>',
-    'By-weight prices drop each day after a restock, so the stores furthest into their weekly cycle have the deepest discounts today:',
+    'Скільки днів минуло від останнього завозу. Карта не називає цін — вона рахує дні · Days since each store last restocked. The map counts days, not prices:',
     '',
     blocks,
   ].join('\n');
 }
 
 function cheapEmpty() {
-  return `No by-weight stores are tracked yet. Open the full map: ${APP_URL}`;
+  return `Поки немає даних про завози. · No restock dates tracked yet. Open the full map: ${APP_URL}`;
 }
 
 // Stores with a fixed weekly restock day — any day, not just today. This is a
@@ -431,7 +445,7 @@ function submitText() {
 // as bare /feedback already does.
 // ─────────────────────────────────────────────────────────────────────────────
 const MENU_DAY = '📅 За днем тижня';
-const MENU_CHEAP = '💰 Найдешевше зараз';
+const MENU_CHEAP = '🕒 Найдовше без завозу';
 const MENU_RARE = '🐢 Рідко оновлюють';
 const MENU_ADD = '➕ Додати магазин';
 const MENU_FEEDBACK = '💬 Залишити відгук';
