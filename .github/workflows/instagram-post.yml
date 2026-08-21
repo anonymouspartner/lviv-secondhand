@@ -121,10 +121,14 @@ jobs:
 
       # /debug_token lives on graph.facebook.com and has no equivalent here, so
       # this path cannot report days-remaining. `me` is the substitute: it fails
-      # on an expired or wrong-scoped token, and the user_id it returns is
-      # checked against IG_USER_ID — catching the case where the two secrets
-      # come from different accounts, which otherwise fails much later with a
-      # permissions error that points at the wrong thing.
+      # on an expired or wrong-scoped token.
+      #
+      # It also resolves WHICH account to post to. The token already determines
+      # that — it can only publish to its own account — so the id from `me` is
+      # authoritative and IG_USER_ID is a cross-check, not the source of truth.
+      # An earlier version errored on a mismatch and blocked a perfectly good
+      # token; the dashboard shows an Instagram *app* id next to the account id,
+      # and copying the wrong one should not be fatal.
       - name: Pre-flight — token validity
         if: steps.guard.outputs.ready == 'true'
         env:
@@ -132,20 +136,27 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
         run: |
           RESP=$(curl -sG "$GRAPH/me" \
-            --data-urlencode "fields=user_id,username" \
+            --data-urlencode "fields=id,user_id,username" \
             --data-urlencode "access_token=$IG_ACCESS_TOKEN")
           # Not UID: that name is readonly in bash and the assignment fails.
-          TOKEN_UID=$(echo "$RESP" | jq -r '.user_id // empty')
+          ME_ID=$(echo "$RESP" | jq -r '.id // empty')
+          ME_USER_ID=$(echo "$RESP" | jq -r '.user_id // empty')
           NAME=$(echo "$RESP" | jq -r '.username // empty')
-          if [ -z "$TOKEN_UID" ]; then
+          if [ -z "$ME_ID" ] && [ -z "$ME_USER_ID" ]; then
             echo "::error::Token rejected by Instagram: $(echo "$RESP" | jq -c '.error // .')"
             exit 1
           fi
-          if [ "$TOKEN_UID" != "$IG_USER_ID" ]; then
-            echo "::error::Token belongs to Instagram user $TOKEN_UID but IG_USER_ID is set to $IG_USER_ID. The two secrets are from different accounts."
-            exit 1
+          # This path exposes both an app-scoped id and the professional-account
+          # id, and which one the publish endpoints want has moved between API
+          # versions. Prefer user_id, fall back to id.
+          PUBLISH_ID="${ME_USER_ID:-$ME_ID}"
+          echo "Token valid — authenticated as @$NAME."
+          if [ "$IG_USER_ID" = "$ME_USER_ID" ] || [ "$IG_USER_ID" = "$ME_ID" ]; then
+            echo "IG_USER_ID matches the token's account."
+          else
+            echo "::warning::IG_USER_ID (${#IG_USER_ID} chars) matches neither id on this token (user_id ${#ME_USER_ID} chars, id ${#ME_ID} chars). Posting to the token's own account. Most likely the Instagram *app* id was copied from the dashboard instead of the account id — harmless, but worth correcting in the secret."
           fi
-          echo "Token valid — authenticated as @$NAME ($TOKEN_UID)."
+          echo "PUBLISH_ID=$PUBLISH_ID" >> "$GITHUB_ENV"
           # Instagram Login tokens last 60 days and this path exposes no expiry
           # to check, so the reminder is unconditional rather than a threshold.
           echo "::notice::Instagram Login tokens expire 60 days after issue and cannot be inspected here. Refresh via the refresh_access_token endpoint (docs/INSTAGRAM.md) roughly every 50 days."
@@ -158,7 +169,7 @@ jobs:
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           CAPTION: ${{ github.event.inputs.caption }}
         run: |
-          RESP=$(curl -s -X POST "$GRAPH/$IG_USER_ID/media" \
+          RESP=$(curl -s -X POST "$GRAPH/$PUBLISH_ID/media" \
             --data-urlencode "image_url=$IMAGE_URL" \
             --data-urlencode "caption=$CAPTION" \
             --data-urlencode "access_token=$IG_ACCESS_TOKEN")
@@ -202,7 +213,7 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
         run: |
-          RESP=$(curl -s -X POST "$GRAPH/$IG_USER_ID/media_publish" \
+          RESP=$(curl -s -X POST "$GRAPH/$PUBLISH_ID/media_publish" \
             --data-urlencode "creation_id=$CREATION_ID" \
             --data-urlencode "access_token=$IG_ACCESS_TOKEN")
           MEDIA_ID=$(echo "$RESP" | jq -r '.id // empty')
