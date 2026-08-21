@@ -1,6 +1,6 @@
 // Instagram posts that advertise the app itself — what it is and why to use it —
 // each ending on the website URL, since sending people to the site is the point.
-// Run: `npm run promo` → marketing/instagram/*.png
+// Run: `npm run promo` → marketing/instagram/*.jpg
 //
 // Four messages, one idea each, rather than one crowded post:
 //   1 map    — the coverage claim (store count read live from stores.json)
@@ -173,8 +173,13 @@ for (const post of POSTS) {
 <body>${shell(post)}</body></html>`;
     const page = await browser.newPage({ viewport: { width: size.w, height: size.h }, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: 'networkidle' });
-    const buf = await page.locator('.card').screenshot();
-    writeFileSync(resolve(outDir, `${post.name}-${size.key}.png`), buf);
+    // JPEG, not PNG: Meta's content-publishing API accepts JPEG only, and a
+    // PNG image_url fails at container creation with an unhelpful generic
+    // error. The card's background is an opaque gradient, so there is no alpha
+    // to lose. q92 is visually lossless at these sizes and well under the 8 MB
+    // cap. These images exist only to be posted, so there is no PNG copy.
+    const buf = await page.locator('.card').screenshot({ type: 'jpeg', quality: 92 });
+    writeFileSync(resolve(outDir, `${post.name}-${size.key}.jpg`), buf);
     await page.close();
     count++;
   }
