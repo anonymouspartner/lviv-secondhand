@@ -148,7 +148,11 @@ jobs:
       - name: Send it to the owner for approval
         working-directory: .
         env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          # Same fallback chain deploy-bot.yml and deploy-worker.yml use — this
+          # repo's token has lived under TELEGRAM_BOT_TOKEN since before
+          # BOT_TOKEN existed, and looking only for the latter silently found
+          # nothing.
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
           OWNER_ID: ${{ secrets.OWNER_ID }}
           ADMIN_KEY: ${{ secrets.WORKER_ADMIN_KEY }}
           AD_ID: ${{ steps.cfg.outputs.ad_id }}
@@ -160,8 +164,15 @@ jobs:
           # an ad nobody can be asked about sits in the queue forever, and the
           # run going green would say the opposite. The image and caption are
           # already committed at this point, so nothing is lost by failing here.
+          # OWNER_ID is a chat id, not a credential — it is already committed as
+          # a plain var in worker/wrangler.toml. Read it from there rather than
+          # asking for a secret that duplicates a value the repo already holds.
+          if [ -z "$OWNER_ID" ]; then
+            OWNER_ID=$(sed -n 's/^OWNER_ID *= *"\([0-9-]*\)".*/\1/p' worker/wrangler.toml | head -1)
+            [ -n "$OWNER_ID" ] && echo "OWNER_ID taken from worker/wrangler.toml"
+          fi
           if [ -z "$BOT_TOKEN" ] || [ -z "$OWNER_ID" ]; then
-            echo "::error::BOT_TOKEN / OWNER_ID are not set as repository secrets, so the approval request cannot be sent and this ad can never be approved. Add both under Settings → Secrets and variables → Actions."
+            echo "::error::No Telegram bot token (BOT_TOKEN or TELEGRAM_BOT_TOKEN) or no OWNER_ID, so the approval request cannot be sent and this ad can never be approved."
             exit 1
           fi
           if [ -z "$ADMIN_KEY" ]; then
