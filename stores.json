@@ -962,19 +962,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–12:30",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–17:00"
     },
     "cycle": 7,
     "restockDay": "thu",
     "lat": 49.845323,
     "lng": 24.023052,
-    "note": "By weight. Restocked Thursdays."
+    "note": "By weight. Restocked Thursdays. Hours photographed on the door 2026-08-21 (issue #270): opens 09:00 daily, Wed closes 12:30, Sat 18:00, Sun 10:00–17:00."
   },
   {
     "id": "c28",
