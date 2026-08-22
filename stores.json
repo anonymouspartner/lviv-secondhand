@@ -502,7 +502,7 @@
   {
     "id": "c3",
     "name": "Euro second hand",
-    "brand": "Independent",
+    "brand": "Євро секонд хенд",
     "address": "вул. Шота Руставелі, 42",
     "addressEn": "42 Shota Rustaveli St",
     "phone": "",
@@ -551,7 +551,7 @@
   {
     "id": "c5",
     "name": "Euro second hand",
-    "brand": "Independent",
+    "brand": "Євро секонд хенд",
     "address": "вулиця Юліуша Словацького, 14",
     "addressEn": "14 Yuliusha Slovatskoho St",
     "phone": "",
@@ -671,7 +671,7 @@
   {
     "id": "c11",
     "name": "Євро секонд хенд",
-    "brand": "Independent",
+    "brand": "Євро секонд хенд",
     "address": "",
     "addressEn": "",
     "phone": "",
@@ -717,7 +717,7 @@
   {
     "id": "c16",
     "name": "Euro Second Hand",
-    "brand": "Independent",
+    "brand": "Євро секонд хенд",
     "address": "",
     "addressEn": "",
     "phone": "",
@@ -740,7 +740,7 @@
   {
     "id": "c17",
     "name": "Євро секонд-хенд",
-    "brand": "Independent",
+    "brand": "Євро секонд хенд",
     "address": "пр. Червоної Калини, 105",
     "addressEn": "105 Chervonoi Kalyny Ave",
     "phone": "",
@@ -819,19 +819,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "mon",
-    "lat": 49.865577,
-    "lng": 24.015615,
-    "note": "By weight. Restocked Mondays. A Lviv business directory (dlab.com.ua) lists \"EconomClass, секонд-хенд\" at this exact address instead — could be a directory error, a chain change, or two shops sharing the building (a pattern confirmed elsewhere on this map); not changed pending a field check."
+    "lat": 49.8657832,
+    "lng": 24.0154233,
+    "note": "By weight. Restocked Mondays — підтверджено таблицею «ЦІНА ДНЯ» в магазині: сім рядків, понеділок → неділя, тобто тижневий цикл. · Confirmed by the in-store «ЦІНА ДНЯ» table: seven rows, Monday to Sunday, i.e. a weekly cycle. Назву звірено з вивіскою «ЄВРО ТРЕНД СЕКОНД ХЕНД» на фасаді, години — з таблички на дверях (2026-08-22). · Name checked against the «ЄВРО ТРЕНД СЕКОНД ХЕНД» fascia, hours from the door sign (2026-08-22). Координати уточнено на місці — це окреме приміщення, за кілька метрів від «Світ секонд-хенду» (c128) у тому ж торговому ряду на просп. Чорновола, 101. Довідник dlab.com.ua і далі показує тут «EconomClass» — не підтверджено на місці. · Pin surveyed in person: a separate unit a few metres from Світ секонд-хенду (c128) in the same strip at Чорновола 101. dlab.com.ua still lists \"EconomClass\" here, unconfirmed on the ground."
   },
   {
     "id": "c22",
@@ -1212,9 +1212,9 @@
       "sun": "09:00–19:00"
     },
     "cycle": 7,
-    "lat": 49.861428,
-    "lng": 24.017172,
-    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — субота. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Saturday.",
+    "lat": 49.859656,
+    "lng": 24.019063,
+    "note": "Одяг з Європи на вагу, щоденне зниження цін. Оновлення товару «ЛЮКС» — субота. · Clothing from Europe by weight, daily markdowns. \"Lux\" restock on Saturday. Координати виправлено на місці 2026-08-22 (пін стояв за ~240 м від входу); п’ятничний завіз і суботнє оновлення «люкс» звірено з дошкою «ЦІНА ДНЯ» в магазині. · Coordinates corrected in person 2026-08-22 (the pin sat ~240 m from the door); the Friday restock and Saturday \"lux\" restock were checked against the in-store \"ЦІНА ДНЯ\" board.",
     "restockDay": "fri"
   },
   {
@@ -1743,7 +1743,7 @@
   {
     "id": "c61",
     "name": "Євро секонд хенд",
-    "brand": "Independent",
+    "brand": "Євро секонд хенд",
     "address": "вул. Базарна, 1",
     "addressEn": "Bazarna St, 1",
     "phone": "",
@@ -2221,7 +2221,7 @@
   {
     "id": "c80",
     "name": "Євро секонд-хенд",
-    "brand": "Independent",
+    "brand": "Євро секонд хенд",
     "address": "",
     "addressEn": "",
     "phone": "",
@@ -2696,17 +2696,17 @@
   },
   {
     "id": "c103",
-    "name": "Second hand — Мазепи 26",
-    "brand": "Independent",
+    "name": "Євро секонд-хенд — Мазепи 26",
+    "brand": "Євро секонд хенд",
     "address": "вул. Мазепи, 26",
     "addressEn": "26 Mazepy St",
     "phone": "",
     "type": "other",
-    "pricing": "item",
+    "pricing": "kg",
     "cycle": 7,
     "lat": 49.8714771,
     "lng": 24.0409333,
-    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown). Only ~90m from c71 (вул. Гетьмана Мазепи, 24 — Світ секонд-хенду, on a 14-day dated cycle, not a weekday one). Possibly the same store misreported, possibly a genuine neighbor — kept separate pending a field check rather than merged on proximity alone.",
+    "note": "Name and by-weight pricing confirmed on the ground 2026-08-22. An in-store opening poster (\"ВІДКРИТТЯ! Євро секонд хенд\") announced this branch together with Сихівська 13 (c111), so the two share an operator. Hours still unconfirmed. Originally from the #208 community list as an unnamed \"Second hand\". Checked in person against c71 (Світ секонд-хенду, Гетьмана Мазепи 24) ~90 m away: two distinct shops of different chains, not one store misreported — the proximity flag is resolved.",
     "hours": {
       "mon": "?",
       "tue": "?",
@@ -2769,7 +2769,7 @@
   {
     "id": "c106",
     "name": "Євро Секонд Хенд — Наукова 49а",
-    "brand": "Independent",
+    "brand": "Євро секонд хенд",
     "address": "вул. Наукова, 49а",
     "addressEn": "49а Naukova St",
     "phone": "",
@@ -2887,17 +2887,17 @@
   },
   {
     "id": "c111",
-    "name": "Second hand — Сихівська 13",
-    "brand": "Independent",
+    "name": "Євро секонд-хенд — Сихівська 13",
+    "brand": "Євро секонд хенд",
     "address": "вул. Сихівська, 13",
     "addressEn": "13 Sykhivska St",
     "phone": "",
     "type": "other",
-    "pricing": "item",
+    "pricing": "kg",
     "cycle": 7,
     "lat": 49.7936322,
     "lng": 24.0618711,
-    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown).",
+    "note": "Name and by-weight pricing confirmed on the ground 2026-08-22. An in-store opening poster (\"ВІДКРИТТЯ! Євро секонд хенд\") announced this branch together with Мазепи 26 (c103), so the two share an operator. Hours still unconfirmed. Originally from the #208 community list as an unnamed \"Second hand\".",
     "hours": {
       "mon": "?",
       "tue": "?",
@@ -3211,5 +3211,29 @@
     "lat": 49.844481,
     "lng": 24.023186,
     "note": "Footwear only · тільки взуття. Submitted from the app and approved in Telegram (issue #272). Hours were submitted as \"Звичайно\" (\"as usual\") rather than times, so they are recorded as unknown pending a field check. 26 m from c125 (Birka! Lux — Шпитальна 7) — different shop by name and stock, but worth confirming on the ground."
+  },
+  {
+    "id": "c128",
+    "name": "Світ секонд-хенду — Чорновола 101",
+    "brand": "Світ секонд-хенду",
+    "address": "проспект В'ячеслава Чорновола, 101",
+    "addressEn": "101 Chornovola Ave",
+    "phone": "",
+    "type": "other",
+    "pricing": "kg",
+    "hours": {
+      "mon": "09:00–20:00",
+      "tue": "09:00–20:00",
+      "wed": "09:00–20:00",
+      "thu": "09:00–20:00",
+      "fri": "09:00–20:00",
+      "sat": "09:00–20:00",
+      "sun": "10:00–18:00"
+    },
+    "cycle": 14,
+    "lat": 49.865577,
+    "lng": 24.015615,
+    "note": "Підтверджено на місці 2026-08-22: на просп. Чорновола, 101 є «Світ секонд-хенду», окремо від «Євро Тренд» (c21), що за кілька метрів у тому ж торговому ряду. · Confirmed in person 2026-08-22: a Світ секонд-хенду at Чорновола 101, separate from the Євро Тренд unit (c21) a few metres along the same strip. Години — з таблички на дверях, без перерви. Повне оновлення товару — середа, останнє 19.08.2026; таблиця «ВІДДІЛ НА ВАГУ» має 14 рядків (середа → другий вівторок), тобто цикл 14 днів, а ціна знижується щодня. · Hours from the door sign, no midday break. Full restock on Wednesdays, last one 19.08.2026; the in-store weight-department board runs 14 rows (Wednesday through the second Tuesday), so the cycle is 14 days, with the price stepping down each day. Координати — це геокод адреси, а не зафіксований вхід; уточнити при нагоді. · Coordinates are the address geocode, not a surveyed door — worth a field pin.",
+    "restock_date": "2026-08-19"
   }
 ]
