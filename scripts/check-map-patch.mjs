@@ -167,6 +167,57 @@ const pretty = JSON.stringify(FIXTURE, null, 2) + '\n';
     JSON.stringify(r.report.stores[0].skipped));
 }
 
+// ── 8. Additions ───────────────────────────────────────────────────────────
+{
+  const r = run({ mode: 'fill-gaps', adds: [
+    { name: 'Brand New Shop', lat: 49.8000, lng: 24.0000, pricing: 'kg' },
+  ] }, pretty);
+  const out = JSON.parse(r.raw);
+  check('a clear addition lands with an allocated id', out.length === 3 && out[2].id === 'c1', out[2] && out[2].id);
+  check('and gets the dataset defaults', out[2] && out[2].brand === 'Independent' && out[2].type === 'other' && out[2].cycle === 7);
+  check('the report names it', r.report.added.length === 1 && r.report.added[0].name === 'Brand New Shop');
+}
+{
+  // 'a1' has no coordinates in the fixture, so give the duplicate test its own.
+  const near = JSON.stringify([{ id: 'c9', name: 'Existing', lat: 49.8397, lng: 24.0297, cycle: 7 }], null, 2) + '\n';
+  const r = run({ mode: 'fill-gaps', adds: [{ name: 'Too Close', lat: 49.83975, lng: 24.02975 }] }, near);
+  check('an addition on top of an existing store is refused', JSON.parse(r.raw).length === 1);
+  check('and says which store and how far', /c9/.test(r.report.rejectedAdds[0].why) && /duplicate/.test(r.report.rejectedAdds[0].why),
+    JSON.stringify(r.report.rejectedAdds));
+}
+{
+  const far = JSON.stringify([{ id: 'c9', name: 'Existing', lat: 49.8397, lng: 24.0297, cycle: 7 }], null, 2) + '\n';
+  const r = run({ mode: 'fill-gaps', adds: [{ name: 'Regional Branch', lat: 49.3500, lng: 23.5000 }] }, far);
+  check('a genuine regional branch 60+ km out is still accepted', JSON.parse(r.raw).length === 2,
+    'EconomClass really does trade in Drohobych and Stryi');
+  check('the allocated id follows the highest existing c-number', JSON.parse(r.raw)[1].id === 'c10', JSON.parse(r.raw)[1].id);
+}
+{
+  const one = JSON.stringify([{ id: 'c9', name: 'Existing', lat: 49.8397, lng: 24.0297, cycle: 7 }], null, 2) + '\n';
+  const r = run({ mode: 'fill-gaps', adds: [{ name: 'Nowhere', lat: 0, lng: 0 }] }, one);
+  check('null-island coordinates are refused', JSON.parse(r.raw).length === 1 && /not a real location/.test(r.report.rejectedAdds[0].why));
+  const r2 = run({ mode: 'fill-gaps', adds: [{ name: '', lat: 49.9, lng: 24.1 }] }, one);
+  check('an unnamed addition is refused', JSON.parse(r2.raw).length === 1 && /no name/.test(r2.report.rejectedAdds[0].why));
+}
+
+// ── 9. Removals ────────────────────────────────────────────────────────────
+{
+  const r = run({ mode: 'fill-gaps', removes: ['a1'] }, pretty);
+  const out = JSON.parse(r.raw);
+  check('an approved removal takes the store off the map', out.length === 1 && out[0].id === 'a2');
+  check('and the report names what went', r.report.removed[0].id === 'a1' && r.report.removed[0].name === 'Filled In');
+  check('removal still writes indent 2', r.raw === JSON.stringify(out, null, 2) + '\n');
+}
+{
+  const r = run({ mode: 'fill-gaps', removes: ['ghost'] }, pretty);
+  check('removing a store that is not there is a no-op, not a crash',
+    !r.error && JSON.parse(r.raw).length === 2);
+}
+{
+  const r = run({ store_id: 'a1', removes: ['a2'], updates: { phone: 'x' } }, pretty);
+  check('overwrite mode ignores adds/removes entirely', JSON.parse(r.raw).length === 2);
+}
+
 console.log('');
 if (failures) { console.error(`map-patch: ${failures} check(s) failed.`); process.exit(1); }
 console.log('Map-patch pipeline OK — formatting preserved, fill-gaps never overwrites.');

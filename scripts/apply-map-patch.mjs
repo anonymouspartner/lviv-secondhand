@@ -89,6 +89,70 @@ export function applyFillGaps(store, updates) {
   return { applied, skipped };
 }
 
+// Metres between two pins. Only used to spot an addition landing on top of a
+// store already on the map.
+function metresBetween(a, b) {
+  const t = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * t, dLng = (b.lng - a.lng) * t;
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+// Deliberately NOT bounded to Lviv: EconomClass runs real branches in
+// Drohobych, Stryi, Sokal, Chervonohrad and elsewhere, 30–75 km out. A
+// bounding box would reject them. This only rejects coordinates that can't be
+// a place at all.
+function coordsLookReal(lat, lng) {
+  return Number.isFinite(lat) && Number.isFinite(lng)
+    && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+    && !(lat === 0 && lng === 0);
+}
+
+const DUPLICATE_RADIUS_M = 60;
+
+// Next free c-id. Reuses nothing: ids of removed stores stay retired so an old
+// QR poster or shared link can never resolve to a different shop.
+function nextStoreId(stores) {
+  let max = 0;
+  for (const s of stores) {
+    const m = /^c(\d+)$/.exec(s && s.id ? s.id : '');
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return 'c' + (max + 1);
+}
+
+export function addStore(stores, proposed) {
+  const lat = Number(proposed && proposed.lat), lng = Number(proposed && proposed.lng);
+  const name = proposed && typeof proposed.name === 'string' ? proposed.name.trim() : '';
+  if (!name) return { rejected: 'no name' };
+  if (!coordsLookReal(lat, lng)) return { rejected: 'coordinates are not a real location' };
+
+  // A new pin sitting on top of an existing store is the failure this map keeps
+  // hitting — c12, c13 and two re-submitted stores were all found that way. It
+  // is reported rather than added: a missed addition becomes an issue, whereas
+  // a duplicate on the live map sends someone to a shop that isn't there.
+  let nearest = null;
+  for (const s of stores) {
+    if (!s || s.watermark || !Number.isFinite(s.lat)) continue;
+    const d = metresBetween({ lat, lng }, s);
+    if (!nearest || d < nearest.d) nearest = { d, s };
+  }
+  if (nearest && nearest.d <= DUPLICATE_RADIUS_M) {
+    return { rejected: `${Math.round(nearest.d)} m from ${nearest.s.id} (${nearest.s.name}) — possible duplicate` };
+  }
+
+  const id = nextStoreId(stores);
+  const store = { id, name, lat, lng, cycle: Number(proposed.cycle) || 7 };
+  for (const k of ['brand', 'address', 'addressEn', 'phone', 'type', 'pricing', 'note', 'hours', 'restockDay', 'restock_date', 'dailyDrop']) {
+    if (proposed[k] !== undefined && proposed[k] !== null && proposed[k] !== '') store[k] = proposed[k];
+  }
+  if (!store.brand) store.brand = 'Independent';
+  if (!store.type) store.type = 'other';
+  stores.push(store);
+  return { added: id, nearestMetres: nearest ? Math.round(nearest.d) : null };
+}
+
 function main() {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) throw new Error('GITHUB_EVENT_PATH is not set — this script must run inside a GitHub Actions job.');
@@ -102,10 +166,13 @@ function main() {
   // { patches: [{ store_id, updates }] } — lets one approved contribution
   // touching a dozen stores be one workflow run, one commit and one report,
   // instead of a dozen runs queued behind each other each opening its own issue.
-  const batch = Array.isArray(payload.patches)
-    ? payload.patches
-    : [{ store_id: payload.store_id, updates: payload.updates }];
-  if (!batch.length) throw new Error('client_payload carried no patches.');
+  const batch = Array.isArray(payload.patches) ? payload.patches
+    : payload.store_id ? [{ store_id: payload.store_id, updates: payload.updates }]
+    : [];
+  const hasAddsOrRemoves = Array.isArray(payload.adds) || Array.isArray(payload.removes);
+  // A contribution can consist purely of additions or removals, with no field
+  // patches at all — that is not an empty payload.
+  if (!batch.length && !hasAddsOrRemoves) throw new Error('client_payload carried nothing to apply.');
 
   const raw = readFileSync(storesPath, 'utf8');
   const stores = JSON.parse(raw);
@@ -146,9 +213,35 @@ function main() {
       console.log(`Patched store "${storeId}":`, JSON.stringify(updates));
     }
   }
+  // Additions and removals, which a field patch cannot express. Both are only
+  // honoured in fill-gaps mode — the overwrite callers patch one known store.
+  const added = [], removedIds = [], rejectedAdds = [];
+  if (mode === 'fill-gaps') {
+    for (const proposed of (Array.isArray(payload.adds) ? payload.adds.slice(0, 50) : [])) {
+      const r = addStore(stores, proposed);
+      if (r.rejected) {
+        rejectedAdds.push({ name: (proposed && proposed.name) || '(unnamed)', why: r.rejected });
+        console.log(`Declined to add "${(proposed && proposed.name) || '(unnamed)'}": ${r.rejected}`);
+      } else {
+        added.push({ id: r.added, name: proposed.name });
+        console.log(`Added "${proposed.name}" as ${r.added}`);
+      }
+    }
+    for (const rid of (Array.isArray(payload.removes) ? payload.removes.slice(0, 50) : [])) {
+      const idx2 = stores.findIndex((x) => x && x.id === rid);
+      if (idx2 === -1) { console.log(`Nothing to remove for "${rid}".`); continue; }
+      const gone = stores.splice(idx2, 1)[0];
+      removedIds.push({ id: rid, name: gone.name });
+      console.log(`Removed ${rid} ("${gone.name}")`);
+    }
+  }
+
   const report = {
     mode: mode || 'overwrite',
     stores: results,
+    added,
+    removed: removedIds,
+    rejectedAdds,
     // What a human still has to look at.
     needsReview: results.filter((r) => r.missing || (r.skipped && r.skipped.length)),
   };
