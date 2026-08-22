@@ -310,14 +310,17 @@ async function dispatchMapPatch(env, storeId, updates) {
   if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
 }
 
-// Fields a contribution is allowed to patch unattended. Deliberately excludes
-// id, lat and lng: a pin is the one thing a wrong edit makes actively
-// misleading rather than merely incomplete, and every store already has
-// coordinates, so fill-gaps would decline them anyway. Listing them out means
-// a new field added to the edit form doesn't silently become auto-appliable.
+// Fields a contribution is allowed to patch. Still excludes id, which is the
+// store's identity and can never be reassigned. lat/lng are included: a pin in
+// the wrong place is one of the commonest faults on this map — c37 sat 240 m
+// from its door, c21 was on the wrong unit of a strip — and correcting an
+// address without being able to move the marker fixes the half nobody navigates
+// by. The approval message shows how far a pin moves, so a slip is visible
+// before it ships. Listing fields out means a new one added to the edit form
+// doesn't silently become auto-appliable.
 const AUTO_PATCH_FIELDS = [
   'name', 'addressEn', 'address', 'phone', 'pricing', 'cycle',
-  'dailyDrop', 'restockDay', 'restock_date', 'note', 'hours',
+  'dailyDrop', 'restockDay', 'restock_date', 'note', 'hours', 'lat', 'lng',
 ];
 
 // Turns an approved contribution's corrections into one batch. Conservative
@@ -982,6 +985,17 @@ function generatePin() {
   return String(a[0] % 10000).padStart(4, '0');
 }
 
+// Straight-line metres between two pins, for the approval message.
+function metresApart(aLat, aLng, bLat, bLng) {
+  const nums = [aLat, aLng, bLat, bLng].map(Number);
+  if (nums.some((n) => !Number.isFinite(n))) return null;
+  const [y1, x1, y2, x2] = nums;
+  const t = Math.PI / 180;
+  const dLat = (y2 - y1) * t, dLng = (x2 - x1) * t;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(y1 * t) * Math.cos(y2 * t) * Math.sin(dLng / 2) ** 2;
+  return Math.round(6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h)));
+}
+
 function submissionSummary(kind, storeId, payload) {
   const p = payload || {};
   if (kind === 'feedback') {
@@ -1018,11 +1032,30 @@ function submissionSummary(kind, storeId, payload) {
   if (edits.length) {
     out.push(`✏️ EDITING ${edits.length}:`);
     for (const e of edits.slice(0, 15)) {
+      const ch = (e && e.changes) || {};
+      // A moved pin is shown as metres, not as two field names: the distance is
+      // the whole question, and it is the one edit that silently relocates a
+      // shop rather than mis-describing it.
+      let pinShown = false;
+      if (ch.lat !== undefined && ch.lng !== undefined && e.base
+          && e.base.lat !== undefined && e.base.lng !== undefined) {
+        const m = metresApart(e.base.lat, e.base.lng, ch.lat, ch.lng);
+        if (m !== null) {
+          // Kilometres past a point where metres stop meaning anything. A
+          // doorway correction is tens of metres; four figures is a mistake.
+          const dist = m >= 2000 ? (m / 1000).toFixed(1) + ' km' : m + ' m';
+          out.push(`  📍 ${mdSafe(e.name, 40)}: pin moves ${dist}${m >= 2000 ? ' ⚠️' : ''}`);
+          pinShown = true;
+        }
+      }
       // Field names, not values: which fields moved is what tells you whether
       // this is a routine gap-fill or someone rewriting a store's identity.
-      const fields = Object.keys((e && e.changes) || {});
+      // lat/lng are dropped when the line above already gave the distance.
+      const fields = Object.keys((e && e.changes) || {})
+        .filter((k) => !(pinShown && (k === 'lat' || k === 'lng')));
+      if (!fields.length) continue;
       const shown = fields.slice(0, 6).join(', ') + (fields.length > 6 ? `, +${fields.length - 6}` : '');
-      out.push(`  • ${mdSafe(e.name, 44)}: ${mdSafe(shown, 90) || 'no fields'}`);
+      out.push(`  • ${mdSafe(e.name, 44)}: ${mdSafe(shown, 90)}`);
     }
     if (edits.length > 15) out.push(`  …and ${edits.length - 15} more`);
     out.push('');
