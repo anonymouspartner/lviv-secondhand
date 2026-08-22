@@ -829,9 +829,9 @@
     },
     "cycle": 7,
     "restockDay": "mon",
-    "lat": 49.865577,
-    "lng": 24.015615,
-    "note": "By weight. Restocked Mondays. A Lviv business directory (dlab.com.ua) lists \"EconomClass, секонд-хенд\" at this exact address instead — could be a directory error, a chain change, or two shops sharing the building (a pattern confirmed elsewhere on this map); not changed pending a field check."
+    "lat": 49.8657832,
+    "lng": 24.0154233,
+    "note": "By weight. Restocked Mondays. Координати уточнено на місці 2026-08-22 — це окреме приміщення в тому ж торговому ряду, за кілька метрів від «Світ секонд-хенду» (c128). · Pin surveyed in person 2026-08-22: a separate unit in the same strip, a few metres from Світ секонд-хенду (c128). На адресі просп. Чорновола, 101 працює більше ніж один секонд-хенд, тому довідники дають різні назви; довідник dlab.com.ua і далі показує тут «EconomClass» — не підтверджено на місці. · More than one second-hand shop trades at Чорновола 101, which is why directories disagree; dlab.com.ua still lists \"EconomClass\" here, unconfirmed on the ground."
   },
   {
     "id": "c22",
@@ -3211,5 +3211,28 @@
     "lat": 49.844481,
     "lng": 24.023186,
     "note": "Footwear only · тільки взуття. Submitted from the app and approved in Telegram (issue #272). Hours were submitted as \"Звичайно\" (\"as usual\") rather than times, so they are recorded as unknown pending a field check. 26 m from c125 (Birka! Lux — Шпитальна 7) — different shop by name and stock, but worth confirming on the ground."
+  },
+  {
+    "id": "c128",
+    "name": "Світ секонд-хенду — Чорновола 101",
+    "brand": "Світ секонд-хенду",
+    "address": "проспект В'ячеслава Чорновола, 101",
+    "addressEn": "101 Chornovola Ave",
+    "phone": "",
+    "type": "other",
+    "pricing": "kg",
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    },
+    "cycle": 7,
+    "lat": 49.865577,
+    "lng": 24.015615,
+    "note": "Підтверджено на місці 2026-08-22: на просп. Чорновола, 101 є «Світ секонд-хенду», окремо від «Євро Тренд» (c21), що за кілька метрів у тому ж торговому ряду. · Confirmed in person 2026-08-22: a Світ секонд-хенду at Чорновола 101, separate from the Євро Тренд unit (c21) a few metres along the same strip. Координати — це геокод адреси, а не зафіксований вхід; уточнити при нагоді. Години й день завозу невідомі. · Coordinates are the address geocode, not a surveyed door — worth a field pin. Hours and restock day unknown."
   }
 ]
