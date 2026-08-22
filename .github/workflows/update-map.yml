@@ -103,50 +103,19 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-          REPORT: ${{ runner.temp }}/patch-report.json
+          PATCH_REPORT_FILE: ${{ runner.temp }}/patch-report.json
+          ISSUE_BODY_FILE: ${{ runner.temp }}/issue.md
         run: |
-          [ -f "$REPORT" ] || { echo "No report written — nothing to raise."; exit 0; }
-          COUNT=$(node -e "const r=require('$REPORT');console.log((r.needsReview||[]).length)")
+          if [ ! -f "$PATCH_REPORT_FILE" ]; then
+            echo "No report written — nothing to raise."
+            exit 0
+          fi
+          COUNT=$(node scripts/render-patch-issue.mjs)
           if [ "$COUNT" = "0" ]; then
             echo "Nothing declined — no issue needed."
             exit 0
           fi
-          node -e "
-            const r = require('$REPORT');
-            const L = [];
-            L.push('An automated map patch applied what it safely could and declined the rest.');
-            L.push('');
-            L.push('Declined values are **not** errors — they are places where a contribution');
-            L.push('disagrees with something already on the map, which is a judgment call.');
-            L.push('');
-            for (const s of r.needsReview) {
-              if (s.missing) {
-                L.push('### `' + s.store_id + '` — not on the map');
-                L.push('');
-                L.push('A patch referenced this id but no such store exists. It needs adding by hand,');
-                L.push('or the contribution is pointing at the wrong store.');
-                L.push('');
-                continue;
-              }
-              L.push('### `' + s.store_id + '`');
-              L.push('');
-              L.push('| field | on the map | proposed | why declined |');
-              L.push('|---|---|---|---|');
-              for (const k of s.skipped) {
-                L.push('| `' + k.field + '` | ' + JSON.stringify(k.have) + ' | ' + JSON.stringify(k.proposed) + ' | ' + k.why + ' |');
-              }
-              L.push('');
-            }
-            const applied = (r.stores || []).filter(x => Object.keys(x.applied || {}).length);
-            if (applied.length) {
-              L.push('---');
-              L.push('');
-              L.push('Applied without review: ' + applied.map(x => '`' + x.store_id + '` (' + Object.keys(x.applied).join(', ') + ')').join(', '));
-            }
-            require('fs').writeFileSync(process.env.RUNNER_TEMP + '/issue.md', L.join('
-'));
-          "
           gh issue create \
-            --title "Map patch declined ${COUNT} change(s) that need a decision" \
-            --body-file "${RUNNER_TEMP}/issue.md" \
+            --title "Map patch raised $COUNT change(s) for a decision" \
+            --body-file "$ISSUE_BODY_FILE" \
             --label map-contribution
