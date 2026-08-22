@@ -23,6 +23,8 @@ concurrency:
 
 permissions:
   contents: write
+  # Only used to raise an issue for the fields this run declined to apply.
+  issues: write
 
 jobs:
   patch:
@@ -41,6 +43,8 @@ jobs:
       # nested/quoted JSON survives without shell-escaping surprises.
       - name: Apply patch
         run: node scripts/apply-map-patch.mjs
+        env:
+          PATCH_REPORT_FILE: ${{ runner.temp }}/patch-report.json
 
       # Step 2 — schema gate. Aborts the whole run (nothing committed) if the
       # patch produced anything the app can't safely render: broken JSON,
@@ -66,6 +70,8 @@ jobs:
       # the deploy. Skips cleanly if the patch was a no-op (e.g. updates
       # matched the existing values).
       - name: Commit
+        env:
+          REPORT: ${{ runner.temp }}/patch-report.json
         run: |
           git config user.name "lviv-secondhand-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -74,6 +80,73 @@ jobs:
             echo "No changes after patch — nothing to commit."
             exit 0
           fi
-          STORE_ID=$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.env.GITHUB_EVENT_PATH,'utf8')).client_payload.store_id)")
-          git commit -m "Auto-update store ${STORE_ID} [skip ci]"
+          # Names the stores actually touched, taken from the applier's report
+          # rather than the payload — a batch has no single store_id, and a
+          # fill-gaps run may have applied to fewer stores than were proposed.
+          SUBJECT=$(node -e "
+            const r = require(process.env.REPORT);
+            const hit = (r.stores || []).filter(x => Object.keys(x.applied || {}).length).map(x => x.store_id);
+            console.log(hit.length === 1 ? 'store ' + hit[0]
+              : hit.length ? hit.length + ' stores (' + hit.join(', ') + ')'
+              : 'map data');
+          ")
+          git commit -m "Auto-update ${SUBJECT} [skip ci]"
           git push
+
+      # Anything the patch declined — a value that disagrees with one already on
+      # the map, or a store the map doesn't hold — is raised for a person. This
+      # is what keeps unattended application honest: the safe part lands without
+      # anyone reading it, and only the genuine judgment calls become an issue.
+      # Runs even when the commit step found nothing to commit, since a run can
+      # legitimately apply nothing and still have declines worth seeing.
+      - name: Raise anything that needs a decision
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT: ${{ runner.temp }}/patch-report.json
+        run: |
+          [ -f "$REPORT" ] || { echo "No report written — nothing to raise."; exit 0; }
+          COUNT=$(node -e "const r=require('$REPORT');console.log((r.needsReview||[]).length)")
+          if [ "$COUNT" = "0" ]; then
+            echo "Nothing declined — no issue needed."
+            exit 0
+          fi
+          node -e "
+            const r = require('$REPORT');
+            const L = [];
+            L.push('An automated map patch applied what it safely could and declined the rest.');
+            L.push('');
+            L.push('Declined values are **not** errors — they are places where a contribution');
+            L.push('disagrees with something already on the map, which is a judgment call.');
+            L.push('');
+            for (const s of r.needsReview) {
+              if (s.missing) {
+                L.push('### `' + s.store_id + '` — not on the map');
+                L.push('');
+                L.push('A patch referenced this id but no such store exists. It needs adding by hand,');
+                L.push('or the contribution is pointing at the wrong store.');
+                L.push('');
+                continue;
+              }
+              L.push('### `' + s.store_id + '`');
+              L.push('');
+              L.push('| field | on the map | proposed | why declined |');
+              L.push('|---|---|---|---|');
+              for (const k of s.skipped) {
+                L.push('| `' + k.field + '` | ' + JSON.stringify(k.have) + ' | ' + JSON.stringify(k.proposed) + ' | ' + k.why + ' |');
+              }
+              L.push('');
+            }
+            const applied = (r.stores || []).filter(x => Object.keys(x.applied || {}).length);
+            if (applied.length) {
+              L.push('---');
+              L.push('');
+              L.push('Applied without review: ' + applied.map(x => '`' + x.store_id + '` (' + Object.keys(x.applied).join(', ') + ')').join(', '));
+            }
+            require('fs').writeFileSync(process.env.RUNNER_TEMP + '/issue.md', L.join('
+'));
+          "
+          gh issue create \
+            --title "Map patch declined ${COUNT} change(s) that need a decision" \
+            --body-file "${RUNNER_TEMP}/issue.md" \
+            --label map-contribution

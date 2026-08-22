@@ -310,6 +310,73 @@ async function dispatchMapPatch(env, storeId, updates) {
   if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
 }
 
+// Fields a contribution is allowed to patch unattended. Deliberately excludes
+// id, lat and lng: a pin is the one thing a wrong edit makes actively
+// misleading rather than merely incomplete, and every store already has
+// coordinates, so fill-gaps would decline them anyway. Listing them out means
+// a new field added to the edit form doesn't silently become auto-appliable.
+const AUTO_PATCH_FIELDS = [
+  'name', 'addressEn', 'address', 'phone', 'pricing', 'cycle',
+  'dailyDrop', 'restockDay', 'restock_date', 'note', 'hours',
+];
+
+// Turns an approved contribution's corrections into one fill-gaps batch. The
+// workflow decides what actually lands: anything that would contradict a value
+// already on the map is declined there and raised as its own issue. So this
+// only has to be conservative about *which fields* may be offered, not about
+// whether each one is right.
+function contributionPatches(payload) {
+  const list = Array.isArray(payload && payload.overrideList) ? payload.overrideList.slice(0, 200) : [];
+  const patches = [];
+  for (const o of list) {
+    if (!o || typeof o.id !== 'string' || !/^[a-z0-9]{1,12}$/i.test(o.id)) continue;
+    const changes = o.changes && typeof o.changes === 'object' ? o.changes : {};
+    const updates = {};
+    for (const k of AUTO_PATCH_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(changes, k)) updates[k] = changes[k];
+    }
+    if (Object.keys(updates).length) patches.push({ store_id: o.id, updates });
+  }
+  return patches;
+}
+
+// Stores proposed for addition, trimmed to the fields stores.json holds. The
+// applier still refuses anything landing within 60 m of an existing pin, so
+// this only has to filter fields, not judge the store.
+function contributionAdds(payload) {
+  const list = Array.isArray(payload && payload.custom) ? payload.custom.slice(0, 50) : [];
+  return list.map((c) => {
+    const out = { name: String((c && c.name) || '').slice(0, 120), lat: Number(c && c.lat), lng: Number(c && c.lng) };
+    for (const k of ['address', 'addressEn', 'phone', 'pricing', 'cycle', 'note', 'hours', 'restockDay', 'restock_date', 'dailyDrop']) {
+      if (c && c[k] !== undefined && c[k] !== null && c[k] !== '') out[k] = c[k];
+    }
+    return out;
+  }).filter((c) => c.name);
+}
+
+// Ids proposed for removal. The moderator saw every one of these by name in the
+// approval message, which is what makes removing them on one tap defensible.
+function contributionRemoves(payload) {
+  const list = Array.isArray(payload && payload.removed) ? payload.removed.slice(0, 50) : [];
+  return list.map((r) => r && r.id).filter((id) => typeof id === 'string' && /^[a-z0-9]{1,12}$/i.test(id));
+}
+
+async function dispatchFillGaps(env, body) {
+  if (!env.GH_PAT) throw new Error('GH_PAT not configured');
+  const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GH_PAT}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'lviv-secondhand-worker',
+    },
+    body: JSON.stringify({ event_type: 'update_map_data', client_payload: { mode: 'fill-gaps', ...body } }),
+  });
+  if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
+}
+
 // Same GitHub dispatch mechanism as dispatchMapPatch, different event. Split
 // rather than parameterised because the two carry unrelated payloads and are
 // consumed by different workflows; folding them together would only hide which
@@ -927,10 +994,44 @@ function submissionSummary(kind, storeId, payload) {
     return `🔑 STORE CLAIM — someone says they own ${storeId}\n\nName: ${mdSafe(p.name, 120)}\nContact: ${mdSafe(p.contact, 200)}\nNote: ${mdSafe(p.note, 300) || '—'}`;
   }
   const b = p;
-  const nCustom = Array.isArray(b.custom) ? b.custom.length : 0;
-  const nEdit = Array.isArray(b.overrideList) ? b.overrideList.length : 0;
-  const nRem = Array.isArray(b.removed) ? b.removed.length : 0;
-  return `🗺️ MAP CONTRIBUTION\n\n➕ ${nCustom} added\n✏️ ${nEdit} edited\n🗑️ ${nRem} removed`;
+  const custom = Array.isArray(b.custom) ? b.custom : [];
+  const edits = Array.isArray(b.overrideList) ? b.overrideList : [];
+  const removed = Array.isArray(b.removed) ? b.removed : [];
+  const out = [`🗺️ MAP CONTRIBUTION\n`];
+
+  // Removals first, always named in full and never truncated. Approving is one
+  // tap, and this is the only category that takes something off the live map —
+  // "🗑️ 2 removed" is not something anyone can consent to.
+  if (removed.length) {
+    out.push(`🗑️ REMOVING ${removed.length}:`);
+    for (const r of removed) out.push(`  • ${mdSafe(r.name, 60)} (${mdSafe(r.id, 12)})`);
+    out.push('');
+  }
+  if (custom.length) {
+    out.push(`➕ ADDING ${custom.length}:`);
+    for (const c of custom.slice(0, 10)) {
+      out.push(`  • ${mdSafe(c.name, 60)} — ${mdSafe(c.addressEn || c.address, 60) || 'no address'}`);
+    }
+    if (custom.length > 10) out.push(`  …and ${custom.length - 10} more`);
+    out.push('');
+  }
+  if (edits.length) {
+    out.push(`✏️ EDITING ${edits.length}:`);
+    for (const e of edits.slice(0, 15)) {
+      // Field names, not values: which fields moved is what tells you whether
+      // this is a routine gap-fill or someone rewriting a store's identity.
+      const fields = Object.keys((e && e.changes) || {});
+      const shown = fields.slice(0, 6).join(', ') + (fields.length > 6 ? `, +${fields.length - 6}` : '');
+      out.push(`  • ${mdSafe(e.name, 44)}: ${mdSafe(shown, 90) || 'no fields'}`);
+    }
+    if (edits.length > 15) out.push(`  …and ${edits.length - 15} more`);
+    out.push('');
+  }
+  if (!removed.length && !custom.length && !edits.length) out.push('(nothing in this bundle)');
+  // Telegram rejects a sendMessage over 4096 characters outright, so a very
+  // large bundle must lose its tail rather than fail to arrive at all.
+  const text = out.join('\n').trimEnd();
+  return text.length > 3400 ? text.slice(0, 3400) + '\n…(truncated — see the issue)' : text;
 }
 
 async function awardPoints(env, chatId, name, points) {
@@ -1310,15 +1411,56 @@ export default {
             `Pass this to the store owner. Entering it on a flash-deal purchase publishes their deal immediately, with no review.`,
             { status: 200 });
         }
-        let issueUrl;
-        try {
-          const issue = renderSubmissionIssue(row.kind, payload);
-          issueUrl = await createGithubIssue(env, issue.title, issue.body, issue.labels);
-        } catch (e) {
-          return new Response('issue creation failed — check GH_PAT and that it still has repo scope', { status: 502 });
+        // A contribution's corrections to existing stores are structured, so
+        // they go straight down the automated pipeline in fill-gaps mode. New
+        // stores and removals cannot: a patch can neither create nor delete an
+        // entry, and both are decisions a person should make anyway. An issue is
+        // raised only for those — and only if there are any.
+        //
+        // Owner submissions stay on the issue path regardless: their fields
+        // arrive as prose ("last restocked 2026-08-19, every 14 days"), and
+        // parsing that unattended would be guessing.
+        let patches = [], adds = [], removes = [];
+        if (row.kind === 'contribution') {
+          patches = contributionPatches(payload);
+          adds = contributionAdds(payload);
+          removes = contributionRemoves(payload);
+          if (patches.length || adds.length || removes.length) {
+            try {
+              await dispatchFillGaps(env, { patches, adds, removes });
+            } catch (e) {
+              return new Response('map-patch dispatch failed — check GH_PAT and the update-map workflow logs', { status: 502 });
+            }
+          }
+        }
+
+        // Everything a contribution can express now goes down the pipeline, so
+        // an issue is only for the other submission kinds. The workflow raises
+        // its own issue for whatever it declined — a contested value, an
+        // addition that looked like a duplicate — so nothing is lost silently.
+        const needsIssue = row.kind !== 'contribution';
+
+        let issueUrl = null;
+        if (needsIssue) {
+          try {
+            const issue = renderSubmissionIssue(row.kind, payload);
+            issueUrl = await createGithubIssue(env, issue.title, issue.body, issue.labels);
+          } catch (e) {
+            return new Response('issue creation failed — check GH_PAT and that it still has repo scope', { status: 502 });
+          }
         }
         await env.DB.prepare("UPDATE submissions SET status = 'approved', issue_url = ? WHERE id = ?").bind(issueUrl, id).run();
-        return new Response(`✅ Approved — issue created:\n${issueUrl}`, { status: 200 });
+
+        const bits = [];
+        if (patches.length) bits.push(`${patches.length} correction(s)`);
+        if (adds.length) bits.push(`${adds.length} new store(s)`);
+        if (removes.length) bits.push(`${removes.length} removal(s)`);
+        const applied = bits.length
+          ? `🤖 Sent to the map pipeline: ${bits.join(', ')}.\nIt ships in a couple of minutes. Anything that disagrees with data already on the map — or an addition landing on top of an existing pin — is declined there and raised as its own issue.\n\n`
+          : '';
+        return new Response(issueUrl
+          ? `✅ Approved.\n\n${applied}Issue created:\n${issueUrl}`
+          : `✅ Approved.\n\n${applied}Nothing needed a human — no issue opened.`, { status: 200 });
       }
       // Owner taps this from the "1 of 2" restock notification to publish a
       // single report without waiting for a second one. Same GET-so-Telegram-
