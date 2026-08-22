@@ -35,6 +35,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://www.lvivsecondhand.com/chain/yevro-sekond-khend/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://www.lvivsecondhand.com/chain/yevro-trend-sekond-khend/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
