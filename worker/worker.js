@@ -320,11 +320,10 @@ const AUTO_PATCH_FIELDS = [
   'dailyDrop', 'restockDay', 'restock_date', 'note', 'hours',
 ];
 
-// Turns an approved contribution's corrections into one fill-gaps batch. The
-// workflow decides what actually lands: anything that would contradict a value
-// already on the map is declined there and raised as its own issue. So this
-// only has to be conservative about *which fields* may be offered, not about
-// whether each one is right.
+// Turns an approved contribution's corrections into one batch. Conservative
+// about *which fields* may be carried, not about whether each value is right —
+// that judgment was made when the moderator read the itemised list and tapped
+// approve.
 function contributionPatches(payload) {
   const list = Array.isArray(payload && payload.overrideList) ? payload.overrideList.slice(0, 200) : [];
   const patches = [];
@@ -341,8 +340,9 @@ function contributionPatches(payload) {
 }
 
 // Stores proposed for addition, trimmed to the fields stores.json holds. The
-// applier still refuses anything landing within 60 m of an existing pin, so
-// this only has to filter fields, not judge the store.
+// applier still refuses anything landing within 60 m of an existing pin — a
+// duplicate store is corrupt data rather than a correction, and it is the one
+// failure this map keeps hitting — so this only filters fields.
 function contributionAdds(payload) {
   const list = Array.isArray(payload && payload.custom) ? payload.custom.slice(0, 50) : [];
   return list.map((c) => {
@@ -361,7 +361,7 @@ function contributionRemoves(payload) {
   return list.map((r) => r && r.id).filter((id) => typeof id === 'string' && /^[a-z0-9]{1,12}$/i.test(id));
 }
 
-async function dispatchFillGaps(env, body) {
+async function dispatchContribution(env, body) {
   if (!env.GH_PAT) throw new Error('GH_PAT not configured');
   const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
     method: 'POST',
@@ -372,7 +372,7 @@ async function dispatchFillGaps(env, body) {
       'X-GitHub-Api-Version': '2022-11-28',
       'User-Agent': 'lviv-secondhand-worker',
     },
-    body: JSON.stringify({ event_type: 'update_map_data', client_payload: { mode: 'fill-gaps', ...body } }),
+    body: JSON.stringify({ event_type: 'update_map_data', client_payload: body }),
   });
   if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
 }
@@ -1427,7 +1427,12 @@ export default {
           removes = contributionRemoves(payload);
           if (patches.length || adds.length || removes.length) {
             try {
-              await dispatchFillGaps(env, { patches, adds, removes });
+              // Default (overwrite) mode: the moderator has just read an
+              // itemised list of every change and approved it. A correction
+              // only ever disagrees with what's on the map — that is what makes
+              // it a correction — so refusing to overwrite would mean the one
+              // thing this pipeline could never ship is a fix.
+              await dispatchContribution(env, { patches, adds, removes });
             } catch (e) {
               return new Response('map-patch dispatch failed — check GH_PAT and the update-map workflow logs', { status: 502 });
             }
@@ -1456,7 +1461,7 @@ export default {
         if (adds.length) bits.push(`${adds.length} new store(s)`);
         if (removes.length) bits.push(`${removes.length} removal(s)`);
         const applied = bits.length
-          ? `🤖 Sent to the map pipeline: ${bits.join(', ')}.\nIt ships in a couple of minutes. Anything that disagrees with data already on the map — or an addition landing on top of an existing pin — is declined there and raised as its own issue.\n\n`
+          ? `🤖 Sent to the map pipeline: ${bits.join(', ')}.\nIt ships in a couple of minutes. An addition landing on top of an existing pin is held back and raised as its own issue; everything else applies as submitted.\n\n`
           : '';
         return new Response(issueUrl
           ? `✅ Approved.\n\n${applied}Issue created:\n${issueUrl}`

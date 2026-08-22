@@ -9,15 +9,22 @@
 // JSON in `updates` can't be mangled by shell interpolation.
 //
 // Two modes:
-//   (default)    overwrite — the patch wins. Used by flows where a human has
-//                already confirmed the value: the bot's store survey, and
-//                /restock/approve.
+//   (default)    overwrite — the patch wins. Used wherever a human has already
+//                confirmed the change: the bot's store survey,
+//                /restock/approve, and contributions approved in Telegram.
+//                A correction only ever *disagrees* with what's recorded —
+//                that is what makes it a correction — so a mode that refused
+//                to overwrite could never ship one.
 //   'fill-gaps'  only writes where the map currently holds nothing, plus a
-//                strictly-newer restock_date. Used for contributions approved
-//                in bulk, where "the map has no phone number and someone sent
-//                one" is safe to apply unattended but "someone disagrees with
-//                a value we already hold" is a judgment call. Anything skipped
-//                is reported so it can be raised for a human instead.
+//                strictly-newer restock_date, reporting whatever it declined.
+//                Kept for any future flow that wants to merge a source it
+//                does not fully trust; nothing uses it by default.
+//
+// Whether an unknown store id is fatal depends on the payload shape, not the
+// mode: a batch reports it and carries on, since a contribution can name a
+// store the map does not hold and failing the whole batch would discard the
+// patches that were fine. A single { store_id, updates } still throws — those
+// callers pass an id they just read out of stores.json.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -166,7 +173,8 @@ function main() {
   // { patches: [{ store_id, updates }] } — lets one approved contribution
   // touching a dozen stores be one workflow run, one commit and one report,
   // instead of a dozen runs queued behind each other each opening its own issue.
-  const batch = Array.isArray(payload.patches) ? payload.patches
+  const isBatch = Array.isArray(payload.patches);
+  const batch = isBatch ? payload.patches
     : payload.store_id ? [{ store_id: payload.store_id, updates: payload.updates }]
     : [];
   const hasAddsOrRemoves = Array.isArray(payload.adds) || Array.isArray(payload.removes);
@@ -189,12 +197,7 @@ function main() {
 
     const idx = stores.findIndex((s) => s && s.id === storeId);
     if (idx === -1) {
-      // In fill-gaps mode an unknown id is a fact to report, not a crash: a
-      // contribution can legitimately mention a store the map doesn't hold yet,
-      // and failing the whole batch would discard the patches that were fine.
-      // The overwrite callers pass ids they just read out of stores.json, so
-      // there it still means something is genuinely wrong.
-      if (mode === 'fill-gaps') {
+      if (isBatch) {
         results.push({ store_id: storeId, applied: {}, skipped: [], missing: true });
         console.log(`Store "${storeId}" is not on the map — reported, not applied.`);
         continue;
@@ -208,15 +211,25 @@ function main() {
       console.log(`Patched store "${storeId}" (fill-gaps): applied ${JSON.stringify(r.applied)}`);
       if (r.skipped.length) console.log(`  declined ${r.skipped.length} field(s): ${JSON.stringify(r.skipped)}`);
     } else {
-      deepMerge(stores[idx], updates);
-      results.push({ store_id: storeId, applied: updates, skipped: [] });
-      console.log(`Patched store "${storeId}":`, JSON.stringify(updates));
+      // Proposing false for a flag the store doesn't set leaves the state
+      // identical either way, so it is dropped rather than written — otherwise
+      // an older cached client that still sends every field would slowly add
+      // "dailyDrop": false across the dataset. Not a judgment about the value;
+      // there is simply nothing to change.
+      const clean = {};
+      for (const [k, v] of Object.entries(updates)) {
+        if (v === false && isGap(stores[idx][k])) continue;
+        clean[k] = v;
+      }
+      deepMerge(stores[idx], clean);
+      results.push({ store_id: storeId, applied: clean, skipped: [] });
+      console.log(`Patched store "${storeId}":`, JSON.stringify(clean));
     }
   }
   // Additions and removals, which a field patch cannot express. Both are only
   // honoured in fill-gaps mode — the overwrite callers patch one known store.
   const added = [], removedIds = [], rejectedAdds = [];
-  if (mode === 'fill-gaps') {
+  {
     for (const proposed of (Array.isArray(payload.adds) ? payload.adds.slice(0, 50) : [])) {
       const r = addStore(stores, proposed);
       if (r.rejected) {

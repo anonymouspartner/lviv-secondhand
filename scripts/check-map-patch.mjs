@@ -145,11 +145,13 @@ const pretty = JSON.stringify(FIXTURE, null, 2) + '\n';
   check('batch still writes indent 2', r.raw === JSON.stringify(out, null, 2) + '\n');
 }
 {
-  // Overwrite callers pass ids they just read out of stores.json, so there an
-  // unknown id still has to be loud.
-  const r = run({ patches: [{ store_id: 'ghost', updates: { phone: 'x' } }] }, pretty);
-  check('overwrite mode still aborts on an unknown store',
+  // A single-store payload still aborts on an unknown id: those callers pass an
+  // id they just read out of stores.json, so it means something is wrong.
+  const r = run({ store_id: 'ghost', updates: { phone: 'x' } }, pretty);
+  check('a single-store patch still aborts on an unknown store',
     !!r.error && /No store with id/.test(String(r.error.stderr || r.error)));
+  const r2 = run({ patches: [{ store_id: 'ghost', updates: { phone: 'x' } }] }, pretty);
+  check('but a batch reports it and carries on', !r2.error && r2.report.stores[0].missing === true);
 }
 
 // ── 7. A flag proposed as false where the store has none is a no-op ────────
@@ -215,7 +217,34 @@ const pretty = JSON.stringify(FIXTURE, null, 2) + '\n';
 }
 {
   const r = run({ store_id: 'a1', removes: ['a2'], updates: { phone: 'x' } }, pretty);
-  check('overwrite mode ignores adds/removes entirely', JSON.parse(r.raw).length === 2);
+  check('removals work in default mode too, not only fill-gaps', JSON.parse(r.raw).length === 1);
+}
+
+// ── 10. Default mode is what contributions use: every field is updatable ───
+{
+  const r = run({ patches: [{ store_id: 'a1', updates: {
+    name: 'Renamed', address: 'вул. Нова, 5', hours: { mon: '08:00–20:00' },
+  } }] }, pretty);
+  const s0 = JSON.parse(r.raw)[0];
+  check('an approved rename lands', s0.name === 'Renamed', s0.name);
+  check('an approved address change lands over an existing one', s0.address === 'вул. Нова, 5', s0.address);
+  check('an approved hours change lands over a recorded day', s0.hours.mon === '08:00–20:00', s0.hours.mon);
+  check('untouched days survive the merge', s0.hours.sun === 'closed');
+  check('nothing is held back for review', r.report.needsReview.length === 0, JSON.stringify(r.report.needsReview));
+}
+{
+  // The one thing still withheld: a new pin on top of an existing store.
+  const one = JSON.stringify([{ id: 'c9', name: 'Existing', lat: 49.8397, lng: 24.0297, cycle: 7 }], null, 2) + '\n';
+  const r = run({ adds: [{ name: 'Dup', lat: 49.83972, lng: 24.02972 }] }, one);
+  check('a duplicate addition is still refused in default mode', JSON.parse(r.raw).length === 1);
+  check('and reported', r.report.rejectedAdds.length === 1);
+}
+{
+  // Noise suppression, not a value judgment: the resulting state is identical.
+  const r = run({ patches: [{ store_id: 'a2', updates: { dailyDrop: false, phone: '+38 (1) 1' } }] }, pretty);
+  const s1 = JSON.parse(r.raw)[1];
+  check('a false flag on a store that lacks it is not written', !('dailyDrop' in s1));
+  check('while the real field in the same patch still lands', s1.phone === '+38 (1) 1');
 }
 
 console.log('');
