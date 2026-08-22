@@ -2,7 +2,7 @@
    - App shell + Leaflet are precached so the app opens offline.
    - HTML is network-first so an online visit always gets the latest build.
    - Map tiles are cached opportunistically for offline panning of visited areas. */
-const SHELL_CACHE = 'lviv-sh-shell-v4';
+const SHELL_CACHE = 'lviv-sh-shell-v5';
 const TILE_CACHE  = 'lviv-sh-tiles-v1';
 const MAX_TILES = 400;
 
@@ -45,22 +45,56 @@ async function trimTiles() {
 self.addEventListener('push', (e) => {
   let data = { title: 'Lviv Second Hand', body: '', url: './' };
   try { if (e.data) data = Object.assign(data, e.data.json()); } catch (err) {}
-  e.waitUntil(self.registration.showNotification(data.title, {
-    body: data.body,
-    icon: 'icon-192.png',
-    badge: 'favicon-32.png',
-    tag: data.tag || 'restock',
-    data: { url: data.url || './' }
-  }));
+  const payload = data;
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: 'icon-192.png',
+      badge: 'favicon-32.png',
+      tag: data.tag || 'restock',
+      // The whole payload, not just the url: notificationclick has to hand the
+      // page enough to render a banner, and the body is prose that cannot be
+      // parsed back into store ids.
+      data: payload
+    }),
+    // A push that lands while the app is open produces a system notification
+    // the user may never look at, on top of a window already showing the map.
+    // Tell the page too, so it can surface a banner in place.
+    notifyClients({ type: 'push', payload })
+  ]));
 });
 
+// One channel to the page for both arrival and tap. Fire-and-forget: a page
+// that is not listening (an older cached build) simply ignores the message.
+async function notifyClients(msg) {
+  const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  for (const c of cs) { try { c.postMessage(msg); } catch (err) {} }
+  return cs.length;
+}
+
+// Tapping a notification has to ACT on it, not merely surface the app.
+//
+// The previous version called focus() on the first open window and returned,
+// discarding the url entirely — and on a phone with the PWA installed there is
+// almost always an open window, so that branch nearly always won. The app came
+// to the front unchanged and nothing said why, which reads as the notification
+// doing nothing at all.
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || './';
-  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
-    for (const c of cs) { if ('focus' in c) return c.focus(); }
-    return clients.openWindow(url);
-  }));
+  const payload = e.notification.data || {};
+  const url = payload.url || './';
+  e.waitUntil((async () => {
+    const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of cs) {
+      if (!('focus' in c)) continue;
+      // Tell the page first: navigate() does not re-run the app, so a client
+      // that is already on the target URL would otherwise show nothing new.
+      try { c.postMessage({ type: 'notificationclick', payload }); } catch (err) {}
+      if ('navigate' in c) { try { await c.navigate(url); } catch (err) {} }
+      return c.focus();
+    }
+    return self.clients.openWindow(url);
+  })());
 });
 
 self.addEventListener('fetch', (e) => {
