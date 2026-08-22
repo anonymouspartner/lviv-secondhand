@@ -65,11 +65,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://www.lvivsecondhand.com/store/c62/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://www.lvivsecondhand.com/store/c64/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -325,6 +320,11 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://www.lvivsecondhand.com/store/c62/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://www.lvivsecondhand.com/store/c79/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
@@ -345,12 +345,12 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.lvivsecondhand.com/store/s6/</loc>
+    <loc>https://www.lvivsecondhand.com/store/c59/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://www.lvivsecondhand.com/store/c59/</loc>
+    <loc>https://www.lvivsecondhand.com/store/s6/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
