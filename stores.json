@@ -359,7 +359,7 @@
   },
   {
     "id": "s6",
-    "name": "Birka! Lux",
+    "name": "Birka! Lux — Зелена 69а",
     "brand": "Birka! Lux",
     "address": "вул. Зелена, 69а",
     "addressEn": "Zelena St, 69a",
@@ -367,18 +367,18 @@
     "type": "other",
     "pricing": "item",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–18:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00",
+      "sun": "10:00–17:00"
     },
     "cycle": 7,
     "lat": 49.8304495,
     "lng": 24.0440999,
-    "note": "Stock and used. Popular for children's clothing, shoes and toys.",
+    "note": "Stock and used. Popular for children's clothing, shoes and toys. Confirmed as a 3-location chain (Зелена 69а, Котика 2, Шпитальна 7) via a list.in.ua directory listing with published hours.",
     "dailyDrop": true
   },
   {
@@ -617,7 +617,7 @@
     "cycle": 7,
     "lat": 49.839957,
     "lng": 24.027046,
-    "note": "New product everyday. Full rotation is based on seasons",
+    "note": "New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
     "dailyDrop": true
   },
   {
@@ -789,8 +789,8 @@
     "id": "c20",
     "name": "Second hand Bomba",
     "brand": "Independent",
-    "address": "",
-    "addressEn": "Volodymyra Vynnychenka St, 6, Lviv, Lviv Oblast, 79000",
+    "address": "вул. Володимира Винниченка, 6",
+    "addressEn": "Volodymyra Vynnychenka St, 6",
     "phone": "",
     "type": "other",
     "pricing": "kg",
@@ -806,7 +806,7 @@
     "cycle": 7,
     "lat": 49.8393,
     "lng": 24.035811,
-    "note": "",
+    "note": "New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
     "restockDay": "tue"
   },
   {
@@ -819,19 +819,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "mon",
     "lat": 49.8657832,
     "lng": 24.0154233,
-    "note": "Correct coordinates 49.8657832, 24.0154233 By weight. Restocked Mondays. A Lviv business directory (dlab.com.ua) lists \"EconomClass, секонд-хенд\" at this exact address instead — could be a directory error, a chain change, or two shops sharing the building (a pattern confirmed elsewhere on this map); not changed pending a field check."
+    "note": "By weight. Restocked Mondays — підтверджено таблицею «ЦІНА ДНЯ» в магазині: сім рядків, понеділок → неділя, тобто тижневий цикл. · Confirmed by the in-store «ЦІНА ДНЯ» table: seven rows, Monday to Sunday, i.e. a weekly cycle. Назву звірено з вивіскою «ЄВРО ТРЕНД СЕКОНД ХЕНД» на фасаді, години — з таблички на дверях (2026-08-22). · Name checked against the «ЄВРО ТРЕНД СЕКОНД ХЕНД» fascia, hours from the door sign (2026-08-22). Координати уточнено на місці — це окреме приміщення, за кілька метрів від «Світ секонд-хенду» (c128) у тому ж торговому ряду на просп. Чорновола, 101. Довідник dlab.com.ua і далі показує тут «EconomClass» — не підтверджено на місці. · Pin surveyed in person: a separate unit a few metres from Світ секонд-хенду (c128) in the same strip at Чорновола 101. dlab.com.ua still lists \"EconomClass\" here, unconfirmed on the ground."
   },
   {
     "id": "c22",
@@ -1694,10 +1694,10 @@
   },
   {
     "id": "c59",
-    "name": "Birka Lux",
+    "name": "Birka! Lux — Котика 2",
     "brand": "Birka! Lux",
-    "address": "вул. Богдана Котика",
-    "addressEn": "Bohdana Kotyka St",
+    "address": "вул. Богдана Котика, 2",
+    "addressEn": "2 Bohdana Kotyka St",
     "phone": "",
     "type": "other",
     "pricing": "item",
@@ -1713,7 +1713,7 @@
     "cycle": 7,
     "lat": 49.836844,
     "lng": 24.0601287,
-    "note": "From locator.lviv.ua listing.",
+    "note": "Confirmed as a 3-location chain (Зелена 69а, Котика 2, Шпитальна 7) via a list.in.ua directory listing with published hours.",
     "dailyDrop": true
   },
   {
@@ -2000,7 +2000,7 @@
     "lat": 49.8713384,
     "lng": 24.0401275,
     "note": "By weight. Part of the Світ секонд-хенду chain.",
-    "restock_date": "2026-08-05"
+    "restock_date": "2026-08-11"
   },
   {
     "id": "c72",
@@ -2166,7 +2166,7 @@
     "cycle": 14,
     "lat": 49.84924,
     "lng": 24.024066,
-    "note": "Надіслано користувачем; адресу визначено за координатами — потребує перевірки на місці. · Submitted by a contributor; address derived from the pin — needs a field check.",
+    "note": "By weight. Part of the Світ секонд-хенду chain. Цикл виправлено на 14 днів за спостереженням завозу 21.08.2026 — рівно через два тижні після 07.08.2026, обидва в п’ятницю. · Cycle corrected to 14 days from a restock observed 2026-08-21, exactly a fortnight after 2026-08-07, both Fridays (issue #278).",
     "restock_date": "2026-08-21"
   },
   {
@@ -3051,8 +3051,7 @@
       "sat": "?",
       "sun": "?"
     },
-    "restockDay": "wed",
-    "restock_date": "2026-08-19"
+    "restockDay": "wed"
   },
   {
     "id": "c119",
