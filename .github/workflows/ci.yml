@@ -56,6 +56,13 @@ jobs:
       - name: Check the map-patch pipeline
         run: node scripts/check-map-patch.mjs
 
+      # A workflow with a YAML error does not fail loudly: GitHub names the run
+      # after the file path instead of the declared name, and the workflow simply
+      # never fires on its real trigger. update-map.yml shipped broken exactly
+      # that way and nothing said so.
+      - name: Check workflow files parse
+        run: node scripts/check-workflows.mjs
+
       # The per-store pages and sitemap are generated from stores.json but
       # committed (GitHub Pages serves the repo root, so the files ARE the
       # deploy). Regenerate and fail if the committed output differs — that
