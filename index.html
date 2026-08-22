@@ -622,9 +622,48 @@ header{ background:var(--ink); padding:calc(15px + env(safe-area-inset-top,0px))
   .plan.rec .plan-buy{ background:var(--acid); color:#0a1c12; }
   .promo-toast{ background:#12301f; border:1px solid #2a4d38; }
 }
+
+/* Push banner — the in-app surface for notifications. Sits above everything,
+   below the notch, and never covers the map controls for longer than it must. */
+#push-banner{position:fixed;top:0;left:0;right:0;z-index:9000;display:flex;align-items:stretch;
+  gap:0;background:var(--card);border-bottom:1px solid var(--border);
+  box-shadow:0 6px 22px rgba(13,44,26,.18);padding-top:env(safe-area-inset-top,0);
+  transform:translateY(0);transition:transform .22s ease;}
+#push-banner.hidden{transform:translateY(-115%);display:flex;pointer-events:none;}
+#push-banner-go{flex:1;display:flex;align-items:center;gap:12px;text-align:left;
+  background:none;border:0;padding:13px 8px 13px 16px;cursor:pointer;color:var(--text);font:inherit;}
+#push-banner-icon{font-size:24px;line-height:1;flex:0 0 auto;}
+#push-banner .pb-text{display:flex;flex-direction:column;gap:2px;min-width:0;}
+#push-banner .pb-text b{font-size:15px;font-weight:700;}
+#push-banner .pb-text span{font-size:13.5px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+#push-banner-x{flex:0 0 auto;background:none;border:0;padding:0 16px;font-size:17px;
+  color:var(--muted);cursor:pointer;}
+/* A paid placement is labelled here exactly as it is on pins and cards. */
+#push-banner.sponsored{border-bottom-color:var(--orange);}
+#push-banner.sponsored .pb-text span{color:var(--orange);font-weight:600;}
+@media (prefers-reduced-motion:reduce){#push-banner{transition:none;}}
 </style>
 </head>
 <body>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- PUSH BANNER                                -->
+<!-- The in-app face of a notification. A push that arrives while the app is  -->
+<!-- open otherwise produces only a system notification, over a window        -->
+<!-- already showing the map; and a tapped notification used to just focus    -->
+<!-- the app with nothing to say why.                                         -->
+<!-- ══════════════════════════════════════════ -->
+<div id="push-banner" class="hidden" role="status" aria-live="polite">
+  <button type="button" id="push-banner-go">
+    <span id="push-banner-icon" aria-hidden="true">🛍️</span>
+    <span class="pb-text">
+      <b id="push-banner-title"></b>
+      <span id="push-banner-sub"></span>
+    </span>
+  </button>
+  <button type="button" id="push-banner-x" onclick="hidePushBanner()" aria-label="Dismiss">✕</button>
+</div>
 
 <!-- ══════════════════════════════════════════ -->
 <!-- HELP SHEET                                 -->
@@ -1658,6 +1697,45 @@ function renderList() {
 // ─────────────────────────────────────────────
 // User-initiated store open (tap on a card or map pin). Wraps openDetail so
 // programmatic re-opens (after edit/visit/delivery) aren't counted as views.
+// ─────────────────────────────────────────────
+// PUSH BANNER
+// ─────────────────────────────────────────────
+let pushBannerTimer = null;
+
+// Renders one notification payload in-app. Shape comes from the metrics
+// Worker: { title, body, url, kind, stores[] }. Everything is set as text
+// content — a push body can carry a store name, which is contributor-supplied.
+function showPushBanner(p){
+  if(!p || !p.title) return;
+  const el = document.getElementById('push-banner');
+  if(!el) return;
+  const sponsored = p.kind === 'ad';
+  document.getElementById('push-banner-icon').textContent = sponsored ? '📣' : '🛍️';
+  document.getElementById('push-banner-title').textContent = p.title;
+  // "Платні розміщення завжди позначені" is a promise this app makes to
+  // shoppers, and a banner is no more exempt from it than a pin or a card.
+  document.getElementById('push-banner-sub').textContent =
+    (sponsored ? t('sponsoredTag') + ' · ' : '') + (p.body || '');
+  el.classList.toggle('sponsored', sponsored);
+
+  const ids = Array.isArray(p.stores) ? p.stores : [];
+  const go = document.getElementById('push-banner-go');
+  go.onclick = () => { hidePushBanner(); if(ids.length === 1) openStore(ids[0]); };
+  // Only offer the tap when there is exactly one place to go; "3 stores
+  // restock today" has no single destination and a dead tap is worse than none.
+  go.style.cursor = ids.length === 1 ? 'pointer' : 'default';
+
+  el.classList.remove('hidden');
+  clearTimeout(pushBannerTimer);
+  pushBannerTimer = setTimeout(hidePushBanner, 12000);
+}
+
+function hidePushBanner(){
+  const el = document.getElementById('push-banner');
+  if(el) el.classList.add('hidden');
+  clearTimeout(pushBannerTimer);
+}
+
 function openStore(id){ track('store_open', id); openDetail(id); }
 
 function openDetail(id) {
@@ -3223,6 +3301,21 @@ window.addEventListener('DOMContentLoaded',async ()=>{
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    // The service worker speaks to the page on two occasions: a push arriving
+    // while the app is open, and a notification being tapped. Both surface the
+    // same banner, so a notification always has a visible consequence inside
+    // the app rather than only outside it.
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      const m = e.data || {};
+      if (m.type !== 'push' && m.type !== 'notificationclick') return;
+      showPushBanner(m.payload);
+      // A tap is an explicit request to see the thing. Open it, rather than
+      // making the user tap a second time in the banner.
+      if (m.type === 'notificationclick') {
+        const ids = (m.payload && m.payload.stores) || [];
+        if (ids.length === 1) openStore(ids[0]);
+      }
+    });
   });
 }
 

@@ -1950,10 +1950,19 @@ export default {
       const bodyText = names.length === 1
         ? `${names[0]} restocks today — fresh stock just in!`
         : `${names.length} stores you follow restock today: ${names.slice(0, 3).join(', ')}${names.length > 3 ? '…' : ''}`;
+      // Deep-link to the store when exactly one restocked. The URL used to be
+      // APP_URL for every push, so tapping a notification about one specific
+      // shop dropped you on the map with nothing to say which shop it meant.
+      // `kind` and `stores` are for the in-app banner, which needs to know what
+      // it is showing and what to open — the notification body is prose and
+      // cannot be parsed back into ids.
+      const ids = hits.map((f) => f.id);
       const payload = JSON.stringify({
         title: '🛍️ Fresh stock today!',
         body: bodyText,
-        url: APP_URL,
+        url: ids.length === 1 ? `${APP_URL}?store=${encodeURIComponent(ids[0])}` : APP_URL,
+        kind: 'restock',
+        stores: ids,
         tag: 'restock-' + today,
       });
       ctx.waitUntil(sendPush(r, payload, env).catch(() => {}));

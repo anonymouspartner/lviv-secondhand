@@ -266,7 +266,8 @@
       "alert": false,
       "startsAt": "2026-08-15T16:20:00.000Z",
       "expiresAt": "2026-08-16T21:00:00.000Z"
-    }
+    },
+    "restock_date": "2026-08-17"
   },
   {
     "id": "h8",
@@ -496,7 +497,7 @@
     "lat": 49.838766,
     "lng": 24.035492,
     "note": "",
-    "restock_date": "2026-08-03"
+    "restock_date": "2026-08-18"
   },
   {
     "id": "c3",
@@ -569,7 +570,7 @@
     "lat": 49.8385394,
     "lng": 24.0232857,
     "note": "Address from OpenStreetMap/Nominatim (a \"Євро секонд-хенд\" POI 3m from this pin) and the #208 community list, which also reports a Monday restock — conflicts with the Saturday implied by this store's existing restock_date; not overwritten, flagged for a field check.",
-    "restock_date": "2026-08-08"
+    "restock_date": "2026-08-22"
   },
   {
     "id": "c7",
@@ -792,7 +793,7 @@
     "addressEn": "",
     "phone": "",
     "type": "other",
-    "pricing": "item",
+    "pricing": "kg",
     "hours": {
       "sun": "09:00–17:00",
       "mon": "09:00–19:00",
@@ -806,7 +807,7 @@
     "lat": 49.8393,
     "lng": 24.035811,
     "note": "New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
-    "dailyDrop": true
+    "restockDay": "tue"
   },
   {
     "id": "c21",
@@ -1643,30 +1644,6 @@
     "lat": 49.795196,
     "lng": 24.017837,
     "note": "From locator.lviv.ua listing."
-  },
-  {
-    "id": "c56",
-    "name": "Luxovski",
-    "brand": "Independent",
-    "address": "вул. Шпитальна, 11",
-    "addressEn": "11 Shpytalna St",
-    "phone": "",
-    "type": "other",
-    "pricing": "item",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "cycle": 7,
-    "lat": 49.845374,
-    "lng": 24.020345,
-    "note": "From locator.lviv.ua listing. House number from the #208 community list, which also reports a Wednesday restock — conflicts with the Monday implied by this store's existing restock_date; not overwritten, flagged for a field check.",
-    "restock_date": "2026-08-10"
   },
   {
     "id": "c57",
@@ -3170,54 +3147,6 @@
     }
   },
   {
-    "id": "c123",
-    "name": "МЮНХЕН — Вороного 2",
-    "brand": "МЮНХЕН",
-    "address": "вулиця Миколи Вороного, 2",
-    "addressEn": "2 Mykoly Voronoho St",
-    "phone": "+38 (097) 134-55-78",
-    "type": "other",
-    "pricing": "item",
-    "cycle": 7,
-    "lat": 49.8386832,
-    "lng": 24.0299467,
-    "note": "Stock clothing & footwear chain, 2 Lviv locations (see also c124, Городоцька 10): men's, women's, children's clothing, footwear, hats, belts, underwear, bags. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "dailyDrop": true
-  },
-  {
-    "id": "c124",
-    "name": "МЮНХЕН — Городоцька 10",
-    "brand": "МЮНХЕН",
-    "address": "Городоцька вулиця, 10",
-    "addressEn": "10 Horodotska St",
-    "phone": "+38 (067) 679-05-98",
-    "type": "other",
-    "pricing": "item",
-    "cycle": 7,
-    "lat": 49.8439178,
-    "lng": 24.023748,
-    "note": "Stock clothing & footwear chain, 2 Lviv locations (see also c123, Вороного 2): men's, women's, children's clothing, footwear, hats, belts, underwear, bags. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "dailyDrop": true
-  },
-  {
     "id": "c125",
     "name": "Birka! Lux — Шпитальна 7",
     "brand": "Birka! Lux",
@@ -3240,5 +3169,47 @@
       "sat": "10:00–20:00",
       "sun": "11:00–19:00"
     }
+  },
+  {
+    "id": "c126",
+    "name": "Супер секонд-хенд",
+    "address": "вул. Староміська, 1",
+    "addressEn": "1 Staromiska St",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "hours": {
+      "mon": "10:00–20:00",
+      "tue": "10:00–20:00",
+      "wed": "10:00–20:00",
+      "thu": "10:00–20:00",
+      "fri": "10:00–20:00",
+      "sat": "10:00–19:00",
+      "sun": "10:00–19:00"
+    },
+    "lat": 49.844698,
+    "lng": 24.026177,
+    "note": "Submitted from the app and approved in Telegram (issue #272). Reported as running a summer/autumn sale at the time of submission."
+  },
+  {
+    "id": "c127",
+    "name": "Взуття з Європи",
+    "address": "вул. Шпитальна, 8",
+    "addressEn": "8 Shpytalna St",
+    "type": "other",
+    "pricing": "item",
+    "cycle": 7,
+    "hours": {
+      "mon": "?",
+      "tue": "?",
+      "wed": "?",
+      "thu": "?",
+      "fri": "?",
+      "sat": "?",
+      "sun": "?"
+    },
+    "lat": 49.844481,
+    "lng": 24.023186,
+    "note": "Footwear only · тільки взуття. Submitted from the app and approved in Telegram (issue #272). Hours were submitted as \"Звичайно\" (\"as usual\") rather than times, so they are recorded as unknown pending a field check. 26 m from c125 (Birka! Lux — Шпитальна 7) — different shop by name and stock, but worth confirming on the ground."
   }
 ]
