@@ -47,6 +47,15 @@ jobs:
       - name: Check cross-system wiring
         run: node scripts/check-wiring.mjs
 
+      # The automated map-patch path had never run in production, and the first
+      # real dispatch would have reformatted all 130 records — the applier wrote
+      # stores.json with indent 1 while every other writer uses 2. This drives
+      # the applier as a subprocess against a fixture, the same way the workflow
+      # invokes it, and asserts both that formatting survives and that fill-gaps
+      # mode never overwrites a value already on the map.
+      - name: Check the map-patch pipeline
+        run: node scripts/check-map-patch.mjs
+
       # The per-store pages and sitemap are generated from stores.json but
       # committed (GitHub Pages serves the repo root, so the files ARE the
       # deploy). Regenerate and fail if the committed output differs — that

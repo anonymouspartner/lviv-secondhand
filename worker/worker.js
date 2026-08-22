@@ -310,6 +310,52 @@ async function dispatchMapPatch(env, storeId, updates) {
   if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
 }
 
+// Fields a contribution is allowed to patch unattended. Deliberately excludes
+// id, lat and lng: a pin is the one thing a wrong edit makes actively
+// misleading rather than merely incomplete, and every store already has
+// coordinates, so fill-gaps would decline them anyway. Listing them out means
+// a new field added to the edit form doesn't silently become auto-appliable.
+const AUTO_PATCH_FIELDS = [
+  'name', 'addressEn', 'address', 'phone', 'pricing', 'cycle',
+  'dailyDrop', 'restockDay', 'restock_date', 'note', 'hours',
+];
+
+// Turns an approved contribution's corrections into one fill-gaps batch. The
+// workflow decides what actually lands: anything that would contradict a value
+// already on the map is declined there and raised as its own issue. So this
+// only has to be conservative about *which fields* may be offered, not about
+// whether each one is right.
+function contributionPatches(payload) {
+  const list = Array.isArray(payload && payload.overrideList) ? payload.overrideList.slice(0, 200) : [];
+  const patches = [];
+  for (const o of list) {
+    if (!o || typeof o.id !== 'string' || !/^[a-z0-9]{1,12}$/i.test(o.id)) continue;
+    const changes = o.changes && typeof o.changes === 'object' ? o.changes : {};
+    const updates = {};
+    for (const k of AUTO_PATCH_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(changes, k)) updates[k] = changes[k];
+    }
+    if (Object.keys(updates).length) patches.push({ store_id: o.id, updates });
+  }
+  return patches;
+}
+
+async function dispatchFillGaps(env, patches) {
+  if (!env.GH_PAT) throw new Error('GH_PAT not configured');
+  const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GH_PAT}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'lviv-secondhand-worker',
+    },
+    body: JSON.stringify({ event_type: 'update_map_data', client_payload: { mode: 'fill-gaps', patches } }),
+  });
+  if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
+}
+
 // Same GitHub dispatch mechanism as dispatchMapPatch, different event. Split
 // rather than parameterised because the two carry unrelated payloads and are
 // consumed by different workflows; folding them together would only hide which
@@ -1310,15 +1356,48 @@ export default {
             `Pass this to the store owner. Entering it on a flash-deal purchase publishes their deal immediately, with no review.`,
             { status: 200 });
         }
-        let issueUrl;
-        try {
-          const issue = renderSubmissionIssue(row.kind, payload);
-          issueUrl = await createGithubIssue(env, issue.title, issue.body, issue.labels);
-        } catch (e) {
-          return new Response('issue creation failed — check GH_PAT and that it still has repo scope', { status: 502 });
+        // A contribution's corrections to existing stores are structured, so
+        // they go straight down the automated pipeline in fill-gaps mode. New
+        // stores and removals cannot: a patch can neither create nor delete an
+        // entry, and both are decisions a person should make anyway. An issue is
+        // raised only for those — and only if there are any.
+        //
+        // Owner submissions stay on the issue path regardless: their fields
+        // arrive as prose ("last restocked 2026-08-19, every 14 days"), and
+        // parsing that unattended would be guessing.
+        let patches = [];
+        if (row.kind === 'contribution') {
+          patches = contributionPatches(payload);
+          if (patches.length) {
+            try {
+              await dispatchFillGaps(env, patches);
+            } catch (e) {
+              return new Response('map-patch dispatch failed — check GH_PAT and the update-map workflow logs', { status: 502 });
+            }
+          }
+        }
+
+        const needsIssue = row.kind !== 'contribution'
+          || (Array.isArray(payload.custom) && payload.custom.length > 0)
+          || (Array.isArray(payload.removed) && payload.removed.length > 0);
+
+        let issueUrl = null;
+        if (needsIssue) {
+          try {
+            const issue = renderSubmissionIssue(row.kind, payload);
+            issueUrl = await createGithubIssue(env, issue.title, issue.body, issue.labels);
+          } catch (e) {
+            return new Response('issue creation failed — check GH_PAT and that it still has repo scope', { status: 502 });
+          }
         }
         await env.DB.prepare("UPDATE submissions SET status = 'approved', issue_url = ? WHERE id = ?").bind(issueUrl, id).run();
-        return new Response(`✅ Approved — issue created:\n${issueUrl}`, { status: 200 });
+
+        const applied = patches.length
+          ? `🤖 ${patches.length} store correction(s) sent to the map pipeline. Anything that disagrees with data already on the map is declined there and raised as its own issue.\n\n`
+          : '';
+        return new Response(issueUrl
+          ? `✅ Approved.\n\n${applied}Issue created:\n${issueUrl}`
+          : `✅ Approved.\n\n${applied}Nothing needed a human — no issue opened.`, { status: 200 });
       }
       // Owner taps this from the "1 of 2" restock notification to publish a
       // single report without waiting for a second one. Same GET-so-Telegram-
