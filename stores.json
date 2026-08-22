@@ -1768,7 +1768,7 @@
     "id": "c62",
     "name": "Супер Бомба секонд хенду",
     "brand": "Independent",
-    "address": "вул. Пантелеймона Куліша 14",
+    "address": "вул. Пантелеймона Куліша, 14",
     "addressEn": "14 Panteleymona Kulisha St",
     "phone": "",
     "type": "other",
@@ -1783,9 +1783,9 @@
       "sun": "10:00–19:00"
     },
     "cycle": 7,
-    "lat": 49.848122,
-    "lng": 24.02414,
-    "note": "From locator.lviv.ua listing. New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "lat": 49.8471165,
+    "lng": 24.0244292,
+    "note": "Адресу підтверджено власником мапи: буд. 14. Позначку зміщено на 114 м за геокодом будинку (OpenStreetMap) — за тією ж адресою значиться магазин одягу. · Address confirmed by the maintainer as no. 14. Pin moved 114 m to the building-level geocode (OpenStreetMap), which also lists a clothing shop at that number.",
     "dailyDrop": true
   },
   {
