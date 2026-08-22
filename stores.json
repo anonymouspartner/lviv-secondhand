@@ -843,19 +843,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "tue",
     "lat": 49.842187,
     "lng": 23.975855,
-    "note": "By weight. Restocked Tuesdays."
+    "note": "By weight. Restocked Tuesdays. Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
   },
   {
     "id": "c23",
@@ -867,19 +867,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "thu",
     "lat": 49.841631,
     "lng": 24.016137,
-    "note": "By weight. Restocked Thursdays (updated per the #208 community list, which disagreed with the Wednesday previously on record — no other corroborating source, so treated as the newer/better information)."
+    "note": "By weight. Restocked Thursdays (updated per the #208 community list, which disagreed with the Wednesday previously on record — no other corroborating source, so treated as the newer/better information). Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
   },
   {
     "id": "c24",
@@ -891,19 +891,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "wed",
     "lat": 49.8156,
     "lng": 24.0497,
-    "note": "By weight. Restocked Wednesdays. (Approx. location.)"
+    "note": "By weight. Restocked Wednesdays. (Approx. location.) Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
   },
   {
     "id": "c25",
@@ -915,19 +915,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "tue",
     "lat": 49.796834,
     "lng": 24.054224,
-    "note": "By weight. ⭐ 3.4 (138 reviews). Closed Sundays. Restock day updated to Tuesday per the #208 community list, which disagreed with the Wednesday previously on record — no other corroborating source, so treated as the newer/better information."
+    "note": "By weight. ⭐ 3.4 (138 reviews). Closed Sundays. Restock day updated to Tuesday per the #208 community list, which disagreed with the Wednesday previously on record — no other corroborating source, so treated as the newer/better information. Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
   },
   {
     "id": "c26",
@@ -939,19 +939,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "thu",
     "lat": 49.804155,
     "lng": 23.990601,
-    "note": "By weight. Restocked Thursdays."
+    "note": "By weight. Restocked Thursdays. Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
   },
   {
     "id": "c27",
@@ -987,19 +987,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "mon",
     "lat": 49.794862,
     "lng": 24.063585,
-    "note": "By weight. Restocked Mondays (updated per the #208 community list, which disagreed with the Friday previously on record — no other corroborating source, so treated as the newer/better information)."
+    "note": "By weight. Restocked Mondays (updated per the #208 community list, which disagreed with the Friday previously on record — no other corroborating source, so treated as the newer/better information). Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
   },
   {
     "id": "c29",
@@ -1011,19 +1011,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "fri",
     "lat": 49.809116,
     "lng": 24.00112,
-    "note": "By weight. Restocked Fridays."
+    "note": "By weight. Restocked Fridays. Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
   },
   {
     "id": "c30",
@@ -1035,19 +1035,19 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "10:00–19:00",
-      "tue": "10:00–19:00",
-      "wed": "10:00–19:00",
-      "thu": "10:00–19:00",
-      "fri": "10:00–19:00",
-      "sat": "10:00–19:00",
-      "sun": "closed"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–18:00",
+      "sun": "10:00–13:00"
     },
     "cycle": 7,
     "restockDay": "fri",
     "lat": 49.861805,
     "lng": 24.051611,
-    "note": "By weight. Restocked Fridays."
+    "note": "By weight. Restocked Fridays. Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
   },
   {
     "id": "c31",
