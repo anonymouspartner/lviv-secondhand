@@ -789,8 +789,8 @@
     "id": "c20",
     "name": "Second hand Bomba",
     "brand": "Independent",
-    "address": "",
-    "addressEn": "",
+    "address": "вул. Володимира Винниченка, 6",
+    "addressEn": "Volodymyra Vynnychenka St, 6",
     "phone": "",
     "type": "other",
     "pricing": "kg",
@@ -2163,11 +2163,11 @@
       "sat": "09:00–19:00",
       "sun": "10:00–20:00"
     },
-    "cycle": 7,
+    "cycle": 14,
     "lat": 49.84924,
     "lng": 24.024066,
-    "note": "Надіслано користувачем; адресу визначено за координатами — потребує перевірки на місці. · Submitted by a contributor; address derived from the pin — needs a field check.",
-    "restock_date": "2026-08-07"
+    "note": "By weight. Part of the Світ секонд-хенду chain. Цикл виправлено на 14 днів за спостереженням завозу 21.08.2026 — рівно через два тижні після 07.08.2026, обидва в п’ятницю. · Cycle corrected to 14 days from a restock observed 2026-08-21, exactly a fortnight after 2026-08-07, both Fridays (issue #278).",
+    "restock_date": "2026-08-21"
   },
   {
     "id": "c78",
@@ -3041,7 +3041,7 @@
     "cycle": 7,
     "lat": 49.8558822,
     "lng": 24.021353,
-    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown).",
+    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown). Завіз 19.08.2026 (середа) підтверджує записаний день оновлення. · A restock observed on 2026-08-19, a Wednesday, corroborates the recorded restock day (issue #278).",
     "hours": {
       "mon": "?",
       "tue": "?",
@@ -3077,30 +3077,6 @@
     }
   },
   {
-    "id": "c120",
-    "name": "ЕЛІТ",
-    "brand": "Independent",
-    "address": "вул. Театральна, 23",
-    "addressEn": "23 Teatralna St",
-    "phone": "+38 (096) 081-89-98",
-    "type": "other",
-    "pricing": "item",
-    "cycle": 7,
-    "lat": 49.8443089,
-    "lng": 24.0281042,
-    "note": "Consignment shop: used and new clothing, footwear, fur, accessories. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "dailyDrop": true
-  },
-  {
     "id": "c121",
     "name": "Комісійний — Гашека 15а",
     "brand": "Independent",
@@ -3113,29 +3089,6 @@
     "lat": 49.7969275,
     "lng": 24.0189755,
     "note": "Consignment shop: women's, men's, and children's used clothing and footwear. Name (\"Комісійний\") from an OpenStreetMap/Nominatim POI at this exact address. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    }
-  },
-  {
-    "id": "c122",
-    "name": "Second hand — Окуневського 3",
-    "brand": "Independent",
-    "address": "вулиця Теофіла Окуневського, 3",
-    "addressEn": "3 Teofila Okunevskoho St",
-    "phone": "+38 (067) 776-44-74",
-    "type": "other",
-    "pricing": "item",
-    "cycle": 7,
-    "lat": 49.8589845,
-    "lng": 24.0179571,
-    "note": "Large assortment of stock clothing, footwear, underwear; household textiles from Germany. From the dlab.com.ua Lviv business directory (Сток одягу. Секонд хенд category) — not yet confirmed against the map’s other sources; hours unknown.",
     "hours": {
       "mon": "?",
       "tue": "?",
@@ -3233,7 +3186,7 @@
     "cycle": 14,
     "lat": 49.865577,
     "lng": 24.015615,
-    "note": "Підтверджено на місці 2026-08-22: на просп. Чорновола, 101 є «Світ секонд-хенду», окремо від «Євро Тренд» (c21), що за кілька метрів у тому ж торговому ряду. · Confirmed in person 2026-08-22: a Світ секонд-хенду at Чорновола 101, separate from the Євро Тренд unit (c21) a few metres along the same strip. Години — з таблички на дверях, без перерви. Повне оновлення товару — середа, останнє 19.08.2026; таблиця «ВІДДІЛ НА ВАГУ» має 14 рядків (середа → другий вівторок), тобто цикл 14 днів, а ціна знижується щодня. · Hours from the door sign, no midday break. Full restock on Wednesdays, last one 19.08.2026; the in-store weight-department board runs 14 rows (Wednesday through the second Tuesday), so the cycle is 14 days, with the price stepping down each day. Координати — це геокод адреси, а не зафіксований вхід; уточнити при нагоді. · Coordinates are the address geocode, not a surveyed door — worth a field pin.",
+    "note": "Підтверджено на місці 2026-08-22: на просп. Чорновола, 101 є «Світ секонд-хенду», окремо від «Євро Тренд» (c21), що за кілька метрів у тому ж торговому ряду. · Confirmed in person 2026-08-22: a Світ секонд-хенду at Чорновола 101, separate from the Євро Тренд unit (c21) a few metres along the same strip. Години — з таблички на дверях, без перерви. Повне оновлення товару — середа, останнє 19.08.2026; таблиця «ВІДДІЛ НА ВАГУ» має 14 рядків (середа → другий вівторок), тобто цикл 14 днів, а ціна знижується щодня. · Hours from the door sign, no midday break. Full restock on Wednesdays, last one 19.08.2026; the in-store weight-department board runs 14 rows (Wednesday through the second Tuesday), so the cycle is 14 days, with the price stepping down each day. Незалежно підтверджено заявкою власника (@Svit_secondlviv, issue #277): та сама дата завозу 19.08.2026 і той самий 14-денний цикл. У заявці години подано як 09:00–19:00 — залишено години з таблички на дверях, як точніше джерело. · Independently confirmed by an owner submission (@Svit_secondlviv, issue #277): the same 2026-08-19 restock and the same 14-day cycle. That submission gives hours as 09:00–19:00; the door-sign hours are kept as the more precise source. Координати — це геокод адреси, а не зафіксований вхід; уточнити при нагоді. · Coordinates are the address geocode, not a surveyed door — worth a field pin.",
     "restock_date": "2026-08-19"
   }
 ]
