@@ -3142,7 +3142,8 @@
     },
     "lat": 49.844698,
     "lng": 24.026177,
-    "note": "Submitted from the app and approved in Telegram (issue #272). Reported as running a summer/autumn sale at the time of submission."
+    "note": "Submitted from the app and approved in Telegram (issue #272). Reported as running a summer/autumn sale at the time of submission.",
+    "dailyDrop": true
   },
   {
     "id": "c127",
