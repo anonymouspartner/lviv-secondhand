@@ -2983,30 +2983,6 @@
     "restockDay": "tue"
   },
   {
-    "id": "c116",
-    "name": "Second hand — Шолом-Алейхема 20",
-    "brand": "Independent",
-    "address": "вулиця Шолом-Алейхема, 20",
-    "addressEn": "20 Sholom-Aleikhema St",
-    "phone": "",
-    "type": "other",
-    "pricing": "item",
-    "cycle": 7,
-    "lat": 49.8449538,
-    "lng": 24.0203462,
-    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown).",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "restockDay": "tue"
-  },
-  {
     "id": "c118",
     "name": "Second hand — Чорновола 57",
     "brand": "Independent",
