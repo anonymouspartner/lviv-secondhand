@@ -288,9 +288,9 @@
       "sun": "10:00–20:00"
     },
     "cycle": 35,
-    "lat": 49.845559,
-    "lng": 24.007059,
-    "note": "Нещодавно відкрита точка HUMANA — оновлення товару за тим самим графіком мережі (5-тижневий цикл), що й інші точки. Пін потребує перевірки на місці; години встановлено за стандартним графіком мережі (10:00–20:00 щодня, як у решти 7 точок HUMANA). · Recently opened HUMANA location — restocks on the same brand-wide schedule (5-week cycle) as the other locations. Pin still needs field verification; hours are set to the brand's standard 10:00–20:00 daily schedule, matching all 7 other HUMANA locations. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · Hours can change the day before a new collection; some stores close or open short.",
+    "lat": 49.845695,
+    "lng": 24.006535,
+    "note": "2-повер",
     "restockDates": [
       "2026-01-12",
       "2026-02-16",
@@ -3118,5 +3118,27 @@
     "lng": 24.015615,
     "note": "Підтверджено на місці 2026-08-22: на просп. Чорновола, 101 є «Світ секонд-хенду», окремо від «Євро Тренд» (c21), що за кілька метрів у тому ж торговому ряду. · Confirmed in person 2026-08-22: a Світ секонд-хенду at Чорновола 101, separate from the Євро Тренд unit (c21) a few metres along the same strip. Години — з таблички на дверях, без перерви. Повне оновлення товару — середа, останнє 19.08.2026; таблиця «ВІДДІЛ НА ВАГУ» має 14 рядків (середа → другий вівторок), тобто цикл 14 днів, а ціна знижується щодня. · Hours from the door sign, no midday break. Full restock on Wednesdays, last one 19.08.2026; the in-store weight-department board runs 14 rows (Wednesday through the second Tuesday), so the cycle is 14 days, with the price stepping down each day. Незалежно підтверджено заявкою власника (@Svit_secondlviv, issue #277): та сама дата завозу 19.08.2026 і той самий 14-денний цикл. У заявці години подано як 09:00–19:00 — залишено години з таблички на дверях, як точніше джерело. · Independently confirmed by an owner submission (@Svit_secondlviv, issue #277): the same 2026-08-19 restock and the same 14-day cycle. That submission gives hours as 09:00–19:00; the door-sign hours are kept as the more precise source. Координати — це геокод адреси, а не зафіксований вхід; уточнити при нагоді. · Coordinates are the address geocode, not a surveyed door — worth a field pin.",
     "restock_date": "2026-08-19"
+  },
+  {
+    "id": "c129",
+    "name": "Супер секонд-хенд",
+    "lat": 49.84239,
+    "lng": 24.017851,
+    "cycle": 7,
+    "address": "Бул Городоцька 53",
+    "addressEn": "Horodotska St, 53, Lviv, Lviv Oblast, 79000",
+    "pricing": "item",
+    "hours": {
+      "fri": "10:00–20:00",
+      "mon": "10:00–20:00",
+      "sat": "10:00–19:00",
+      "sun": "10:00–19:00",
+      "thu": "10:00–20:00",
+      "tue": "10:00–20:00",
+      "wed": "10:00–20:00"
+    },
+    "dailyDrop": true,
+    "brand": "Independent",
+    "type": "other"
   }
 ]
