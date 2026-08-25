@@ -552,8 +552,8 @@
     "id": "c7",
     "name": "Second Hand",
     "brand": "Independent",
-    "address": "",
-    "addressEn": "",
+    "address": "Бул Стародубська 6",
+    "addressEn": "Starodubska St, 1, Lviv, Lviv Oblast, 79000",
     "phone": "",
     "type": "other",
     "pricing": "kg",
@@ -567,10 +567,11 @@
       "sat": "09:00–19:00"
     },
     "cycle": 7,
-    "lat": 49.837062,
-    "lng": 24.003367,
+    "lat": 49.837148,
+    "lng": 24.003371,
     "note": "",
-    "restock_date": "2026-08-10"
+    "restock_date": "2026-08-10",
+    "restockDay": "mon"
   },
   {
     "id": "c8",
@@ -1867,21 +1868,22 @@
     "addressEn": "Horodotska St, 6",
     "phone": "",
     "type": "other",
-    "pricing": "item",
+    "pricing": "kg",
     "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
+      "mon": "09:00–15:00",
+      "tue": "09:00–20:00",
+      "wed": "09:00–20:00",
+      "thu": "09:00–20:00",
+      "fri": "09:00–20:00",
+      "sat": "09:00–19:00",
+      "sun": "10:00–19:00"
     },
     "cycle": 7,
-    "lat": 49.838047,
-    "lng": 24.006954,
-    "note": "From locator.lviv.ua listing. New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
-    "dailyDrop": true
+    "lat": 49.838078,
+    "lng": 24.006945,
+    "note": "Cheapest in Lviv",
+    "dailyDrop": false,
+    "restockDay": "tue"
   },
   {
     "id": "c68",
