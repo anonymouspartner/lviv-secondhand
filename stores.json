@@ -1735,10 +1735,11 @@
       "sat": "09:00–19:00"
     },
     "cycle": 7,
-    "lat": 49.845383,
-    "lng": 24.019442,
+    "lat": 49.845549,
+    "lng": 24.019699,
     "note": "From locator.lviv.ua listing.",
-    "restock_date": "2026-08-10"
+    "restock_date": "2026-08-10",
+    "restockDay": "mon"
   },
   {
     "id": "c62",
