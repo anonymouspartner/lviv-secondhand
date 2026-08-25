@@ -334,30 +334,6 @@
     "note": "Mixed new and used. Men's, women's, shoes, accessories. Closed Sundays."
   },
   {
-    "id": "s4",
-    "name": "ObnovaNova",
-    "brand": "ObnovaStores",
-    "address": "просп. В. Чорновола, 16і",
-    "addressEn": "V. Chornovola Ave, 16i",
-    "phone": "",
-    "type": "other",
-    "pricing": "item",
-    "hours": {
-      "mon": "10:00–20:00",
-      "tue": "10:00–20:00",
-      "wed": "10:00–20:00",
-      "thu": "10:00–20:00",
-      "fri": "10:00–20:00",
-      "sat": "10:00–20:00",
-      "sun": "10:00–20:00"
-    },
-    "cycle": 7,
-    "lat": 49.85,
-    "lng": 24.0195,
-    "note": "Stock and used. Branded items. Updated daily. Frequent sales.",
-    "dailyDrop": true
-  },
-  {
     "id": "s6",
     "name": "Birka! Lux — Зелена 69а",
     "brand": "Birka! Lux",
@@ -2202,18 +2178,18 @@
     "phone": "",
     "type": "other",
     "pricing": "item",
-    "cycle": 35,
-    "lat": 49.8458124,
-    "lng": 24.0194973,
+    "cycle": 7,
+    "lat": 49.845529,
+    "lng": 24.019458,
     "note": "Address from the #208 community list (31m from this pin). New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle — resolves the earlier cycle-length conflict (this was never a fixed 7- or 35-day cycle to begin with).",
     "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
+      "mon": "09:00–19:00",
+      "tue": "09:00–19:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00",
+      "sun": "10:00–18:00"
     },
     "restock_date": "2026-08-10",
     "dailyDrop": true
