@@ -2528,30 +2528,6 @@
     "restockDay": "tue"
   },
   {
-    "id": "c97",
-    "name": "Second hand — Городоцька 45",
-    "brand": "Independent",
-    "address": "вул. Городоцька, 45",
-    "addressEn": "45 Horodotska St",
-    "phone": "",
-    "type": "other",
-    "pricing": "item",
-    "cycle": 7,
-    "lat": 49.842328,
-    "lng": 24.0195056,
-    "note": "From the #208 community-maintained restock list, cross-checked against OpenStreetMap/Nominatim geocoding — not yet confirmed against the map's other sources (name, phone, hours unknown).",
-    "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
-    },
-    "restockDay": "tue"
-  },
-  {
     "id": "c98",
     "name": "Second hand — Горської 5а",
     "brand": "Independent",
