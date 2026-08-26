@@ -1741,7 +1741,7 @@ async function cmdStoreQr(env, chatId, rawId) {
   if (!store) {
     await say(env, chatId,
       `🤷 Не знайшов магазин <code>${esc(rawId)}</code>. · No store with that id.\n` +
-      `Формат — літера + число, напр. <code>c12</code>, <code>h5</code>. · Format is letter+number.\n` +
+      `Формат — літера + число, напр. <code>c21</code>, <code>h1</code>. · Format is letter+number.\n` +
       `Усі коди · All ids: ${APP_URL}qr/`);
     return;
   }

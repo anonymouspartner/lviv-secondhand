@@ -164,29 +164,6 @@
     }
   },
   {
-    "id": "h5",
-    "name": "HUMANA — Shyroka",
-    "brand": "HUMANA",
-    "address": "вул. Широка, 81а",
-    "addressEn": "Shyroka St, 81a",
-    "phone": "(032) 245-87-80",
-    "type": "humana",
-    "pricing": "item",
-    "hours": {
-      "mon": "10:00–20:00",
-      "tue": "10:00–20:00",
-      "wed": "10:00–20:00",
-      "thu": "10:00–20:00",
-      "fri": "10:00–20:00",
-      "sat": "10:00–20:00",
-      "sun": "10:00–20:00"
-    },
-    "cycle": 14,
-    "lat": 49.841221,
-    "lng": 23.96754,
-    "note": "⚠️ Магазин закривається назавжди 23.08.2026. Розпродаж: одяг/взуття/текстиль — 56 грн, дрібнички — 30 грн, ексклюзивні знахідки — знижка -50%. · 2-week inventory cycle. Напередодні нової колекції години можуть змінюватися — частина магазинів зачинена або працює скорочено. · ⚠️ Permanently closing 2026-08-23. Clearance sale: clothing/shoes/textiles 56 UAH, small items 30 UAH, exclusive finds -50% off. · Hours can change the day before a new collection; some stores close or open short."
-  },
-  {
     "id": "h6",
     "name": "HUMANA — Doroshenka",
     "brand": "HUMANA",

@@ -2874,6 +2874,12 @@ function buildBundle(){
   const staleHeldBack = [];
   const overrideList = Object.keys(overrides).map(id => {
     const shipped = STORES.find(s => s.id === id);
+    // The store has been taken off the official map since this device edited
+    // it. An override for it can never apply, but it was still being submitted
+    // on every contribution — each one raising a fresh "not on the map" issue
+    // for the same dead id, for as long as the entry sat in localStorage.
+    // Four of them produced ten such issues in four days.
+    if(!shipped && !customById[id]){ delete overrides[id]; return null; }
     const split = splitStaleChanges(id, overrides[id]);
     if(split.stale.length){
       staleHeldBack.push({ id, name: shipped ? shipped.name : id, fields: split.stale.map(x => x.field) });
@@ -2887,7 +2893,7 @@ function buildBundle(){
       entry.base = { lat: shipped.lat, lng: shipped.lng };
     }
     return entry;
-  }).filter(o => Object.keys(o.changes).length);
+  }).filter(o => o && Object.keys(o.changes).length);
   // Removals: built-in stores you hid because they don't exist / are wrong — so a
   // contribution can ask the maintainer to take them off the official map.
   const removed = getHiddenStores()
