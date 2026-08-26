@@ -477,7 +477,7 @@
   },
   {
     "id": "c3",
-    "name": "Euro second hand",
+    "name": "Євро секонд-хенд сезони",
     "brand": "Євро секонд хенд",
     "address": "вул. Шота Руставелі, 42",
     "addressEn": "42 Shota Rustaveli St",
@@ -485,13 +485,13 @@
     "type": "other",
     "pricing": "kg",
     "hours": {
-      "mon": "?",
-      "tue": "?",
-      "wed": "?",
-      "thu": "?",
-      "fri": "?",
-      "sat": "?",
-      "sun": "?"
+      "mon": "09:00–19:00",
+      "tue": "09:00–13:00",
+      "wed": "09:00–19:00",
+      "thu": "09:00–19:00",
+      "fri": "09:00–19:00",
+      "sat": "09:00–19:00",
+      "sun": "09:00–19:00"
     },
     "cycle": 7,
     "lat": 49.8299139,
@@ -1838,7 +1838,7 @@
   },
   {
     "id": "c66",
-    "name": "Секонд-хенд Супер Бомба",
+    "name": "Взуття з Європи",
     "brand": "Independent",
     "address": "вул. Шота Руставелі, 4",
     "addressEn": "Shota Rustaveli St, 4",
@@ -1857,7 +1857,7 @@
     "cycle": 7,
     "lat": 49.833748,
     "lng": 24.035063,
-    "note": "From locator.lviv.ua listing. New stock arrives every day; the shop only does a full seasonal wardrobe change rather than following a fixed restock cycle.",
+    "note": "Shoes only",
     "dailyDrop": true
   },
   {
