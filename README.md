@@ -244,7 +244,7 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 
 - **Infrastructure ≈ ₴0** — GitHub Pages, Cloudflare Workers, D1 and KV all sit inside free tiers. The app is a single static file with a self-hosted map library, so there is no server to rent and no CDN bill.
 - **Payments** — Stripe fees (≈2.9% + fixed, plus ~1% currency conversion, since the account settles in USD while stores are charged in ₴).
-- **Field agent** — the only meaningful variable cost: ₴80 per verified store visit plus ₴200 result bonuses (see the handbook below).
+- **Field agent** — the only meaningful variable cost: ₴80 per verified store visit, ₴200 result bonuses, plus smaller public-poster and material-expense reimbursements (see the handbook below).
 
 **Why it works.** Software margin is very high and infrastructure does not scale with users, so the economics turn entirely on customer acquisition. Acquiring a Featured store costs roughly 2–3 visits plus a sales commission (≈₴500–750); at ₴600/month it repays in about a month and everything after that is close to pure margin.
 
@@ -412,6 +412,8 @@ Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The 
 | `/agent` | The agent menu — everything below, as tappable buttons |
 | `/visit` | Log a store visit — GPS, storefront photo, questionnaire |
 | `/route` | A walking route between stores from your location |
+| `/poster` | Log a poster placed in a public space (bus stop, university) |
+| `/expense` | Log a material expense with a photo receipt |
 | `/myvisits` | Your own logged visits and earnings |
 | `/pay` | The live pay scheme, from the configured rates |
 | `/card` | Your payout card |
@@ -428,7 +430,7 @@ The command menu is **self-managing**: the bot pushes its own command list to Te
 
 Surveying ~130 stores and keeping their restock schedules accurate is fieldwork, so the project employs a local agent. The complete handbook — bilingual, and the document the agent actually works from — is **[`docs/FIELD_AGENT.md`](docs/FIELD_AGENT.md)**.
 
-**Pay** — ₴80 per verified visit, plus ₴200 per verifiable result (QR poster placed, or store owner signed up; both can apply to one visit). Suggested pace 8–12 stores/day. Paid weekly against `/report` and `/export`.
+**Pay** — ₴80 per verified visit, plus ₴200 per verifiable result (QR poster placed, or store owner signed up; both can apply to one visit), ₴10 per public-space poster (capped 10/agent/day), and material expenses reimbursed up to ₴300 with a photo receipt. Suggested pace 8–12 stores/day. Paid weekly against `/report` and `/export`.
 
 **Bonus vs. commission** — a **bonus** pays for the *action* (poster placed, lead captured) even if that store never buys. A **sales commission** pays only when a store actually subscribes and pays. The bonus rewards pipeline; the commission rewards revenue.
 
@@ -669,7 +671,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 - **Інфраструктура ≈ ₴0** — GitHub Pages, Cloudflare Workers, D1 і KV вкладаються в безкоштовні тарифи. Застосунок — один статичний файл із власною бібліотекою карт, тож немає ні сервера в оренду, ні рахунків за CDN.
 - **Оплати** — комісії Stripe (≈2,9% + фіксована, плюс ~1% за конвертацію валют, бо рахунок у USD, а магазини платять у ₴).
-- **Польовий агент** — єдина суттєва змінна витрата: ₴80 за перевірений візит плюс бонуси ₴200 (див. довідник нижче).
+- **Польовий агент** — єдина суттєва змінна витрата: ₴80 за перевірений візит, бонуси ₴200, а також менші компенсації за публічні плакати й матеріали (див. довідник нижче).
 
 **Чому це працює.** Маржа програмного продукту дуже висока, а інфраструктура не дорожчає з кількістю користувачів, тож усе тримається на вартості залучення. Залучити магазин на Featured коштує приблизно 2–3 візити плюс комісія (≈₴500–750); за ₴600/місяць це окупається приблизно за місяць, а далі — майже чиста маржа.
 
@@ -719,6 +721,8 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | `/agent` | Меню агента — усе нижче у вигляді кнопок |
 | `/visit` | Записати візит: GPS, фото вітрини, анкета |
 | `/route` | Маршрут обходу магазинів від вашої локації |
+| `/poster` | Записати плакат у публічному місці (зупинка, ВНЗ) |
+| `/expense` | Записати витрату на матеріали з фото-чеком |
 | `/myvisits` | Ваші записані візити та заробіток |
 | `/pay` | Актуальна схема оплати з налаштованих ставок |
 | `/card` | Ваша картка для виплат |
@@ -735,7 +739,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 Обстежити ~130 магазинів і підтримувати графіки завезення актуальними — це польова робота, тож у проєкті працює місцевий агент. Повний довідник — двомовний, саме той, з якого працює агент — **[`docs/FIELD_AGENT.md`](docs/FIELD_AGENT.md)**.
 
-**Оплата** — ₴80 за перевірений візит плюс ₴200 за кожен підтверджений результат (розміщено QR-постер або власник зареєструвався; обидва можуть бути в одному візиті). Орієнтир — 8–12 магазинів на день. Виплати щотижня за `/report` і `/export`.
+**Оплата** — ₴80 за перевірений візит плюс ₴200 за кожен підтверджений результат (розміщено QR-постер або власник зареєструвався; обидва можуть бути в одному візиті), ₴10 за плакат у публічному місці (макс. 10/агент/день) та компенсація матеріалів до ₴300 за фото-чеком. Орієнтир — 8–12 магазинів на день. Виплати щотижня за `/report` і `/export`.
 
 **Бонус чи комісія** — **бонус** платиться за *дію* (постер розміщено, лід зібрано), навіть якщо магазин ніколи не купить. **Комісія з продажу** платиться лише коли магазин справді підписався й заплатив. Бонус винагороджує воронку, комісія — дохід.
 

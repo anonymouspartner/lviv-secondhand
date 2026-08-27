@@ -1,341 +1,369 @@
-# Field Agent Handbook · Довідник польового агента
+# Довідник польового агента · Field Agent Handbook
 
-How the Lviv Second Hand field agent surveys stores, advertises the app, records
-each visit, and gets paid. Sections that the agent uses day-to-day are bilingual
-(English / Українська).
+Як польовий агент Lviv Second Hand обстежує магазини, рекламує застосунок,
+записує кожен візит і отримує оплату. Розділи, якими агент користується
+щодня, написані **українською як основною мовою**; англійська йде другою,
+для власника.
 
-> **Roles.** *Owner* = you (operates in English). *Agent* = the field
-> representative in Lviv (operates in Ukrainian). *Sale model* = **survey &
-> advertise** — the agent is paid per verified store visit, with a bonus when a
-> visit produces a result (a QR poster placed, or an owner signed up).
+> **Ролі.** *Власник* — ви (спілкується англійською). *Агент* — польовий
+> представник у Львові (спілкується українською). *Модель роботи* —
+> **обстеження й реклама**: агент отримує оплату за кожен перевірений
+> візит, плюс бонус, коли візит дає результат (розміщено QR-плакат або
+> зареєструвався власник).
+> *Owner = you (English). Agent = the field representative in Lviv
+> (Ukrainian). Sale model = survey & advertise — paid per verified visit,
+> plus a bonus when a visit produces a result.*
 
 ---
 
-## 1. The bot · Бот
+## 1. Бот · The bot
 
-**@Secondhandlvivbot** — log each store visit: `/visit` walks through GPS →
-store → photo → questionnaire. This is the record that pay is calculated
-from.
+**@Secondhandlvivbot** — записуйте кожен візит командою `/visit`: вона
+веде через GPS → магазин → фото → анкету. Саме з цих даних рахується
+оплата.
 
-Questions, coordination, and the daily plan — message the owner directly on
+Питання, координація та план на день — пишіть власнику напряму в
 Telegram.
 
-*Питання, координація та план на день — пишіть власнику напряму в Telegram.*
+*Log each visit with `/visit` (GPS → store → photo → questionnaire) — this
+is the record pay is calculated from. Questions and coordination go
+straight to the owner on Telegram.*
 
 ---
 
-## 2. Payment scheme · Схема оплати
+## 2. Схема оплати · Payment scheme
 
-Four components. Numbers below are the **defaults** — adjust them in
-`telegram-bot/wrangler.toml` (`RATE_VISIT`, `RATE_BONUS`, `RATE_PUBLIC_POSTER`,
-`MATERIAL_BUDGET`); the bot's `/report` uses the same numbers.
+Чотири складові. Цифри нижче — це **типові налаштування**, їх можна
+змінити в `telegram-bot/wrangler.toml` (`RATE_VISIT`, `RATE_BONUS`,
+`RATE_PUBLIC_POSTER`, `MATERIAL_BUDGET`); бот у команді `/report`
+використовує ті самі числа.
 
-| Component | Default | Paid when |
+| Складова | Типово | Коли платиться |
 |---|---|---|
-| **Visit base** · база за візит | **₴80** | A visit is submitted in `/visit` with **GPS + storefront photo + full questionnaire**. One store = one base per survey cycle. |
-| **Bonus** · бонус | **₴200 each** | A verifiable result: **QR poster placed** in the store (photo proof), or **owner signed up** (owner contact captured *and* they submit via the form / agree to be featured). Both can apply → two bonuses. |
-| **Public poster** · публічний плакат | **₴10 each**, max **10/day** | A poster placed in a **public** high-traffic spot (bus stop, university notice board) — not inside a store, so it's a separate, lower rate from the in-store poster bonus above. Log it with **/poster** (location + photo); the daily cap stops the same handful of posters being photographed repeatedly. |
-| **Materials** · матеріали | up to **₴300** reimbursed | A printshop expense for posters — paper, cutting, tape — with a **photo receipt**. Log it with **/expense** (photo + amount). **Food and transport are not covered.** |
+| **База за візит** | **₴80** | Візит надіслано через `/visit` з **GPS + фото вітрини + повна анкета**. Один магазин = одна база за цикл завезення. |
+| **Бонус** | **₴200 за кожен** | Підтверджений результат: **розміщено QR-плакат** у магазині (фото-доказ) або **зареєструвався власник** (контакт власника зафіксовано *і* він подав форму / погодився бути на карті). Обидва можуть діяти разом → два бонуси. |
+| **Публічний плакат** | **₴10 за кожен**, макс. **10/день** | Плакат у **публічному** місці з великим потоком людей (зупинка, дошка оголошень у ВНЗ) — не в магазині, тому ставка окрема й нижча за бонус вище. Записуйте командою **/poster** (геолокація + фото); денний ліміт не дає фотографувати одні й ті самі кілька плакатів по колу. |
+| **Матеріали** | компенсація до **₴300** | Витрата в друкарні на плакати — папір, різка, скотч — із **фото-чеком**. Записуйте командою **/expense** (фото + сума). **Харчування й транспорт не компенсуються.** |
 
-> **Bonus vs. commission.** A **bonus** (above) is paid for the *action* — placing a
-> poster or signing up a lead — **even if that store never buys**. A **sales
-> commission** (Phase 2, below) is paid **only when a store actually subscribes and
-> pays**. The bonus rewards effort and pipeline; the commission rewards revenue.
-> *Бонус — за дію (плакат / лід), навіть якщо магазин не купить. Комісія — лише коли
-> магазин підписується та платить.*
+> **Бонус проти комісії.** **Бонус** (вище) платиться за саму *дію* —
+> розміщений плакат чи зафіксований лід — **навіть якщо магазин так і не
+> купить рекламу**. **Комісія з продажу** (Фаза 2, нижче) платиться
+> **лише коли магазин справді підписується й платить**. Бонус винагороджує
+> зусилля й воронку продажів; комісія — дохід.
+> *A bonus pays for the action even if the store never buys; a sales
+> commission (Phase 2) pays only once a store actually subscribes and
+> pays.*
 
-**Targets & guardrails**
+**Цілі та застереження**
 
-- Suggested pace: **8–12 stores/day**. A realistic day ≈ ₴640–₴960 base, plus bonuses.
-- A visit **only counts** if it has a real GPS reading, a clear storefront photo,
-  and every question answered. Incomplete submissions don't count.
-- The bot records **distance from the store's map pin**; visits far from the pin
-  (or from a plausible new-store location) are flagged for the owner to review.
-- **No double-pay:** the bot enforces this automatically — re-visiting the same
-  store inside its own restock cycle doesn't earn a second base (it can still
-  earn a bonus for a new poster/sign-up). The agent sees this at submit time,
-  before it's sent.
-- **Pay cadence:** weekly. The owner runs `/report` (totals + estimated pay) and
-  `/export` (full CSV), reconciles against poster photos / form submissions, and
-  pays by bank transfer (₴ UAH) to the card the agent has set with `/card`.
+- Орієнтовний темп: **8–12 магазинів/день**. Реалістичний день ≈
+  ₴640–₴960 бази, плюс бонуси.
+- Візит **зараховується**, лише якщо має справжній GPS-сигнал, чітке фото
+  вітрини й відповіді на всі питання. Неповні подання не зараховуються.
+- Бот записує **відстань від позначки магазину на карті**; візити далеко
+  від пінки (або від правдоподібного місця нового магазину) позначаються
+  для перевірки власником.
+- **Без подвійної оплати:** бот стежить за цим автоматично — повторний
+  візит до того самого магазину в межах його ж циклу завезення не дає
+  другої бази (але може дати бонус за новий плакат/лід). Агент бачить це
+  ще до відправлення форми.
+- **Періодичність виплат:** щотижня. Власник запускає `/report` (підсумки
+  + орієнтовна оплата) і `/export` (повний CSV), звіряє з фото плакатів /
+  поданими формами і переказує кошти (₴ UAH) на картку, яку агент вказав
+  командою `/card`.
 
-*Оплата: **₴80** за перевірений візит (GPS + фото + анкета) + **₴200** бонус за
-результат (плакат розміщено або власник зареєструвався). Ціль: 8–12 магазинів/день.
-Виплати — щотижня.*
+**Фаза 2 — коли агент також продає просування.** Понад базу за візит —
+**разова комісія з продажу за підписаний магазин**, платиться лише коли
+магазин справді підписався й заплатив (орієнтовно **₴300–₴500** за
+Featured, **₴800** за Spotlight — без щомісячного відсотка). Прайс і як
+виконується угода — у [ADVERTISING.md](ADVERTISING.md) (англійською).
+*Ще не активно — власник закриває перші кілька угод власноруч, щоб
+перевірити ціни, а тоді передає продаж агенту.*
 
-**Phase 2 — when the agent also sells promotions.** On top of the visit base, a
-**one-time sales commission per signed store** — paid only once the store actually
-subscribes and pays (proposed **₴300–₴500** Featured, **₴800** Spotlight — no
-recurring trailer). See [ADVERTISING.md](ADVERTISING.md) for the rate
-card and how a sale is fulfilled. *Not active yet — the owner closes the first few
-deals by hand to validate pricing, then hands selling to the agent.*
-
-The agent can pull up this scheme anytime in @Secondhandlvivbot with **/pay** (it
-shows the live rates from `RATE_VISIT` / `RATE_BONUS` / `RATE_PUBLIC_POSTER` /
-`MATERIAL_BUDGET`).
-
----
-
-## 3. Standard operating procedure · Порядок роботи
-
-**Before the day / Перед виходом**
-1. Owner sends the day's target area/list directly on Telegram.
-2. Agent brings a charged phone with location on, and printed **QR posters** —
-   pick these up from the owner in the city center.
-   *Per-store posters:* every store has its own QR that opens **that store** in
-   the app rather than the general map, so a shopper who scans it lands on the
-   hours and restock cycle for the shop they're standing in.
-   Request one at a time in the bot: **/materials** → send the store code
-   (e.g. `c12`) → the bot posts that store's QR as a photo, plus a link to its
-   printable A5 poster. `/materials c12` does the same in one message.
-   The posters carry **only the store code**, never the shop's name or address —
-   so the code is what ties a printed poster to a shop. The full code list is at
-   [lvivsecondhand.com/qr/](https://www.lvivsecondhand.com/qr/).
-3. In **@Secondhandlvivbot** send **/route** (or **/agent → 🧭 Route**), share
-   your location, and get a walking order through the nearest stores — with a
-   map link and turn-by-turn Google Maps directions. Optional, but it plans
-   the day and avoids backtracking.
-
-**At each store / У кожному магазині**
-1. Look at the storefront, go inside, be polite — you represent the app.
-2. **The pitch — four beats, ~20 seconds:**
-   1. *Who:* “Я представляю безкоштовну карту секонд-хендів Львова.” — *I represent
-      the free secondhand map of Lviv.*
-   2. *What it does:* “Покупці бачать ваші години роботи та дату завезення онлайн,
-      без дзвінків.” — *Shoppers see your hours and restock date online, no calls.*
-   3. *What's free:* “Це безкоштовно — ми просто додаємо ваш магазин.” — *It's
-      free — we're just adding your store.*
-   4. *The ask:* “Можна розмістити цей QR-плакат при вході?” — *Can I place this
-      QR poster at the entrance?*
-   Adjust the wording to the moment, but keep the order: identify yourself, say
-   what it does for *them*, say it costs nothing, then ask for the poster.
-3. In **@Secondhandlvivbot** send **/visit** and follow the steps:
-   `📍 location → store → 📷 storefront photo → questions`. Location comes first —
-   the bot lists the nearest stores by GPS, since typing a name is slower and
-   many stores share a near-identical name. Submit ✅.
-4. If the store isn't on the map yet, type `new <name>` at the store-picking
-   step (right after sharing location).
-5. If the owner/manager is interested, capture their contact and point them at the
-   in-app **owner form** (or `/submit` in the bot) → that's a **bonus**.
-6. While you're there anyway: open the app and check the store's own listing is
-   right (hours, restock date, address) — fix it on the spot if not. The
-   questionnaire's last question (§4) records whether you did this.
-
-**Public posters & materials, outside the store visit**
-- Spotted a good public spot for a poster — a bus stop, a university notice
-  board — that isn't inside any store? Place it and log it with **/poster**
-  (location + photo). Lower rate than the in-store bonus, capped at 10/day —
-  see §2.
-- Bought paper, had posters cut, or paid for tape at a printshop? Log the
-  **photo receipt + amount** with **/expense**, reimbursed up to the budget in
-  §2. **Food and transport are not reimbursed** — only printing materials.
-
-**End of day / Наприкінці дня**
-- Agent: quick summary message to the owner directly (areas done, issues, stores to revisit).
-- Owner: `/report` to see the running total; `/export` weekly for the CSV.
+Агент може будь-коли переглянути цю схему в @Secondhandlvivbot командою
+**/pay** — там показані актуальні ставки з `RATE_VISIT` / `RATE_BONUS` /
+`RATE_PUBLIC_POSTER` / `MATERIAL_BUDGET`.
 
 ---
 
-## Updating the map: app vs Telegram · Оновлення карти
+## 3. Порядок роботи · Standard operating procedure
 
-Two channels, split by what each does best.
+**Перед виходом**
+1. Власник надсилає район/список на день напряму в Telegram.
+2. Агент бере заряджений телефон із увімкненою геолокацією та надруковані
+   **QR-плакати** — забрати їх у власника в центрі міста.
+   *Плакати для кожного магазину окремо:* кожен магазин має власний QR,
+   який відкриває саме **цей магазин** у застосунку, а не загальну карту
+   — тож покупець, який відсканував код, одразу бачить години й цикл
+   завезення того магазину, де він стоїть.
+   Замовляйте по одному прямо в боті: **/materials** → надішліть код
+   магазину (наприклад, `c12`) → бот надішле QR цього магазину як фото,
+   плюс посилання на друкований постер A5. `/materials c12` робить те
+   саме одним повідомленням.
+   Плакати містять **лише код магазину**, ніколи назву чи адресу — тож
+   саме код пов'язує надрукований плакат із магазином. Повний список
+   кодів — на [lvivsecondhand.com/qr/](https://www.lvivsecondhand.com/qr/).
+3. У **@Secondhandlvivbot** надішліть **/route** (або **/agent → 🧭
+   Маршрут**), поділіться геолокацією й отримайте піший маршрут
+   найближчими магазинами — з посиланням на карту та покроковою
+   навігацією Google Maps. Необов'язково, але планує день і уникає
+   поворотів назад.
 
-**Structured store data → edit in the app → send for review.** Restock days,
-opening hours, name changes, address, GPS, and notes are edited directly in **Lviv
-Second Hand** (open a store → **Edit**; or add a store that isn't on the map from the
-Map tab). To send the additions & corrections to the official map: **🤝 (top-right)
-→ 🗺️ Add to the official map**. That posts it to the owner, who gets a **Telegram
-notification with ✅/❌ buttons**; approving it creates a GitHub issue automatically,
-which the owner then merges into the map everyone downloads. **No GitHub account
-needed** — the agent never touches GitHub directly.
+**У кожному магазині**
+1. Огляньте вітрину, зайдіть, будьте ввічливі — ви представляєте
+   застосунок.
+2. **Підхід — чотири кроки, ~20 секунд:**
+   1. *Хто ви:* «Я представляю безкоштовну карту секонд-хендів Львова.»
+   2. *Що це дає магазину:* «Покупці бачать ваші години роботи та дату
+      завезення онлайн, без дзвінків.»
+   3. *Що це безкоштовно:* «Це безкоштовно — ми просто додаємо ваш
+      магазин.»
+   4. *Прохання:* «Можна розмістити цей QR-плакат при вході?»
+   Формулюйте своїми словами під ситуацію, але тримайте порядок:
+   відрекомендуйтесь, скажіть, що це дає *їм*, скажіть, що це безкоштовно,
+   тоді просіть про плакат.
+   *Four beats: who you are → what it does for them → it's free → the
+   ask. Keep the order, adjust the wording.*
+3. У **@Secondhandlvivbot** надішліть **/visit** і пройдіть кроки:
+   `📍 геолокація → магазин → 📷 фото вітрини → питання`. Геолокація йде
+   першою — бот показує найближчі магазини за відстанню, бо вводити назву
+   довше, а в багатьох магазинів схожі назви. Надішліть ✅.
+4. Якщо магазину ще немає на карті, на кроці вибору магазину напишіть
+   `new <назва>` замість номера.
+5. Якщо власник/керівник зацікавився, зафіксуйте його контакт і
+   направте на **форму власника** в застосунку (або команду `/submit` у
+   боті) → це **бонус**.
+6. Раз ви вже тут: відкрийте застосунок і перевірте, чи правильний запис
+   про магазин (години, дата завезення, адреса) — виправте на місці,
+   якщо ні. Останнє питання анкети (§4) фіксує, чи ви це зробили.
 
-**Which submission path?** Two different buttons in the app, both reviewed the
-same way (Telegram approval → auto-filed GitHub issue):
-- **🤝 → 🗺️ Add to the official map** — the agent's normal path. It carries the
-  whole bundle of stores she **added or corrected** while surveying. Use this for
-  survey data.
-- **🏪 Own a store? → Submit your store** (from the share sheet) or **🔑 I own this
-  store** (on an existing store's page, for claiming one already on the map) —
-  use these only when signing up a real store **owner** (the ₴200 bonus): fill it
-  *with* the owner so their role and contact are captured — that contact is the
-  sign-up evidence.
+**Питання про плакат: якщо «Так» — фото й геолокація.** Якщо ви
+відповідаєте «Так» на питання про розміщений QR-плакат (§4, питання 6),
+бот попросить надіслати **геолокацію місця розміщення**, а тоді **фото
+плаката на місці**. Це підтвердження, а не окрема оплата — плакат у
+магазині все одно оплачується бонусом ₴200 з §2, просто тепер із
+фото-доказом, а не лише позначкою «так».
 
-**Photos, communication & live location → Telegram.** The app can't take photos,
-chat, or share live position — Telegram does. Storefront photos and the GPS check-in
-go through **/visit** in @Secondhandlvivbot; day-to-day questions and coordination
-go directly to the owner on Telegram.
+**Публічні плакати й матеріали — окремо від візиту**
+- Побачили гарне публічне місце для плаката — зупинка, дошка оголошень у
+  ВНЗ — не в жодному магазині? Розмістіть і запишіть командою **/poster**
+  (геолокація + фото). Ставка нижча за бонус у магазині, ліміт 10/день —
+  див. §2.
+- Купили папір, різали плакати чи платили за скотч у друкарні? Запишіть
+  **фото-чек + суму** командою **/expense**, компенсація до бюджету з §2.
+  **Харчування й транспорт не компенсуються** — лише друковані матеріали.
 
-*Дані магазину (завезення, години, назва, адреса, GPS, нотатки) редагуються у
-застосунку → **🤝 → 🗺️ Додати до офіційної карти** → власник отримує сповіщення в
-Telegram і тисне ✅/❌ → після схвалення система сама створює GitHub issue. Акаунт
-GitHub агенту не потрібен. Фото, спілкування та жива геолокація — у Telegram.*
-
-### Found a store that isn't on the map yet? · Знайшли новий магазин?
-
-Two ways to add it — pick whichever is faster in the moment.
-
-**From the bot, while surveying (fastest):** in **/visit**, at the store-picking
-step, type `new <name>` instead of a number. The survey still logs GPS + photo +
-questionnaire as usual, and it's flagged **🆕 new** on the owner's push — but note
-that this only records the *survey*; it does **not** put a pin on the map by
-itself (the bot has no way to create a brand-new map entry). Follow up with the
-app step below so the store actually appears for shoppers.
-
-**From the app, to actually add the map pin:**
-1. App → **Map** tab → **Add store (＋)**.
-2. Enter the **store name**.
-3. **Tap the store's exact spot on the map** (or paste GPS coordinates) — pin it right
-   on the storefront; do this **standing at the door** so the location is accurate.
-4. Fill in what you know: **address, pricing type** (by-weight / itemized), **opening
-   hours, last delivery date, notes**.
-5. **Save** → "Store added!" (saved on your device).
-6. Submit to the official map: **🤝 (top-right) → 🗺️ Add to the official map**. The
-   owner gets a Telegram approval prompt; approving it files the GitHub issue.
-
-- **Check first** that it's really not already on the map (search the name) so you
-  don't add a duplicate.
-- **Pin accuracy matters** — a pin far from the real storefront gets flagged for review.
-- You still **log the visit** in `/visit` as usual (that's what pays); adding the map
-  pin is a separate step so shoppers can find the store.
-
-*Новий магазин: найшвидше — у `/visit` на кроці вибору магазину напишіть `new
-<назва>` (це фіксує візит, але НЕ додає пін на карту). Щоб додати пін: застосунок →
-**Карта → Додати магазин (＋)** → назва → **торкніться точного місця на карті**
-(стоячи біля входу) → адреса, тип цін, години, дата завезення, нотатки → **Зберегти**
-→ **🤝 → 🗺️ Додати до офіційної карти**. Спочатку перевірте, що його ще немає на
-карті. Візит усе одно фіксуйте через /visit.*
-
----
-
-## The sales pipeline (why Phase 1 matters) · Воронка продажів
-
-Every survey is quietly building a sales funnel. The owner tracks each store's
-stage from the `/visit` notes and `/export` CSV:
-
-`Prospected → Surveyed → Advertised (poster) → Interested (lead) → [owner closes] → Paying → Renewing/Churned`
-
-Phase 1 gets **every** store to *Surveyed + Advertised*, and the promising ones to
-*Interested* with a **captured owner contact** — that contact is exactly what an
-owner sign-up bonus rewards, and it's the raw material Phase 2 sells against. So the
-agent isn't "just surveying": they're generating qualified leads.
-
-**Phase 2 — selling promotions (later).** Once pricing is validated, the agent pitches
-the rate card ([ADVERTISING.md](ADVERTISING.md)) using a bilingual **sell-sheet**,
-handles objections (small budget → start with a free trial or the à-la-carte
-deal-of-week), and closes. Pay adds the one-time sales commission per signed store. The owner
-approves any custom deal or price exception and fulfils the promo.
-
-**What the agent is measured on:** verified visits/day, data completeness, posters
-placed, app referrals, and **qualified leads** (owner contact + genuine interest) —
-and, in Phase 2, signed promotions and their retention.
-
-**Guardrails / ethics:** honest, low-pressure, respect the stores; photograph
-storefronts and merchandise, **not people** (ask first); keep owner contacts private
-and never resell them.
+**Наприкінці дня**
+- Агент: короткий підсумок власнику напряму (які райони пройдено, які
+  проблеми, які магазини повернутись перевірити).
+- Власник: `/report` — переглянути поточний підсумок; `/export` — щотижня
+  для CSV.
 
 ---
 
-## 4. The questionnaire · Анкета (what `/visit` asks)
+## Оновлення карти: застосунок чи Telegram · Updating the map
 
-Kept short so a survey takes ~1 minute. The bot captures these; keep this list
-and `QUESTIONS` in `telegram-bot/worker.js` in sync.
+Два канали, кожен для того, що він робить найкраще.
 
-| # | Field | Answer |
+**Структуровані дані магазину → редагуйте в застосунку → надішліть на
+перевірку.** Дні завезення, години роботи, зміна назви, адреса, GPS і
+нотатки редагуються прямо в **Lviv Second Hand** (відкрийте магазин →
+**Редагувати**; або додайте магазин, якого немає на карті, з вкладки
+Карта). Щоб надіслати доповнення й виправлення на офіційну карту: **🤝
+(праворуч зверху) → 🗺️ Додати до офіційної карти**. Це надсилає власнику
+**сповіщення в Telegram з кнопками ✅/❌**; після підтвердження система
+сама створює звернення на GitHub, яке власник потім вносить у карту, яку
+завантажують усі. **Акаунт GitHub не потрібен** — агент ніколи не заходить
+на GitHub напряму.
+
+**Який шлях подання обрати?** Дві різні кнопки в застосунку, обидві
+проходять однакову перевірку (підтвердження в Telegram → автоматичне
+звернення на GitHub):
+- **🤝 → 🗺️ Додати до офіційної карти** — звичайний шлях агента. Несе
+  весь пакет магазинів, які ви **додали чи виправили** під час обстеження.
+  Використовуйте для даних з обстеження.
+- **🏪 Власник магазину? → Подати свій магазин** (з меню поділитися) або
+  **🔑 Це мій магазин** (на сторінці вже наявного магазина, щоб заявити
+  права на нього) — використовуйте лише коли реєструєте справжнього
+  **власника** магазину (бонус ₴200): заповнюйте *разом* із власником, щоб
+  зафіксувати його роль і контакт — саме цей контакт і є доказом
+  реєстрації.
+
+**Фото, спілкування й жива геолокація → Telegram.** Застосунок не вміє
+робити фото, листуватися чи ділитися живою позицією — це робить Telegram.
+Фото вітрини й GPS-відмітка йдуть через **/visit** у @Secondhandlvivbot;
+щоденні питання й координація — напряму власнику в Telegram.
+
+### Знайшли новий магазин, якого ще немає на карті?
+
+Два способи додати — оберіть швидший на місці.
+
+**З бота, під час обстеження (найшвидше):** у **/visit**, на кроці вибору
+магазину, напишіть `new <назва>` замість номера. Обстеження все одно
+записує GPS + фото + анкету як зазвичай і позначається **🆕 новий** у
+сповіщенні власника — але зверніть увагу: це фіксує лише *обстеження*, а
+**не** ставить пін на карту (бот не вміє створювати новий запис на карті
+сам). Довершіть це кроком через застосунок нижче, щоб магазин справді
+з'явився для покупців.
+
+**Із застосунку, щоб справді додати пін на карту:**
+1. Застосунок → вкладка **Карта** → **Додати магазин (＋)**.
+2. Введіть **назву магазина**.
+3. **Торкніться точного місця на карті** (або вставте GPS-координати) —
+   поставте пін точно на вітрину; робіть це **стоячи біля входу**, щоб
+   локація була точна.
+4. Заповніть, що знаєте: **адреса, тип цін** (на вагу / поштучно),
+   **години роботи, дата останнього завезення, нотатки**.
+5. **Зберегти** → «Магазин додано!» (збережено на вашому пристрої).
+6. Надішліть на офіційну карту: **🤝 (праворуч зверху) → 🗺️ Додати до
+   офіційної карти**. Власник отримає запит на підтвердження в Telegram;
+   після підтвердження звернення на GitHub створюється саме.
+
+- **Спершу перевірте**, що його справді ще немає на карті (пошук за
+  назвою), щоб не створити дубль.
+- **Точність піна має значення** — пін далеко від справжньої вітрини
+  позначається для перевірки.
+- Все одно **зафіксуйте візит** у `/visit` як зазвичай (саме це оплачується);
+  додавання піна на карту — окремий крок, щоб покупці знайшли магазин.
+
+---
+
+## Воронка продажів (чому Фаза 1 має значення) · The sales pipeline
+
+Кожне обстеження непомітно будує воронку продажів. Власник відстежує стадію
+кожного магазину за нотатками `/visit` і CSV з `/export`:
+
+`Знайдено → Обстежено → Прорекламовано (плакат) → Зацікавлений (лід) → [власник закриває угоду] → Платить → Продовжує/Пішов`
+
+Фаза 1 доводить **кожен** магазин до стадії *Обстежено + Прорекламовано*,
+а перспективні — до *Зацікавлений* із **зафіксованим контактом власника**
+— саме цей контакт і винагороджує бонус за реєстрацію власника, і саме
+він є сировиною, яку продає Фаза 2. Тож агент не «просто обстежує» — він
+генерує кваліфіковані ліди.
+
+**Фаза 2 — продаж просування (пізніше).** Коли ціни підтверджені, агент
+пропонує прайс ([ADVERTISING.md](ADVERTISING.md)) через двомовний
+**інформаційний листок**, працює із запереченнями (малий бюджет →
+почніть із безкоштовного пробного періоду або à la carte пропозиції
+тижня) і закриває угоду. Оплата додає разову комісію з продажу за кожен
+підписаний магазин. Власник погоджує будь-яку індивідуальну угоду чи
+виняток у ціні та виконує просування.
+
+**За чим оцінюють роботу агента:** перевірені візити на день, повнота
+даних, розміщені плакати, переходи в застосунок і **кваліфіковані ліди**
+(контакт власника + справжній інтерес) — а на Фазі 2 ще й підписані
+просування та їхнє утримання.
+
+**Правила й етика:** чесно, без тиску, з повагою до магазинів;
+фотографуйте вітрини й товар, **не людей** (спершу спитайте дозволу);
+контакти власників тримайте приватними й ніколи не перепродавайте.
+
+---
+
+## 4. Анкета · The questionnaire (що питає `/visit`)
+
+Коротка, щоб обстеження займало ~1 хвилину. Бот фіксує це; тримайте цей
+список і масив `QUESTIONS` у `telegram-bot/worker.js` синхронізованими.
+
+| № | Поле | Відповідь |
 |---|---|---|
-| 1 | **Location** · Геолокація | share current GPS — the bot lists nearby stores by distance |
-| 2 | **Store** · Магазин | pick a number from the nearby list, search by name, or `new <name>` |
-| — | **Photo** · Фото | one clear storefront/entrance photo |
-| 3 | **Pricing** · Тип цін | by weight / itemized / both / unknown |
-| 4 | **Last delivery** · Останній завіз | Today / Yesterday / a date (e.g. `13.08`) / unknown — asked at **every** store, not just by-weight, since a date (unlike a weekday) works for any restock cycle |
-| 5 | **Hours** · Години роботи | e.g. `10:00–20:00`, or “closed …” |
-| 6 | **Size** · Розмір | S / M / L |
-| 7 | **Poster placed?** · Плакат розміщено? | yes / no  → 💰 bonus |
-| 8 | **Owner contact + consent?** · Контакт власника + згода? | yes / no  → 💰 bonus |
-| 9 | **Map checked?** · Перевірили карту? | yes / no — did you check the live app and fix the store's own listing on-site? |
-| 10 | **Notes** · Нотатки | anything useful, or “-” |
+| 1 | **Геолокація** | поділіться поточним GPS — бот покаже найближчі магазини за відстанню |
+| 2 | **Магазин** | оберіть номер зі списку поруч, знайдіть за назвою, або `new <назва>` |
+| — | **Фото** | одне чітке фото вітрини/входу |
+| 3 | **Тип цін** | на вагу / поштучно — бінарний вибір, без «обидва» чи «не знаю» |
+| 4 | **Останній завіз** | Сьогодні / Вчора / дата (напр. `13.08`) / **🔄 Щоденне/сезонне поповнення** — питається в **кожному** магазині, не лише на вагу, бо дата (на відміну від дня тижня) підходить для будь-якого циклу. Варіант «Не знаю» прибрано — натомість є щоденне/сезонне поповнення для магазинів без фіксованого циклу; вибір цього варіанта ставить прапорець `dailyDrop`, так само як перемикач «Оновлюється щодня» в самому застосунку |
+| 5 | **Години роботи** | напр. `10:00–20:00`, або «зачинено …» — з нагадуванням спершу звірити з тим, що вже записано на карті |
+| 6 | **Плакат розміщено?** | так / ні → 💰 бонус. Якщо «так» — далі бот попросить **геолокацію та фото плаката на місці** |
+| 7 | **Контакт власника + згода?** | так / ні → 💰 бонус |
+| 8 | **Перевірили карту?** | так / ні — чи звірили ви застосунок і виправили запис магазина на місці |
+| 9 | **Нотатки** | будь-що корисне, або «-» |
 
-Auto-recorded with every visit: timestamp, agent, GPS, distance from the map pin,
-and the photo.
+Питання про **розмір магазину** прибрано — воно ніде не використовувалось
+далі й лише подовжувало анкету.
 
----
-
-## 5. Data & privacy · Дані та приватність
-
-- The bot stores only what the survey needs (store, GPS, storefront photo,
-  answers) in a private Cloudflare KV namespace; nothing is public.
-- Photograph **storefronts and merchandise**, not people. Ask before photographing
-  anyone; don't record names/phones without the person's OK (that's the point of
-  the consent question).
-- Owner contacts are collected only to invite the store onto the map — handle them
-  respectfully and don't share them onward.
+Автоматично записується з кожним візитом: час, агент, GPS, відстань від
+позначки на карті, і фото.
 
 ---
 
-## 6. Owner setup & tallying · Налаштування власником
+## 5. Дані та приватність · Data & privacy
 
-One-time enablement of the `/visit` subsystem is documented in
-`telegram-bot/wrangler.toml` (create the `VISITS` KV namespace, set `BOT_TOKEN`,
-`OWNER_ID`, `AGENT_IDS`, and the rates). After that:
+- Бот зберігає лише те, що потрібно для обстеження (магазин, GPS, фото
+  вітрини, відповіді) у приватному сховищі Cloudflare KV; нічого не є
+  публічним.
+- Фотографуйте **вітрини й товар**, не людей. Питайте дозволу перед тим,
+  як фотографувати когось; не записуйте імена/телефони без згоди людини
+  (саме для цього й питання про згоду).
+- Контакти власників збираються лише для запрошення магазину на карту —
+  поводьтеся з ними шанобливо й не передавайте нікому.
 
-`/agent` (agent · owner) opens a one-tap menu for the commands below; `/admin`
-(owner only) opens one for `/report`/`/export`/`/admin agents`. Each command
-below also still works typed directly — the menus are just a shortcut.
+---
 
-| Command | Who | Does |
+## 6. Налаштування власником і облік · Owner setup & tallying
+
+Одноразове увімкнення підсистеми `/visit` описано в
+`telegram-bot/wrangler.toml` (створіть простір KV `VISITS`, встановіть
+`BOT_TOKEN`, `OWNER_ID`, `AGENT_IDS` і ставки). Після цього:
+
+`/agent` (агент · власник) відкриває меню в одне натискання для команд
+нижче; `/admin` (лише власник) — меню для `/report`/`/export`/`/admin
+agents`. Кожна команда нижче так само працює, якщо ввести її текстом —
+меню лише зручніше.
+
+| Команда | Хто | Що робить |
 |---|---|---|
-| `/route` | agent | plan a walking route through the nearest stores (map link + Google Maps directions) |
-| `/visit` | agent | start a survey |
-| `/poster` | agent | log a public-space poster (bus stop, university) — location + photo, capped 10/day |
-| `/expense` | agent | log a material expense — photo receipt + amount, reimbursed up to the budget |
-| `/myvisits` | agent | their running visit count |
-| `/card` | agent | set/view the payout card or IBAN `/report` pays out to |
-| `/pay` | agent · owner | show the pay scheme (live rates from `RATE_VISIT`/`RATE_BONUS`/`RATE_PUBLIC_POSTER`/`MATERIAL_BUDGET`) |
-| `/job` | agent · owner | this handbook, as a link |
-| `/cancel` | agent | abort the current survey |
-| `/report` | owner | totals, per-agent counts, **estimated pay** |
-| `/export` | owner | CSV of every logged visit |
-| `/admin agents` | owner | every configured agent, their tally, payout card, and active/fired status — with a one-tap 🔥 Fire / ♻️ Rehire button per agent |
-| `/admin fire <id>` | owner | revoke an agent's bot access immediately (see §7) |
-| `/admin rehire <id>` | owner | restore a fired agent's access immediately |
-| `/admin purge <id>` | owner | delete that id's logged visits and correct the counters — for clearing your own smoke-test visits (asks to confirm first) |
+| `/route` | агент | планує піший маршрут найближчими магазинами (посилання на карту + навігація Google Maps) |
+| `/visit` | агент | почати обстеження |
+| `/poster` | агент | записати публічний плакат (зупинка, ВНЗ) — геолокація + фото, ліміт 10/день |
+| `/expense` | агент | записати витрату на матеріали — фото-чек + сума, компенсація до бюджету |
+| `/myvisits` | агент | скільки візитів записано |
+| `/card` | агент | вказати/переглянути картку чи IBAN для виплат |
+| `/pay` | агент · власник | показати схему оплати (актуальні ставки з `RATE_VISIT`/`RATE_BONUS`/`RATE_PUBLIC_POSTER`/`MATERIAL_BUDGET`) |
+| `/job` | агент · власник | цей довідник, посиланням |
+| `/cancel` | агент | скасувати поточне обстеження |
+| `/report` | власник | підсумки, кількість по кожному агенту, **орієнтовна оплата** |
+| `/export` | власник | CSV усіх записаних візитів |
+| `/admin agents` | власник | усі налаштовані агенти, їхній підсумок, картка для виплат і статус активний/звільнений — з кнопкою 🔥 Звільнити / ♻️ Відновити для кожного |
+| `/admin fire <id>` | власник | негайно скасувати доступ агента до бота (див. §7) |
+| `/admin rehire <id>` | власник | негайно відновити доступ звільненого агента |
+| `/admin purge <id>` | власник | видалити записані візити цього id й виправити лічильники — для очищення власних тестових візитів (спершу питає підтвердження) |
 
-Each submitted visit is also **pushed to the owner in real time** (photo +
-summary) for spot-checking. Reconcile `/export` against poster photos and form
-submissions before paying.
+Кожен надісланий візит також **надсилається власнику в реальному часі**
+(фото + підсумок) для вибіркової перевірки. Звіряйте `/export` з фото
+плакатів і поданими формами перед оплатою.
 
 ---
 
-## 7. Offboarding · Звільнення
+## 7. Звільнення · Offboarding
 
-Firing someone takes effect immediately — no redeploy, no waiting for a new
-Worker build. It doesn't touch `AGENT_IDS` at all (that's a deployment secret);
-instead a fired id is recorded separately, so it's just as instant to reverse.
+Звільнення діє миттєво — без повторного розгортання, без очікування на
+нову збірку воркера. Воно не чіпає `AGENT_IDS` взагалі (це секрет
+розгортання) — натомість звільнений id записується окремо, тож і
+відновити доступ так само швидко.
 
-**To fire an agent:**
-1. `/admin` → **👥 Агенти · Agents** (or type `/admin agents`) — shows every
-   configured id with their running visit tally, payout card on file, and
-   current status. Use this to get the id and check what you'll still owe
-   *before* firing.
-2. Tap **🔥 Fire** next to their id. The bot shows a confirmation with their
-   final unpaid tally and payout card, so nothing gets missed. Tap **✅ Confirm
-   fire** — or use the direct `/admin fire <id>` if you already know the id and
-   want to skip the confirm step.
-3. That's it. The agent:
-   - immediately loses access to every field-agent command (`/visit`, `/route`,
-     `/card`, …) — they get the same "not a registered agent" message as
-     anyone who was never hired;
-   - is notified automatically by the bot that access was revoked;
-   - keeps their historical visit count in the system (still visible in
-     `/admin agents` and included in `/export`) so the final payout is never lost.
-4. **Settle the final balance** — pay out whatever `/admin agents` showed as
-   their unpaid tally, same as any weekly `/report`/`/export` reconciliation.
-5. **Reclaim materials** — any unused printed QR posters.
+**Щоб звільнити агента:**
+1. `/admin` → **👥 Агенти** (або введіть `/admin agents`) — показує кожен
+   налаштований id з поточним підсумком візитів, карткою для виплат і
+   статусом. Використовуйте це, щоб отримати id й перевірити, скільки ви
+   ще винні, *перед* звільненням.
+2. Натисніть **🔥 Звільнити** біля потрібного id. Бот покаже підтвердження
+   з фінальним неоплаченим підсумком і карткою, щоб нічого не загубилось.
+   Натисніть **✅ Підтвердити звільнення** — або скористайтесь напряму
+   `/admin fire <id>`, якщо вже знаєте id і хочете пропустити крок
+   підтвердження.
+3. Готово. Агент:
+   - одразу втрачає доступ до всіх команд польового агента (`/visit`,
+     `/route`, `/card`, …) — отримує те саме повідомлення «не
+     зареєстрований агент», що й будь-хто, кого ніколи не наймали;
+   - автоматично отримує повідомлення від бота, що доступ скасовано;
+   - зберігає історію своїх візитів у системі (все ще видно в `/admin
+     agents` і включено в `/export`), тож фінальна оплата ніколи не
+     губиться.
+4. **Розрахуйте фінальний баланс** — виплатіть те, що `/admin agents`
+   показав як неоплачений підсумок, так само як і будь-яке щотижневе
+   звіряння через `/report`/`/export`.
+5. **Заберіть матеріали** — будь-які невикористані надруковані QR-плакати.
 
-**To reverse it:** tap **♻️ Rehire** next to their id in `/admin agents`, or
-`/admin rehire <id>`. Access is restored immediately and they're notified.
-
-*Звільнення діє миттєво. `/admin → 👥 Агенти` показує підсумок і картку кожного
-агента з кнопкою 🔥 Звільнити / ♻️ Відновити. Після звільнення агент одразу
-втрачає доступ до команд і отримує повідомлення від бота; історія його візитів
-зберігається для остаточного розрахунку. Відновлення — кнопкою ♻️ або
-`/admin rehire <id>`, теж миттєво.*
+**Щоб скасувати звільнення:** натисніть **♻️ Відновити** біля id в
+`/admin agents`, або введіть `/admin rehire <id>`. Доступ відновлюється
+миттєво, агент отримує повідомлення.
