@@ -876,12 +876,17 @@ function mdSafe(v, max) {
 function renderSubmissionIssue(kind, payload) {
   if (kind === 'feedback') {
     const p = payload || {};
+    const isWeb = p.source === 'web';
     return {
-      title: 'Bot feedback: ' + (mdSafe(p.text, 80) || '(empty)'),
+      title: (isWeb ? 'Website feedback: ' : 'Bot feedback: ') + (mdSafe(p.text, 80) || '(empty)'),
       labels: ['bot-feedback'],
-      body: 'Sent via the Telegram bot\'s /feedback command, approved by the maintainer.\n\n'
+      body: (isWeb
+          ? 'Sent via the website\'s feedback toast, approved by the maintainer.\n\n'
+          : 'Sent via the Telegram bot\'s /feedback command, approved by the maintainer.\n\n')
         + `> ${mdSafe(p.text, 2000)}\n\n`
-        + `Chat: \`${mdSafe(p.chatId, 40)}\`` + (p.username ? ` (@${mdSafe(p.username, 60)})` : ''),
+        + (isWeb
+          ? `Page: ${mdSafe(p.url, 200) || '—'}`
+          : `Chat: \`${mdSafe(p.chatId, 40)}\`` + (p.username ? ` (@${mdSafe(p.username, 60)})` : '')),
     };
   }
   if (kind === 'owner') {
@@ -999,7 +1004,12 @@ function metresApart(aLat, aLng, bLat, bLng) {
 function submissionSummary(kind, storeId, payload) {
   const p = payload || {};
   if (kind === 'feedback') {
-    return `💬 BOT FEEDBACK\n\n${mdSafe(p.text, 500)}`;
+    // Issue #295: the website's feedback toast reuses this exact pipeline
+    // rather than calling the Telegram Bot API from the browser, which would
+    // have meant shipping the bot token to every visitor. p.source
+    // distinguishes it from the bot's own /feedback command in the same queue.
+    const label = p.source === 'web' ? '💬 WEBSITE FEEDBACK' : '💬 BOT FEEDBACK';
+    return `${label}\n\n${mdSafe(p.text, 500)}`;
   }
   if (kind === 'owner') {
     return `🏪 STORE OWNER SUBMISSION\n\nStore: ${mdSafe(p.name, 120)}\nAddress: ${mdSafe(p.address, 200) || '—'}\nContact: ${mdSafe(p.contact, 200)}`;

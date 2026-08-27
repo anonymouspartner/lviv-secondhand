@@ -2,7 +2,7 @@
    - App shell + Leaflet are precached so the app opens offline.
    - HTML is network-first so an online visit always gets the latest build.
    - Map tiles are cached opportunistically for offline panning of visited areas. */
-const SHELL_CACHE = 'lviv-sh-shell-v9';
+const SHELL_CACHE = 'lviv-sh-shell-v10';
 const TILE_CACHE  = 'lviv-sh-tiles-v1';
 const MAX_TILES = 400;
 
