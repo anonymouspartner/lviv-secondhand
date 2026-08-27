@@ -26,14 +26,16 @@ Telegram.
 
 ## 2. Payment scheme · Схема оплати
 
-Two components. Numbers below are the **defaults** — adjust them in
-`telegram-bot/wrangler.toml` (`RATE_VISIT`, `RATE_BONUS`); the bot's `/report`
-uses the same numbers.
+Four components. Numbers below are the **defaults** — adjust them in
+`telegram-bot/wrangler.toml` (`RATE_VISIT`, `RATE_BONUS`, `RATE_PUBLIC_POSTER`,
+`MATERIAL_BUDGET`); the bot's `/report` uses the same numbers.
 
 | Component | Default | Paid when |
 |---|---|---|
 | **Visit base** · база за візит | **₴80** | A visit is submitted in `/visit` with **GPS + storefront photo + full questionnaire**. One store = one base per survey cycle. |
 | **Bonus** · бонус | **₴200 each** | A verifiable result: **QR poster placed** in the store (photo proof), or **owner signed up** (owner contact captured *and* they submit via the form / agree to be featured). Both can apply → two bonuses. |
+| **Public poster** · публічний плакат | **₴10 each**, max **10/day** | A poster placed in a **public** high-traffic spot (bus stop, university notice board) — not inside a store, so it's a separate, lower rate from the in-store poster bonus above. Log it with **/poster** (location + photo); the daily cap stops the same handful of posters being photographed repeatedly. |
+| **Materials** · матеріали | up to **₴300** reimbursed | A printshop expense for posters — paper, cutting, tape — with a **photo receipt**. Log it with **/expense** (photo + amount). **Food and transport are not covered.** |
 
 > **Bonus vs. commission.** A **bonus** (above) is paid for the *action* — placing a
 > poster or signing up a lead — **even if that store never buys**. A **sales
@@ -69,7 +71,8 @@ card and how a sale is fulfilled. *Not active yet — the owner closes the first
 deals by hand to validate pricing, then hands selling to the agent.*
 
 The agent can pull up this scheme anytime in @Secondhandlvivbot with **/pay** (it
-shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
+shows the live rates from `RATE_VISIT` / `RATE_BONUS` / `RATE_PUBLIC_POSTER` /
+`MATERIAL_BUDGET`).
 
 ---
 
@@ -95,9 +98,17 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
 
 **At each store / У кожному магазині**
 1. Look at the storefront, go inside, be polite — you represent the app.
-2. Briefly advertise: “Цей магазин є на безкоштовній карті секонд-хендів Львова —
-   ось QR, покупці знаходять вас за годинами й цінами.” Offer to place a **QR poster**.
-2. Опишіть коротко застосунок і запропонуйте розмістити **QR-плакат**.
+2. **The pitch — four beats, ~20 seconds:**
+   1. *Who:* “Я представляю безкоштовну карту секонд-хендів Львова.” — *I represent
+      the free secondhand map of Lviv.*
+   2. *What it does:* “Покупці бачать ваші години роботи та дату завезення онлайн,
+      без дзвінків.” — *Shoppers see your hours and restock date online, no calls.*
+   3. *What's free:* “Це безкоштовно — ми просто додаємо ваш магазин.” — *It's
+      free — we're just adding your store.*
+   4. *The ask:* “Можна розмістити цей QR-плакат при вході?” — *Can I place this
+      QR poster at the entrance?*
+   Adjust the wording to the moment, but keep the order: identify yourself, say
+   what it does for *them*, say it costs nothing, then ask for the poster.
 3. In **@Secondhandlvivbot** send **/visit** and follow the steps:
    `📍 location → store → 📷 storefront photo → questions`. Location comes first —
    the bot lists the nearest stores by GPS, since typing a name is slower and
@@ -106,6 +117,18 @@ shows the live rates from `RATE_VISIT` / `RATE_BONUS`).
    step (right after sharing location).
 5. If the owner/manager is interested, capture their contact and point them at the
    in-app **owner form** (or `/submit` in the bot) → that's a **bonus**.
+6. While you're there anyway: open the app and check the store's own listing is
+   right (hours, restock date, address) — fix it on the spot if not. The
+   questionnaire's last question (§4) records whether you did this.
+
+**Public posters & materials, outside the store visit**
+- Spotted a good public spot for a poster — a bus stop, a university notice
+  board — that isn't inside any store? Place it and log it with **/poster**
+  (location + photo). Lower rate than the in-store bonus, capped at 10/day —
+  see §2.
+- Bought paper, had posters cut, or paid for tape at a printshop? Log the
+  **photo receipt + amount** with **/expense**, reimbursed up to the budget in
+  §2. **Food and transport are not reimbursed** — only printing materials.
 
 **End of day / Наприкінці дня**
 - Agent: quick summary message to the owner directly (areas done, issues, stores to revisit).
@@ -228,7 +251,8 @@ and `QUESTIONS` in `telegram-bot/worker.js` in sync.
 | 6 | **Size** · Розмір | S / M / L |
 | 7 | **Poster placed?** · Плакат розміщено? | yes / no  → 💰 bonus |
 | 8 | **Owner contact + consent?** · Контакт власника + згода? | yes / no  → 💰 bonus |
-| 9 | **Notes** · Нотатки | anything useful, or “-” |
+| 9 | **Map checked?** · Перевірили карту? | yes / no — did you check the live app and fix the store's own listing on-site? |
+| 10 | **Notes** · Нотатки | anything useful, or “-” |
 
 Auto-recorded with every visit: timestamp, agent, GPS, distance from the map pin,
 and the photo.
@@ -261,9 +285,11 @@ below also still works typed directly — the menus are just a shortcut.
 |---|---|---|
 | `/route` | agent | plan a walking route through the nearest stores (map link + Google Maps directions) |
 | `/visit` | agent | start a survey |
+| `/poster` | agent | log a public-space poster (bus stop, university) — location + photo, capped 10/day |
+| `/expense` | agent | log a material expense — photo receipt + amount, reimbursed up to the budget |
 | `/myvisits` | agent | their running visit count |
 | `/card` | agent | set/view the payout card or IBAN `/report` pays out to |
-| `/pay` | agent · owner | show the pay scheme (live rates from `RATE_VISIT`/`RATE_BONUS`) |
+| `/pay` | agent · owner | show the pay scheme (live rates from `RATE_VISIT`/`RATE_BONUS`/`RATE_PUBLIC_POSTER`/`MATERIAL_BUDGET`) |
 | `/job` | agent · owner | this handbook, as a link |
 | `/cancel` | agent | abort the current survey |
 | `/report` | owner | totals, per-agent counts, **estimated pay** |
