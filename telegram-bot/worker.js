@@ -632,11 +632,31 @@ async function tg(env, method, params) {
   return res.json().catch(() => ({}));
 }
 
+// #309 follow-up: this used to send remove_keyboard:true whenever no keyboard
+// was passed, which is the opposite of the design this file documents above
+// (line ~440) — "everything else can omit it and the visible keyboard just
+// stays put." In practice it meant every status message (/report, /pay,
+// /cancel, a finished /visit, ...) wiped the persistent menu, including the
+// agent/admin row, which is what made it "keep disappearing" rather than
+// just needing one /start. Omitting reply_markup entirely, instead of
+// setting remove_keyboard, is what actually leaves the existing keyboard
+// alone, matching Telegram's own behavior for a field left out of the call.
 function say(env, chatId, text, keyboard) {
-  const reply_markup = keyboard
-    ? { keyboard: keyboard.map((row) => row.map((t) => ({ text: t }))), resize_keyboard: true, one_time_keyboard: true }
-    : { remove_keyboard: true };
-  return tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup });
+  const body = { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true };
+  if (keyboard) body.reply_markup = { keyboard: keyboard.map((row) => row.map((t) => ({ text: t }))), resize_keyboard: true, one_time_keyboard: true };
+  return tg(env, 'sendMessage', body);
+}
+
+// A one_time_keyboard (say()'s per-question yes/no, submit/cancel, ...)
+// collapses on its own once tapped, but Telegram doesn't bring back whatever
+// persistent keyboard was showing before it -- the chat is left with no
+// custom keyboard at all until the next explicit one. Used at the actual end
+// of a stateful flow (a finished /visit, /cancel, ...) to bring the
+// agent/admin menu row back rather than leaving the agent to send /start.
+async function sayMenu(env, c, uid, chatId, text) {
+  const isOwner = c.ownerId && String(uid) === c.ownerId;
+  const isAgent = c.agentIds.includes(String(uid));
+  return tg(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, reply_markup: mainMenuMarkupFor(isOwner, isAgent) });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1585,7 +1605,7 @@ async function finishVisit(env, c, uid, chatId, session, from) {
     ? `💵 ${fragments.join(' ')} = <b>₴${earned}</b>`
     : '⏭️ Нічого не нараховано — цей магазин уже обстежували цього циклу, нового бонусу немає. · Nothing earned — already surveyed this cycle, no new bonus.';
   const mine = Number((await env.VISITS.get('count:agent:' + uid)) || 0);
-  await say(env, chatId,
+  await sayMenu(env, c, uid, chatId,
     `✅ <b>Візит записано! · Visit logged!</b>\n` +
     `${payLine}\n` +
     `📊 Ваших візитів усього · Your total visits: <b>${mine}</b>\n\n` +
@@ -1763,7 +1783,7 @@ async function cmdCancel(env, userId, chatId) {
   const session = await getSession(env, userId);
   if (!session) return false;
   await clearSession(env, userId);
-  await say(env, chatId, 'Скасовано. · Cancelled. /visit щоб почати знову.');
+  await sayMenu(env, await cfg(env), userId, chatId, 'Скасовано. · Cancelled. /visit щоб почати знову.');
   return true;
 }
 async function cmdMyVisits(env, userId, chatId) {
@@ -1827,7 +1847,7 @@ async function finishPoster(env, c, uid, chatId, session, from) {
   await bump(env, 'posters:' + uid, 1);
   await clearSession(env, uid);
   const earned = c.ratePublicPoster;
-  await say(env, chatId,
+  await sayMenu(env, c, uid, chatId,
     `✅ Зараховано · Logged (${soFar + 1}/${POSTER_DAILY_CAP} сьогодні · today)\n💵 +₴${earned}`);
   if (c.ownerId && String(uid) !== c.ownerId && d.photoFileId) {
     await tg(env, 'sendPhoto', {
@@ -1866,7 +1886,7 @@ async function finishExpense(env, c, uid, chatId, session, from) {
   await clearSession(env, uid);
   const newTotal = await agentExpenseTotal(env, uid);
   const overCap = newTotal > c.materialBudget;
-  await say(env, chatId,
+  await sayMenu(env, c, uid, chatId,
     `✅ Зараховано · Logged: ₴${rec.amountUAH}\n` +
     `Разом на компенсацію · Running total: ₴${newTotal} / ₴${c.materialBudget}` +
     (overCap ? '\n⚠️ Перевищує ліміт компенсації — власник вирішить, що покрити. · Over the reimbursement cap — the owner will decide what to cover.' : ''));
@@ -2570,7 +2590,7 @@ async function handleVisit(env, c, msg, ctx) {
     }
     if (/скасувати|cancel|✖️|❌/i.test(text || '')) {
       await clearSession(env, userId);
-      await say(env, chatId, 'Скасовано. · Cancelled.');
+      await sayMenu(env, c, userId, chatId, 'Скасовано. · Cancelled.');
       return true;
     }
     await say(env, chatId, 'Оберіть: ✅ Надіслати або ✖️ Скасувати. · Choose Submit or Cancel.', [['✅ Надіслати / Submit', '✖️ Скасувати / Cancel']]);
