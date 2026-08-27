@@ -1456,12 +1456,18 @@ async function promptStorePick(env, uid, chatId, session) {
     const onRoute = routeIds.includes(s.id) ? ` (🧭 маршрут, зупинка ${routeIds.indexOf(s.id) + 1} · route stop ${routeIds.indexOf(s.id) + 1})` : '';
     return `${i + 1}. <b>${esc(s.name)}</b>${onRoute} · ${fmtDist(d)}${s.address ? ' — ' + esc(s.address) : ''}`;
   });
-  // The line on a real map, from wherever they are in the round — no need to
-  // re-run /route to get their bearings.
-  const mapIds = (routeIds.length ? routeIds : near.map(({ s }) => s.id)).join(',');
+  // Always this list's own 8 stores, in this list's own order -- not the
+  // agent's whole day's route. A field report showed why: when a route was
+  // active, this used to link to the FULL route, whose pins are numbered by
+  // route-walking-order. That's a third, independent numbering next to this
+  // message's own 1-8 -- "pin 3 on the map" ended up meaning a completely
+  // different store than "item 3 in the list" (an early, already-visited
+  // stop vs. the nearby store she was trying to identify). Scoping the link
+  // to exactly what's listed here means pin N is always item N.
+  const mapIds = near.map(({ s }) => s.id).join(',');
   await say(env, chatId,
     '2️⃣ Який це магазин? Надішліть номер · Which store? Reply with the number:\n' + lines.join('\n') +
-    `\n\n🗺️ <a href="${APP_URL}?route=${mapIds}">${routeIds.length ? 'Маршрут на карті · Route on the map' : 'Ці магазини на карті · These stores on the map'}</a>` +
+    `\n\n🗺️ <a href="${APP_URL}?route=${mapIds}">Ці магазини на карті · These stores on the map</a>` +
     '\n\nНемає у списку — надішліть назву, або <code>new Назва</code>.\nNot listed — send a name, or <code>new Name</code>.',
     near.map((_, i) => [String(i + 1)]));
 }
