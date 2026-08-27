@@ -582,7 +582,11 @@ const QUESTIONS = [
   { key: 'size', q: '6️⃣ Розмір магазину? · Store size?', kb: [['🟢 S малий/small', '🟡 M середній/medium', '🔴 L великий/large']] },
   { key: 'poster', q: '7️⃣ QR-плакат розміщено? · QR poster placed?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
   { key: 'contact', q: '8️⃣ Контакт власника + згода на карту? · Owner contact + consent to feature?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
-  { key: 'notes', q: '9️⃣ Нотатки? (або «-») · Notes? (or "-")', kb: null },
+  // #296: confirms the agent actually looked at the live app while standing in
+  // the store, not just filled in the survey from memory later. Recorded, not
+  // paid on — it's a completeness check, not a bonus trigger.
+  { key: 'mapChecked', q: '9️⃣ Перевірили застосунок і внесли потрібні правки на місці? · Checked the live app and made any needed edits on-site?', kb: [['✅ Так / Yes', '❌ Ні / No']] },
+  { key: 'notes', q: '🔟 Нотатки? (або «-») · Notes? (or "-")', kb: null },
 ];
 
 // Firing an agent doesn't touch AGENT_IDS (that's a Worker secret — editing it
@@ -610,6 +614,8 @@ async function cfg(env) {
     firedIds,
     rateVisit: Number(env.RATE_VISIT || 80),
     rateBonus: Number(env.RATE_BONUS || 200),
+    ratePublicPoster: Number(env.RATE_PUBLIC_POSTER || 10),
+    materialBudget: Number(env.MATERIAL_BUDGET || 300),
   };
 }
 
@@ -1073,6 +1079,8 @@ async function handleAgentCallback(env, c, cq) {
         await (val === 'route' ? cmdRoute(env, uid, chatId) : cmdVisit(env, uid, chatId));
         return;
       }
+      if (val === 'poster') { if (!isAgent2) return; await cmdPoster(env, uid, chatId); return; }
+      if (val === 'expense') { if (!isAgent2) return; await cmdExpense(env, uid, chatId, c); return; }
       if (val === 'myvisits') { if (!isAgent2) return; await cmdMyVisits(env, uid, chatId); return; }
       if (val === 'card') { if (!isAgent2) return; await cmdCard(env, uid, chatId); return; }
       if (val === 'pay') { await cmdPay(env, c, chatId); return; }
@@ -1214,6 +1222,8 @@ const AGENT_CMDS = [
   { command: 'agent', description: '🧭 Меню агента · Agent menu' },
   { command: 'visit', description: '🧭 Записати відвідування магазину' },
   { command: 'route', description: '🧭 Маршрут обходу від вашої локації' },
+  { command: 'poster', description: '🧭 Публічний плакат (зупинка/ВНЗ) · Public poster' },
+  { command: 'expense', description: '🧭 Витрата на матеріали (чек) · Material expense' },
   { command: 'myvisits', description: '🧭 Мої відвідування та заробіток' },
   { command: 'pay', description: '🧭 Ставки оплати · Pay rates' },
   { command: 'card', description: '🧭 Картка для виплат · Payout card' },
@@ -1536,6 +1546,7 @@ async function finishVisit(env, c, uid, chatId, session, from) {
     size: d.size || null,
     poster: !!d.poster,
     contact: !!d.contact,
+    mapChecked: !!d.mapChecked,
     notes: d.notes && d.notes !== '-' ? d.notes : null,
   };
   // Key sorts chronologically; include uid so two agents can't collide on a ts.
@@ -1601,45 +1612,94 @@ async function finishVisit(env, c, uid, chatId, session, from) {
   }
 }
 
+// Sums every expense: record for one agent. Scans the whole prefix rather
+// than keeping a running total, matching ownerExport's existing approach —
+// this is a handful of field agents, not a volume the KV list call strains
+// on, and unlike the visit/bonus counters, an amount can't be tallied with a
+// simple bump() since it varies per receipt.
+async function agentExpenseTotal(env, uid) {
+  const list = await env.VISITS.list({ prefix: 'expense:', limit: 1000 });
+  let sum = 0;
+  for (const k of list.keys) {
+    const r = await env.VISITS.get(k.name, { type: 'json' });
+    if (r && String(r.agentId) === String(uid)) sum += Number(r.amountUAH) || 0;
+  }
+  return sum;
+}
+
 async function ownerReport(env, c, chatId) {
   const total = Number((await env.VISITS.get('count:total')) || 0);
   const bonus = Number((await env.VISITS.get('count:bonus')) || 0);
+  const postersTotal = Number((await env.VISITS.get('count:posters_total')) || 0);
   // The owner is often also listed in AGENT_IDS (to smoke-test /visit) — their
   // own visits shouldn't inflate the payroll total below.
   const ownerVisits = (c.ownerId && c.agentIds.includes(c.ownerId))
     ? Number((await env.VISITS.get('count:agent:' + c.ownerId)) || 0) : 0;
-  const lines = ['📊 <b>Field report · Звіт</b>', `Visits logged: <b>${total}</b>`, `Bonus events: <b>${bonus}</b>`];
+  const ownerPosters = (c.ownerId && c.agentIds.includes(c.ownerId))
+    ? Number((await env.VISITS.get('count:posters:' + c.ownerId)) || 0) : 0;
+  const lines = ['📊 <b>Field report · Звіт</b>', `Visits logged: <b>${total}</b>`, `Bonus events: <b>${bonus}</b>`, `Public posters: <b>${postersTotal}</b>`];
   // Per-agent counts, with their payout card if they've set one.
+  let expenseTotal = 0;
   for (const id of c.agentIds) {
     const n = Number((await env.VISITS.get('count:agent:' + id)) || 0);
-    if (!n) continue;
+    const exp = await agentExpenseTotal(env, id);
+    if (id !== c.ownerId) expenseTotal += Math.min(exp, c.materialBudget);
+    if (!n && !exp) continue;
     const card = await env.VISITS.get(cardKey(id));
     const cardNote = id === c.ownerId ? ' (owner — excluded from pay below)' : (card ? ` 💳 <code>${esc(card)}</code>` : ' ⚠️ no payout card');
-    lines.push(`• agent <code>${id}</code>${cardNote}: ${n} visits`);
+    const expNote = exp ? `, ₴${exp} materials${exp > c.materialBudget ? ` (capped at ₴${c.materialBudget})` : ''}` : '';
+    lines.push(`• agent <code>${id}</code>${cardNote}: ${n} visits${expNote}`);
   }
   const payableVisits = total - ownerVisits;
-  const pay = payableVisits * c.rateVisit + bonus * c.rateBonus;
-  lines.push('', `💵 Estimated pay: <b>₴${pay}</b>  (₴${c.rateVisit}/visit × ${payableVisits}${ownerVisits ? `, excludes ${ownerVisits} owner visit(s)` : ''} + ₴${c.rateBonus}/bonus × ${bonus})`);
+  const payablePosters = postersTotal - ownerPosters;
+  const pay = payableVisits * c.rateVisit + bonus * c.rateBonus + payablePosters * c.ratePublicPoster + expenseTotal;
+  lines.push('', `💵 Estimated pay: <b>₴${pay}</b>  (₴${c.rateVisit}/visit × ${payableVisits}${ownerVisits ? `, excludes ${ownerVisits} owner visit(s)` : ''} + ₴${c.rateBonus}/bonus × ${bonus} + ₴${c.ratePublicPoster}/poster × ${payablePosters} + ₴${expenseTotal} materials)`);
   lines.push('Note: bonus events aren’t tracked per-agent, so an owner smoke-test bonus (if any) is still included above.');
   lines.push('Use /export for the full CSV.');
   await say(env, chatId, lines.join('\n'));
 }
 
-async function ownerExport(env, chatId) {
-  const list = await env.VISITS.list({ prefix: 'visit:', limit: 1000 });
-  const rows = [['ts', 'agentId', 'agentName', 'storeId', 'storeName', 'lat', 'lng', 'distM', 'pricing', 'lastDelivery', 'hours', 'size', 'poster', 'contact', 'notes', 'photoFileId']];
-  for (const k of list.keys) {
-    const r = await env.VISITS.get(k.name, { type: 'json' });
-    if (!r) continue;
-    const csv = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-    rows.push([r.ts, r.agentId, r.agentName, r.store?.id || '', r.store?.name || '', r.lat, r.lng, r.distM, r.pricing, r.lastDelivery, r.hours, r.size, r.poster, r.contact, r.notes, r.photoFileId].map(csv));
-  }
+const csvCell = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+
+async function sendCsv(env, chatId, filename, caption, rows) {
   const csvText = rows.map((row) => row.join(',')).join('\n');
   const form = new FormData();
   form.append('chat_id', String(chatId));
-  form.append('caption', `📄 ${rows.length - 1} visit(s)`);
-  form.append('document', new Blob([csvText], { type: 'text/csv' }), `visits-${new Date().toISOString().slice(0, 10)}.csv`);
+  form.append('caption', caption);
+  form.append('document', new Blob([csvText], { type: 'text/csv' }), filename);
   await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendDocument`, { method: 'POST', body: form });
+}
+
+async function ownerExport(env, chatId) {
+  const list = await env.VISITS.list({ prefix: 'visit:', limit: 1000 });
+  const rows = [['ts', 'agentId', 'agentName', 'storeId', 'storeName', 'lat', 'lng', 'distM', 'pricing', 'lastDelivery', 'hours', 'size', 'poster', 'contact', 'mapChecked', 'notes', 'photoFileId']];
+  for (const k of list.keys) {
+    const r = await env.VISITS.get(k.name, { type: 'json' });
+    if (!r) continue;
+    rows.push([r.ts, r.agentId, r.agentName, r.store?.id || '', r.store?.name || '', r.lat, r.lng, r.distM, r.pricing, r.lastDelivery, r.hours, r.size, r.poster, r.contact, r.mapChecked, r.notes, r.photoFileId].map(csvCell));
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  await sendCsv(env, chatId, `visits-${date}.csv`, `📄 ${rows.length - 1} visit(s)`, rows);
+
+  // Posters and expenses are a different record shape (#296) — a second file
+  // rather than bolting mismatched columns onto the visits export, which
+  // might already be consumed downstream by the owner as-is.
+  const mRows = [['kind', 'ts', 'agentId', 'agentName', 'amountUAH', 'lat', 'lng', 'photoFileId']];
+  const posterList = await env.VISITS.list({ prefix: 'poster:', limit: 1000 });
+  for (const k of posterList.keys) {
+    const r = await env.VISITS.get(k.name, { type: 'json' });
+    if (!r) continue;
+    mRows.push(['poster', r.ts, r.agentId, r.agentName, '', r.lat, r.lng, r.photoFileId].map(csvCell));
+  }
+  const expenseList = await env.VISITS.list({ prefix: 'expense:', limit: 1000 });
+  for (const k of expenseList.keys) {
+    const r = await env.VISITS.get(k.name, { type: 'json' });
+    if (!r) continue;
+    mRows.push(['expense', r.ts, r.agentId, r.agentName, r.amountUAH, '', '', r.photoFileId].map(csvCell));
+  }
+  if (mRows.length > 1) {
+    await sendCsv(env, chatId, `materials-${date}.csv`, `📄 ${posterList.keys.length} poster(s), ${expenseList.keys.length} expense(s)`, mRows);
+  }
 }
 
 function notAgentMsg(uid) {
@@ -1680,6 +1740,14 @@ function payText(c) {
     '🎯 Ціль · Target: 8–12 магазинів/день · stores/day.',
     '🗓️ Виплати щотижня — власник звіряє /report і фото. · Weekly pay; owner reconciles /report + photos.',
     '',
+    `📍 <b>Публічний плакат · Public poster: ₴${c.ratePublicPoster}</b> (кожен, макс. ${POSTER_DAILY_CAP}/день · each, max ${POSTER_DAILY_CAP}/day)`,
+    'За плакат на зупинці/у ВНЗ, не в магазині — окремо від бонусу вище. · For a poster at a bus stop/university, not in a store — separate from the bonus above.',
+    '/poster для запису · /poster to log one.',
+    '',
+    `🧾 <b>Матеріали · Materials:</b> компенсація до ₴${c.materialBudget} за фото-чек (папір, різка, скотч). · reimbursed up to ₴${c.materialBudget} with a photo receipt (paper, cutting, tape).`,
+    'Харчування та транспорт не покриваються. · Food and transport are not covered.',
+    '/expense для запису чека · /expense to log a receipt.',
+    '',
     '📈 <b>Фаза 2 (згодом) · Phase 2 (later)</b> — коли ви продаєте промо:',
     'разова премія за підписаний магазин · one-time bonus per signed store',
     '(₴300–₴500 Featured, ₴800 Spotlight). Ще не активно. · Not active yet.',
@@ -1700,6 +1768,115 @@ async function cmdMyVisits(env, userId, chatId) {
   const n = Number((await env.VISITS.get('count:agent:' + userId)) || 0);
   await say(env, chatId, `📊 Ваших візитів усього · Your total visits: <b>${n}</b>`);
 }
+
+// ── Public poster flow (#296) — distinct from the in-store poster question in
+// /visit. This is for fliers in public high-traffic spots (bus stops,
+// universities), paid at a lower per-item rate and hard-capped per day so it
+// can't be gamed by photographing the same handful of posters repeatedly.
+const posterDayKey = (uid, day) => `poster_day:${uid}:${day}`;
+const POSTER_DAILY_CAP = 10;
+
+function busySessionMsg(session) {
+  const label = session.step.startsWith('poster_') ? 'публічний плакат · public poster'
+    : session.step.startsWith('expense_') ? 'витрату · expense'
+    : 'візит · visit';
+  return `⚠️ У вас є незавершена дія (${label}). Завершіть її або /cancel. · You have something in progress. Finish it or /cancel first.`;
+}
+
+async function cmdPoster(env, uid, chatId) {
+  const session = await getSession(env, uid);
+  if (session && session.step !== 'done') { await say(env, chatId, busySessionMsg(session)); return; }
+  const today = isoDay(0);
+  const soFar = Number((await env.VISITS.get(posterDayKey(uid, today))) || 0);
+  if (soFar >= POSTER_DAILY_CAP) {
+    await say(env, chatId,
+      `🚫 Денний ліміт публічних плакатів (${POSTER_DAILY_CAP}) вже вичерпано на сьогодні. · Today's public-poster limit (${POSTER_DAILY_CAP}) is already reached.\n` +
+      'Спробуйте завтра. · Try again tomorrow.');
+    return;
+  }
+  await putSession(env, uid, { step: 'poster_loc', qi: 0, data: {} });
+  await say(env, chatId,
+    `📍 <b>Публічний плакат · Public poster</b> (${soFar}/${POSTER_DAILY_CAP} сьогодні · today)\n` +
+    '1️⃣ Надішліть <b>геолокацію</b> місця розміщення (📎 → Location). · Share the <b>location</b> where you placed it.\n\n' +
+    '/cancel щоб вийти · to abort');
+}
+
+async function finishPoster(env, c, uid, chatId, session, from) {
+  const d = session.data;
+  const today = isoDay(0);
+  // Re-check the cap at submit time, not just at /poster start — two posters
+  // logged back-to-back must not both slip past a cap only checked once.
+  const soFar = Number((await env.VISITS.get(posterDayKey(uid, today))) || 0);
+  if (soFar >= POSTER_DAILY_CAP) {
+    await clearSession(env, uid);
+    await say(env, chatId,
+      `🚫 Денний ліміт (${POSTER_DAILY_CAP}) вичерпано, поки ви заповнювали цю форму — цей плакат не зараховано. · The daily limit (${POSTER_DAILY_CAP}) was reached while you were filling this in — this one was not counted.`);
+    return;
+  }
+  const now = new Date();
+  const rec = {
+    ts: now.toISOString(), agentId: uid,
+    agentName: [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || String(uid),
+    lat: d.lat ?? null, lng: d.lng ?? null, photoFileId: d.photoFileId || null,
+  };
+  await env.VISITS.put(`poster:${rec.ts}:${uid}`, JSON.stringify(rec));
+  await env.VISITS.put(posterDayKey(uid, today), String(soFar + 1));
+  await bump(env, 'posters_total', 1);
+  await bump(env, 'posters:' + uid, 1);
+  await clearSession(env, uid);
+  const earned = c.ratePublicPoster;
+  await say(env, chatId,
+    `✅ Зараховано · Logged (${soFar + 1}/${POSTER_DAILY_CAP} сьогодні · today)\n💵 +₴${earned}`);
+  if (c.ownerId && String(uid) !== c.ownerId && d.photoFileId) {
+    await tg(env, 'sendPhoto', {
+      chat_id: c.ownerId, photo: d.photoFileId, parse_mode: 'HTML',
+      caption: `📍 Публічний плакат · Public poster — <b>${esc(rec.agentName)}</b>\n${d.lat != null ? `${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}` : ''}\n(${soFar + 1}/${POSTER_DAILY_CAP} сьогодні · today)`,
+    });
+  }
+}
+
+// ── Material expense flow (#296) — a printshop trip for premium paper,
+// cutting, tape. Logged and forwarded to the owner with the running total,
+// but NOT auto-capped/blocked here: every other money-adjacent flow in this
+// bot (visits, bonuses, promotions) ends in the owner reconciling and paying
+// by hand, never an automatic payout, and reimbursement is no different. The
+// 300₴ figure (agentExpenseTotal above /ownerReport) is enforced as a ceiling
+// on what /report counts as reimbursable, not as a hard stop on logging one.
+async function cmdExpense(env, uid, chatId, c) {
+  const session = await getSession(env, uid);
+  if (session && session.step !== 'done') { await say(env, chatId, busySessionMsg(session)); return; }
+  await putSession(env, uid, { step: 'expense_photo', qi: 0, data: {} });
+  await say(env, chatId,
+    `🧾 <b>Витрата на матеріали · Material expense</b> (макс. ₴${c.materialBudget} на компенсацію · max ₴${c.materialBudget} reimbursable)\n` +
+    '1️⃣ Надішліть <b>фото чека</b>. · Send a <b>photo of the receipt</b>.\n\n' +
+    '/cancel щоб вийти · to abort');
+}
+
+async function finishExpense(env, c, uid, chatId, session, from) {
+  const d = session.data;
+  const now = new Date();
+  const rec = {
+    ts: now.toISOString(), agentId: uid,
+    agentName: [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || String(uid),
+    amountUAH: d.amountUAH, photoFileId: d.photoFileId || null,
+  };
+  await env.VISITS.put(`expense:${rec.ts}:${uid}`, JSON.stringify(rec));
+  await clearSession(env, uid);
+  const newTotal = await agentExpenseTotal(env, uid);
+  const overCap = newTotal > c.materialBudget;
+  await say(env, chatId,
+    `✅ Зараховано · Logged: ₴${rec.amountUAH}\n` +
+    `Разом на компенсацію · Running total: ₴${newTotal} / ₴${c.materialBudget}` +
+    (overCap ? '\n⚠️ Перевищує ліміт компенсації — власник вирішить, що покрити. · Over the reimbursement cap — the owner will decide what to cover.' : ''));
+  if (c.ownerId && String(uid) !== c.ownerId && d.photoFileId) {
+    await tg(env, 'sendPhoto', {
+      chat_id: c.ownerId, photo: d.photoFileId, parse_mode: 'HTML',
+      caption: `🧾 Витрата · Expense — <b>${esc(rec.agentName)}</b>: ₴${rec.amountUAH}\n` +
+        `Разом · Running total: ₴${newTotal} / ₴${c.materialBudget}${overCap ? ' ⚠️' : ''}`,
+    });
+  }
+}
+
 async function cmdPay(env, c, chatId) {
   await say(env, chatId, payText(c));
 }
@@ -1773,8 +1950,13 @@ async function cmdRoute(env, userId, chatId) {
     'Share your <b>location</b> and I\u2019ll plan a walking route through the nearest stores.\n\n' +
     '/cancel щоб вийти · to abort');
 }
+const VISIT_STEPS = new Set(['store', 'store_pick', 'photo', 'question', 'confirm', 'resume_ask']);
 async function cmdVisit(env, userId, chatId, session) {
   if (session === undefined) session = await getSession(env, userId);
+  if (session && session.step !== 'route_loc' && session.step !== 'done' && !VISIT_STEPS.has(session.step)) {
+    await say(env, chatId, busySessionMsg(session));
+    return;
+  }
   // Don't silently discard a half-finished survey -- losing a photo and six
   // answers to a mistyped command is the worst thing this flow can do.
   if (session && session.step !== 'route_loc' && session.step !== 'done') {
@@ -1793,6 +1975,8 @@ async function cmdAgentMenu(env, chatId, isAgent) {
   if (isAgent) {
     rows.push([{ text: '🧭 Маршрут · Route', callback_data: 'ag:route' }]);
     rows.push([{ text: '📝 Візит · Visit', callback_data: 'ag:visit' }]);
+    rows.push([{ text: '📍 Публічний плакат · Public poster', callback_data: 'ag:poster' }]);
+    rows.push([{ text: '🧾 Витрата на матеріали · Material expense', callback_data: 'ag:expense' }]);
     rows.push([{ text: '📊 Мої візити · My visits', callback_data: 'ag:myvisits' }]);
     rows.push([{ text: '💳 Картка для виплат · Payout card', callback_data: 'ag:card' }]);
   }
@@ -2161,6 +2345,17 @@ async function handleVisit(env, c, msg, ctx) {
     return true;
   }
 
+  if (command === 'poster') {
+    if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    await cmdPoster(env, userId, chatId);
+    return true;
+  }
+  if (command === 'expense') {
+    if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
+    await cmdExpense(env, userId, chatId, c);
+    return true;
+  }
+
   // A bare store id right after /materials. Guarded on !session so it can never
   // swallow an answer to an in-progress /visit questionnaire, and on the armed
   // flag so a stray "c12" at any other time still falls through to /help.
@@ -2322,6 +2517,12 @@ async function handleVisit(env, c, msg, ctx) {
         session.data.contact = v;
         break;
       }
+      case 'mapChecked': {
+        const v = readYesNo(val);
+        if (v == null) return reprompt();
+        session.data.mapChecked = v;
+        break;
+      }
       case 'notes': session.data.notes = val || '-'; break;
     }
     session.qi++;
@@ -2340,6 +2541,40 @@ async function handleVisit(env, c, msg, ctx) {
       return true;
     }
     await say(env, chatId, 'Оберіть: ✅ Надіслати або ✖️ Скасувати. · Choose Submit or Cancel.', [['✅ Надіслати / Submit', '✖️ Скасувати / Cancel']]);
+    return true;
+  }
+
+  if (session.step === 'poster_loc') {
+    if (!msg.location) { await say(env, chatId, '📍 Потрібна геолокація: 📎 → Location. · Please share a location.'); return true; }
+    session.data.lat = msg.location.latitude;
+    session.data.lng = msg.location.longitude;
+    session.step = 'poster_photo';
+    await putSession(env, userId, session);
+    await say(env, chatId, '2️⃣ Тепер надішліть <b>фото плаката</b> на місці. · Now send a <b>photo of the poster</b> in place.');
+    return true;
+  }
+
+  if (session.step === 'poster_photo') {
+    if (!msg.photo || !msg.photo.length) { await say(env, chatId, '📷 Потрібне фото. · A photo is required. Send one photo.'); return true; }
+    session.data.photoFileId = msg.photo[msg.photo.length - 1].file_id;
+    await finishPoster(env, c, userId, chatId, session, from);
+    return true;
+  }
+
+  if (session.step === 'expense_photo') {
+    if (!msg.photo || !msg.photo.length) { await say(env, chatId, '📷 Потрібне фото чека. · A photo of the receipt is required.'); return true; }
+    session.data.photoFileId = msg.photo[msg.photo.length - 1].file_id;
+    session.step = 'expense_amount';
+    await putSession(env, userId, session);
+    await say(env, chatId, '2️⃣ Яка сума, ₴? · What amount, in ₴?');
+    return true;
+  }
+
+  if (session.step === 'expense_amount') {
+    const n = Number(String(text || '').replace(',', '.').trim());
+    if (!isFinite(n) || n <= 0 || n > 5000) { await say(env, chatId, 'Надішліть суму в ₴ (число від 1 до 5000). · Send an amount in ₴ (a number from 1 to 5000).'); return true; }
+    session.data.amountUAH = Math.round(n * 100) / 100;
+    await finishExpense(env, c, userId, chatId, session, from);
     return true;
   }
 
