@@ -1447,7 +1447,13 @@ async function promptStorePick(env, uid, chatId, session) {
   session.step = 'store';
   await putSession(env, uid, session);
   const lines = near.map(({ s, d }, i) => {
-    const onRoute = routeIds.includes(s.id) ? ` 🧭${routeIds.indexOf(s.id) + 1}` : '';
+    // Route-stop number is unrelated to this list's own reply-index below, and
+    // a bare digit right after the name reads exactly like an alternative
+    // pick number -- a field report showed exactly that: a store's route-stop
+    // number visually matched a *different* store's list position, and the
+    // agent replied with the route number, picking the wrong store. Spelling
+    // it out removes the ambiguity.
+    const onRoute = routeIds.includes(s.id) ? ` (🧭 маршрут, зупинка ${routeIds.indexOf(s.id) + 1} · route stop ${routeIds.indexOf(s.id) + 1})` : '';
     return `${i + 1}. <b>${esc(s.name)}</b>${onRoute} · ${fmtDist(d)}${s.address ? ' — ' + esc(s.address) : ''}`;
   });
   // The line on a real map, from wherever they are in the round — no need to
