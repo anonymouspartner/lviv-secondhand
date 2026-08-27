@@ -2394,9 +2394,21 @@ async function handleVisit(env, c, msg, ctx) {
   // No active session and not one of our commands → let the public handler reply.
   if (!session) return false;
 
-  // A public/other slash-command mid-session escapes to the normal handlers, so
-  // /help, /materials, etc. keep working; the session stays and can be resumed.
-  if (command) return false;
+  // A command genuinely handled elsewhere (public replies, /feedback) escapes
+  // to those normal handlers so it keeps working mid-session; the survey
+  // stays put and can be resumed. Everything else reaching this point is
+  // unrecognized -- letting THAT fall through too used to land on a bare
+  // "Unknown command" with no hint that a survey was still waiting on an
+  // answer (e.g. a mistyped "/not" instead of "/cancel"), leaving the agent
+  // stuck. Reply in context instead, and leave the session untouched.
+  if (command) {
+    const ESCAPES_MID_SESSION = new Set(['start', 'help', 'today', 'day', 'rare', 'cheap', 'submit', 'owner', 'feedback']);
+    if (ESCAPES_MID_SESSION.has(command)) return false;
+    await say(env, chatId,
+      `🤷 Не розпізнав команду «/${command}». · Command "/${command}" not recognized.\n` +
+      'У вас активне обстеження — надішліть відповідь на останнє питання, або /cancel щоб скасувати. · You have an active survey — answer the last question, or /cancel to abort.');
+    return true;
+  }
 
   // ── In-session step machine ──
   if (session.step === 'resume_ask') {
@@ -2502,8 +2514,29 @@ async function handleVisit(env, c, msg, ctx) {
     return handleQuestionsStart(env, userId, chatId, session);
   }
 
+  // Undo, at either sub-step: answering the poster question "yes" is a single
+  // tap, easy to hit by mistake, and the survey-so-far shouldn't be thrown
+  // away just to correct it. "Ні/No" backs out of the photo+location capture
+  // only — poster goes back to false and the questionnaire resumes normally.
+  if (session.step === 'visit_poster_loc' || session.step === 'visit_poster_photo') {
+    if (readYesNo(text) === false) {
+      delete session.data.posterLat;
+      delete session.data.posterLng;
+      session.data.poster = false;
+      session.step = 'question';
+      session.qi++;
+      await putSession(env, userId, session);
+      return askNext(env, userId, chatId, session);
+    }
+  }
+
   if (session.step === 'visit_poster_loc') {
-    if (!msg.location) { await say(env, chatId, '📍 Потрібна геолокація: 📎 → Location. · Please share a location.'); return true; }
+    if (!msg.location) {
+      await say(env, chatId,
+        '📍 Потрібна геолокація: 📎 → Location. · Please share a location.\n' +
+        'Натиснули «Так» помилково? Надішліть «Ні» · Tapped Yes by mistake? Send "No".');
+      return true;
+    }
     session.data.posterLat = msg.location.latitude;
     session.data.posterLng = msg.location.longitude;
     session.step = 'visit_poster_photo';
@@ -2513,7 +2546,12 @@ async function handleVisit(env, c, msg, ctx) {
   }
 
   if (session.step === 'visit_poster_photo') {
-    if (!msg.photo || !msg.photo.length) { await say(env, chatId, '📷 Потрібне фото. · A photo is required.'); return true; }
+    if (!msg.photo || !msg.photo.length) {
+      await say(env, chatId,
+        '📷 Потрібне фото. · A photo is required.\n' +
+        'Натиснули «Так» помилково? Надішліть «Ні» · Tapped Yes by mistake? Send "No".');
+      return true;
+    }
     const ts = new Date().toISOString();
     const agentName = [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || String(userId);
     await env.VISITS.put(`poster:${ts}:${userId}`, JSON.stringify({
