@@ -573,20 +573,23 @@ const NEAR_METERS = 250; // GPS this close to the picked store's pin = "on site"
 // The questionnaire, in agent order. `kb` = reply-keyboard rows (bilingual button
 // labels). Keep in sync with docs/FIELD_AGENT.md.
 const QUESTIONS = [
-  { key: 'pricing', q: '3️⃣ Тип цін? · Pricing type?', kb: [['⚖️ Вага / By weight', '🏷️ Штука / Itemized'], ['🔀 Обидва / Both', '❓ Не знаю / Unknown']] },
+  // #309: binary choice only — "both"/"unknown" produced ambiguous data that
+  // wasn't actionable in stores.json's own pricing field.
+  { key: 'pricing', q: '3️⃣ Тип цін? · Pricing type?', kb: [['⚖️ Вага / By weight', '🏷️ Штука / Itemized']] },
   // A concrete date beats a weekday: the app's tracker works off restock_date
   // for ANY cycle length, whereas a weekday only pins down a 7-day cycle — so
-  // this is asked at every store, not just the by-weight ones.
-  { key: 'lastdel', q: '4️⃣ Коли був останній завіз? · When was the last delivery?\n(або дата: 13.08) · (or a date)', kb: [['Сьогодні / Today', 'Вчора / Yesterday'], ['❓ Не знаю / Unknown']] },
-  { key: 'hours', q: '5️⃣ Години роботи? (напр. 10:00–20:00, або «зачинено») · Opening hours?', kb: null },
-  { key: 'size', q: '6️⃣ Розмір магазину? · Store size?', kb: [['🟢 S малий/small', '🟡 M середній/medium', '🔴 L великий/large']] },
-  { key: 'poster', q: '7️⃣ QR-плакат розміщено? · QR poster placed?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
-  { key: 'contact', q: '8️⃣ Контакт власника + згода на карту? · Owner contact + consent to feature?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
+  // this is asked at every store, not just the by-weight ones. #309: replaced
+  // "Unknown" with a daily/seasonal option, since a store with no fixed cycle
+  // isn't actually unknown — it just needs the dailyDrop flag instead of a date.
+  { key: 'lastdel', q: '4️⃣ Коли був останній завіз? · When was the last delivery?\n(або дата: 13.08) · (or a date)', kb: [['Сьогодні / Today', 'Вчора / Yesterday'], ['🔄 Щоденне/сезонне поповнення · Daily/seasonal restock']] },
+  { key: 'hours', q: '5️⃣ Години роботи? (напр. 10:00–20:00, або «зачинено») · Opening hours?\nПеревірте на карті застосунку, чи вже записані правильні години. · Check the live map for accurate hours first.', kb: null },
+  { key: 'poster', q: '6️⃣ QR-плакат розміщено? · QR poster placed?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
+  { key: 'contact', q: '7️⃣ Контакт власника + згода на карту? · Owner contact + consent to feature?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
   // #296: confirms the agent actually looked at the live app while standing in
   // the store, not just filled in the survey from memory later. Recorded, not
   // paid on — it's a completeness check, not a bonus trigger.
-  { key: 'mapChecked', q: '9️⃣ Перевірили застосунок і внесли потрібні правки на місці? · Checked the live app and made any needed edits on-site?', kb: [['✅ Так / Yes', '❌ Ні / No']] },
-  { key: 'notes', q: '🔟 Нотатки? (або «-») · Notes? (or "-")', kb: null },
+  { key: 'mapChecked', q: '8️⃣ Перевірили застосунок і внесли потрібні правки на місці? · Checked the live app and made any needed edits on-site?', kb: [['✅ Так / Yes', '❌ Ні / No']] },
+  { key: 'notes', q: '9️⃣ Нотатки? (або «-») · Notes? (or "-")', kb: null },
 ];
 
 // Firing an agent doesn't touch AGENT_IDS (that's a Worker secret — editing it
@@ -1337,11 +1340,14 @@ function readDate(t) {
 }
 // Button text -> a delivery date. Precise for the two answers that cover most
 // visits; anything vaguer is better recorded as unknown than guessed.
+// Returns 'daily' as a sentinel — visitToUpdates() turns that into a
+// dailyDrop:true patch instead of a restock_date, same as the app's own
+// "Restocks daily" toggle (index.html saveDelivery()).
 function readLastDelivery(t) {
   const n = norm(t);
   if (n.includes('сьогод') || n.includes('today')) return isoDay(0);
   if (n.includes('вчора') || n.includes('yesterday')) return isoDay(-1);
-  if (n.includes('не знаю') || n.includes('unknown') || n === '-') return null;
+  if (n.includes('щоденн') || n.includes('сезонн') || n.includes('daily') || n.includes('seasonal')) return 'daily';
   return readDate(t);
 }
 
@@ -1362,19 +1368,13 @@ const clearSession = (env, uid) => env.VISITS.delete(sessionKey(uid));
 // instead of tapping, so unrecognised text returns null rather than a silent
 // guess; the question-step handler below reprompts on null instead of
 // recording e.g. an accidental typo as "no".
+// #309: binary only — "both"/"unknown" are no longer offered, so free-typed
+// text matching either now falls through to null (reprompt) like anything
+// else unrecognised.
 function readPricing(t) {
   const n = norm(t);
   if (n.includes('вага') || n.includes('weight')) return 'kg';
   if (n.includes('штук') || n.includes('itemi')) return 'item';
-  if (n.includes('обид') || n.includes('both')) return 'both';
-  if (n.includes('не знаю') || n.includes('unknown')) return 'unknown';
-  return null;
-}
-function readSize(t) {
-  const n = norm(t);
-  if (n.includes('s ') || n.includes('мал') || n.includes('small')) return 'S';
-  if (n.includes('m ') || n.includes('серед') || n.includes('medium')) return 'M';
-  if (n.includes('l ') || n.includes('вел') || n.includes('large')) return 'L';
   return null;
 }
 // Loose yes-detection for the free-text /visit confirm step (any phrasing
@@ -1499,11 +1499,11 @@ function summary(session) {
   if (d.lat != null) lines.push(`🗺️ GPS ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}${d.distM != null ? ` (~${d.distM} м від точки/from pin)` : ''}`);
   lines.push(`📷 Фото · Photo: ${d.photoFileId ? '✅' : '—'}`);
   lines.push(`💰 Ціни · Pricing: ${esc(d.pricing || '—')}`);
-  if (d.lastDelivery) lines.push(`📦 Останній завіз · Last delivery: ${esc(d.lastDelivery)}`);
+  if (d.lastDelivery === 'daily') lines.push('📦 Останній завіз · Last delivery: 🔄 Щоденне/сезонне · Daily/seasonal');
+  else if (d.lastDelivery) lines.push(`📦 Останній завіз · Last delivery: ${esc(d.lastDelivery)}`);
   if (d.dupDays != null) lines.push(`⚠️ <b>Цей магазин уже обстежували ${d.dupDays} дн. тому.</b> · Already surveyed ${d.dupDays} day(s) ago.`);
   lines.push(`🕐 Години · Hours: ${esc(d.hours || '—')}`);
-  lines.push(`📐 Розмір · Size: ${esc(d.size || '—')}`);
-  lines.push(`🪧 Плакат · Poster: ${d.poster ? '✅' : '❌'}`);
+  lines.push(`🪧 Плакат · Poster: ${d.poster ? (d.posterPhotoFileId ? '✅ 📷' : '✅') : '❌'}`);
   lines.push(`🤝 Контакт · Contact: ${d.contact ? '✅' : '❌'}`);
   if (d.notes && d.notes !== '-') lines.push(`📝 ${esc(d.notes)}`);
   return lines.join('\n');
@@ -1524,7 +1524,10 @@ function visitToUpdates(rec) {
     if (h) { u.hours = {}; for (const d of ['mon','tue','wed','thu','fri','sat','sun']) u.hours[d] = h; }
   }
   if (rec.pricing === 'kg' || rec.pricing === 'item') u.pricing = rec.pricing;
-  if (rec.lastDelivery) u.restock_date = rec.lastDelivery;
+  // #309: "Daily/seasonal restock" isn't a date — it's the same correction the
+  // app's own "Restocks daily" toggle makes (index.html saveDelivery()).
+  if (rec.lastDelivery === 'daily') u.dailyDrop = true;
+  else if (rec.lastDelivery) u.restock_date = rec.lastDelivery;
   return u;
 }
 
@@ -1543,7 +1546,6 @@ async function finishVisit(env, c, uid, chatId, session, from) {
     pricing: d.pricing || null,
     lastDelivery: d.lastDelivery || null,
     hours: d.hours || null,
-    size: d.size || null,
     poster: !!d.poster,
     contact: !!d.contact,
     mapChecked: !!d.mapChecked,
@@ -1672,11 +1674,11 @@ async function sendCsv(env, chatId, filename, caption, rows) {
 
 async function ownerExport(env, chatId) {
   const list = await env.VISITS.list({ prefix: 'visit:', limit: 1000 });
-  const rows = [['ts', 'agentId', 'agentName', 'storeId', 'storeName', 'lat', 'lng', 'distM', 'pricing', 'lastDelivery', 'hours', 'size', 'poster', 'contact', 'mapChecked', 'notes', 'photoFileId']];
+  const rows = [['ts', 'agentId', 'agentName', 'storeId', 'storeName', 'lat', 'lng', 'distM', 'pricing', 'lastDelivery', 'hours', 'poster', 'contact', 'mapChecked', 'notes', 'photoFileId']];
   for (const k of list.keys) {
     const r = await env.VISITS.get(k.name, { type: 'json' });
     if (!r) continue;
-    rows.push([r.ts, r.agentId, r.agentName, r.store?.id || '', r.store?.name || '', r.lat, r.lng, r.distM, r.pricing, r.lastDelivery, r.hours, r.size, r.poster, r.contact, r.mapChecked, r.notes, r.photoFileId].map(csvCell));
+    rows.push([r.ts, r.agentId, r.agentName, r.store?.id || '', r.store?.name || '', r.lat, r.lng, r.distM, r.pricing, r.lastDelivery, r.hours, r.poster, r.contact, r.mapChecked, r.notes, r.photoFileId].map(csvCell));
   }
   const date = new Date().toISOString().slice(0, 10);
   await sendCsv(env, chatId, `visits-${date}.csv`, `📄 ${rows.length - 1} visit(s)`, rows);
@@ -1684,18 +1686,18 @@ async function ownerExport(env, chatId) {
   // Posters and expenses are a different record shape (#296) — a second file
   // rather than bolting mismatched columns onto the visits export, which
   // might already be consumed downstream by the owner as-is.
-  const mRows = [['kind', 'ts', 'agentId', 'agentName', 'amountUAH', 'lat', 'lng', 'photoFileId']];
+  const mRows = [['kind', 'source', 'ts', 'agentId', 'agentName', 'storeId', 'amountUAH', 'lat', 'lng', 'photoFileId']];
   const posterList = await env.VISITS.list({ prefix: 'poster:', limit: 1000 });
   for (const k of posterList.keys) {
     const r = await env.VISITS.get(k.name, { type: 'json' });
     if (!r) continue;
-    mRows.push(['poster', r.ts, r.agentId, r.agentName, '', r.lat, r.lng, r.photoFileId].map(csvCell));
+    mRows.push(['poster', r.source || 'public', r.ts, r.agentId, r.agentName, r.storeId || '', '', r.lat, r.lng, r.photoFileId].map(csvCell));
   }
   const expenseList = await env.VISITS.list({ prefix: 'expense:', limit: 1000 });
   for (const k of expenseList.keys) {
     const r = await env.VISITS.get(k.name, { type: 'json' });
     if (!r) continue;
-    mRows.push(['expense', r.ts, r.agentId, r.agentName, r.amountUAH, '', '', r.photoFileId].map(csvCell));
+    mRows.push(['expense', '', r.ts, r.agentId, r.agentName, '', r.amountUAH, '', '', r.photoFileId].map(csvCell));
   }
   if (mRows.length > 1) {
     await sendCsv(env, chatId, `materials-${date}.csv`, `📄 ${posterList.keys.length} poster(s), ${expenseList.keys.length} expense(s)`, mRows);
@@ -1950,7 +1952,7 @@ async function cmdRoute(env, userId, chatId) {
     'Share your <b>location</b> and I\u2019ll plan a walking route through the nearest stores.\n\n' +
     '/cancel щоб вийти · to abort');
 }
-const VISIT_STEPS = new Set(['store', 'store_pick', 'photo', 'question', 'confirm', 'resume_ask']);
+const VISIT_STEPS = new Set(['store', 'store_pick', 'photo', 'question', 'visit_poster_loc', 'visit_poster_photo', 'confirm', 'resume_ask']);
 async function cmdVisit(env, userId, chatId, session) {
   if (session === undefined) session = await getSession(env, userId);
   if (session && session.step !== 'route_loc' && session.step !== 'done' && !VISIT_STEPS.has(session.step)) {
@@ -2480,6 +2482,32 @@ async function handleVisit(env, c, msg, ctx) {
     return handleQuestionsStart(env, userId, chatId, session);
   }
 
+  if (session.step === 'visit_poster_loc') {
+    if (!msg.location) { await say(env, chatId, '📍 Потрібна геолокація: 📎 → Location. · Please share a location.'); return true; }
+    session.data.posterLat = msg.location.latitude;
+    session.data.posterLng = msg.location.longitude;
+    session.step = 'visit_poster_photo';
+    await putSession(env, userId, session);
+    await say(env, chatId, '📷 Тепер надішліть фото плаката на місці. · Now send a photo of the poster in place.');
+    return true;
+  }
+
+  if (session.step === 'visit_poster_photo') {
+    if (!msg.photo || !msg.photo.length) { await say(env, chatId, '📷 Потрібне фото. · A photo is required.'); return true; }
+    const ts = new Date().toISOString();
+    const agentName = [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || String(userId);
+    await env.VISITS.put(`poster:${ts}:${userId}`, JSON.stringify({
+      ts, agentId: userId, agentName,
+      lat: session.data.posterLat ?? null, lng: session.data.posterLng ?? null,
+      photoFileId: msg.photo[msg.photo.length - 1].file_id,
+      source: 'visit', storeId: session.data.store?.id || null,
+    }));
+    session.step = 'question';
+    session.qi++;
+    await putSession(env, userId, session);
+    return askNext(env, userId, chatId, session);
+  }
+
   if (session.step === 'question') {
     const question = QUESTIONS[session.qi];
     const val = (text || '').trim();
@@ -2499,16 +2527,21 @@ async function handleVisit(env, c, msg, ctx) {
       }
       case 'lastdel': session.data.lastDelivery = readLastDelivery(val); break;
       case 'hours': session.data.hours = normalizeHours(val); break;
-      case 'size': {
-        const v = readSize(val);
-        if (v == null) return reprompt();
-        session.data.size = v;
-        break;
-      }
       case 'poster': {
         const v = readYesNo(val);
         if (v == null) return reprompt();
         session.data.poster = v;
+        // #309: a placed poster now also collects a photo + location, logged
+        // through the same poster: record shape #296 built for /poster (so it
+        // shows up in the materials CSV) — but it does NOT bump posters_total,
+        // since that counter drives the public-poster rate and this one is
+        // already paid via the visit's own ₴200 bonus.
+        if (v) {
+          session.step = 'visit_poster_loc';
+          await putSession(env, userId, session);
+          await say(env, chatId, '📍 Надішліть геолокацію місця розміщення плаката. · Share the location where you placed the poster.');
+          return true;
+        }
         break;
       }
       case 'contact': {
