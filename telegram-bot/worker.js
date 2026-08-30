@@ -1570,12 +1570,33 @@ async function startVisit(env, uid, chatId) {
 // route marker so someone following /route knows which stop is which.
 async function promptStorePick(env, uid, chatId, session) {
   const from = { lat: session.data.lat, lng: session.data.lng };
-  const near = await nearestUnvisitedStores(env, from, 8);
   let routeIds = [];
+  let routeDone = [];
   try {
     const r = await env.VISITS.get(routeKey(uid), { type: 'json' });
-    if (r && Array.isArray(r.ids)) routeIds = r.ids;
+    if (r && Array.isArray(r.ids)) { routeIds = r.ids; routeDone = Array.isArray(r.done) ? r.done : []; }
   } catch (e) {}
+  // With an active /route, scope the picker to that route's own remaining
+  // stops instead of a fresh "nearest 8" — otherwise a store that was never
+  // part of the plan can sneak into the numbered list, and the whole set
+  // can reshuffle between one /visit and the next as the agent walks, which
+  // defeats the point of having a fixed day plan. Falls back to the normal
+  // nearest-unvisited list once the route is empty or fully done.
+  const remainingRouteIds = routeIds.filter((id) => !routeDone.includes(id));
+  let near;
+  if (remainingRouteIds.length) {
+    const candidates = [];
+    for (const id of remainingRouteIds) {
+      const s = STORES.find((st) => st.id === id);
+      if (!s || typeof s.lat !== 'number' || typeof s.lng !== 'number') continue;
+      const days = await daysSinceLastVisit(env, id);
+      if (days != null && days < AGENT_REVISIT_DAYS) continue;
+      candidates.push({ s, d: distM(from, s) });
+    }
+    near = candidates.sort((a, b) => a.d - b.d);
+  } else {
+    near = await nearestUnvisitedStores(env, from, 8);
+  }
   session.data.nearby = near.map(({ s }) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng, cycle: s.cycle }));
   session.step = 'store';
   await putSession(env, uid, session);
@@ -1589,11 +1610,13 @@ async function promptStorePick(env, uid, chatId, session) {
     const onRoute = routeIds.includes(s.id) ? ` (🧭 маршрут, зупинка ${routeIds.indexOf(s.id) + 1} · route stop ${routeIds.indexOf(s.id) + 1})` : '';
     return `${i + 1}. <b>${esc(s.name)}</b>${onRoute} · ${fmtDist(d)}${s.address ? ' — ' + esc(s.address) : ''}`;
   });
-  // Always this list's own 8 stores, in this list's own order -- not the
-  // agent's whole day's route. A field report showed why: when a route was
-  // active, this used to link to the FULL route, whose pins are numbered by
-  // route-walking-order. That's a third, independent numbering next to this
-  // message's own 1-8 -- "pin 3 on the map" ended up meaning a completely
+  // Always this list's own stores, in this list's own order -- not the
+  // agent's whole day's route (even when this list IS scoped to the route's
+  // remaining stops above, it's a subset in this message's own order, not
+  // the route's walking order). A field report showed why that distinction
+  // matters: this used to link to the FULL route, whose pins are numbered
+  // by route-walking-order -- a third, independent numbering next to this
+  // message's own 1-N -- so "pin 3 on the map" ended up meaning a completely
   // different store than "item 3 in the list" (an early, already-visited
   // stop vs. the nearby store she was trying to identify). Scoping the link
   // to exactly what's listed here means pin N is always item N.
