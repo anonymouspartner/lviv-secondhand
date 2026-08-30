@@ -2580,7 +2580,8 @@ async function handleVisit(env, c, msg, ctx) {
       lines.join('\n') +
       `\n\n🗺️ <a href="${routeUrl}">Показати на карті · See it on the map</a>` +
       `\n🧭 <a href="${mapsUrl}">Навігація в Google Maps · Turn-by-turn in Google Maps</a>\n\n` +
-      'Далі — /visit біля першого магазину. · Then /visit at the first store.');
+      'Далі — рухайтесь до першого магазину і на місці надішліть /visit. Прибувши до наступної точки, знову оберіть /visit. · ' +
+      'Now go to your first store and send /visit once there. When you arrive at your next location, select /visit again.');
     return true;
   }
 
