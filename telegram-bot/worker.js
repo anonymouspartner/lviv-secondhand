@@ -589,7 +589,11 @@ const QUESTIONS = [
   // "Unknown" with a daily/seasonal option, since a store with no fixed cycle
   // isn't actually unknown — it just needs the dailyDrop flag instead of a date.
   { key: 'lastdel', q: '4️⃣ Коли був останній завіз? · When was the last delivery?\n(або дата: 13.08) · (or a date)', kb: [['Сьогодні / Today', 'Вчора / Yesterday'], ['🔄 Щоденне/сезонне поповнення · Daily/seasonal restock']] },
-  { key: 'hours', q: '5️⃣ Години роботи? (напр. 10:00–20:00, або «зачинено») · Opening hours?\nПеревірте на карті застосунку, чи вже записані правильні години. · Check the live map for accurate hours first.', kb: null },
+  // Many stores don't run one flat range all week (weekday vs. weekend is
+  // the common split) — asking this first avoids losing that distinction by
+  // forcing a single answer onto every day, then only asks the extra
+  // weekday/weekend questions when they're actually needed.
+  { key: 'hours', q: '5️⃣ Години роботи однакові щодня? · Same hours every day?\nПеревірте на карті застосунку, чи вже записані правильні години. · Check the live map for accurate hours first.', kb: [['✅ Так, однакові / Yes, same', '📅 Різні по днях / Different by day']] },
   { key: 'poster', q: '6️⃣ QR-плакат розміщено? · QR poster placed?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
   { key: 'contact', q: '7️⃣ Контакт власника + згода на карту? · Owner contact + consent to feature?  (💰 бонус/bonus)', kb: [['✅ Так / Yes', '❌ Ні / No']] },
   // #296: confirms the agent actually looked at the live app while standing in
@@ -1532,6 +1536,14 @@ function readYesNo(t) {
   if (/ні|no|❌/i.test(s)) return false;
   return null;
 }
+// Distinct from readYesNo() so the "Different by day" button (which reads
+// as neither a plain так/yes nor ні/no) isn't left to a substring accident.
+function readHoursSame(t) {
+  const s = String(t || '');
+  if (/однаков|same/i.test(s)) return true;
+  if (/різні|different/i.test(s)) return false;
+  return null;
+}
 // A payout card number (16 digits, spaces/dashes stripped) or a Ukrainian
 // IBAN. Only shape-checked, not a Luhn/bank check — this is a destination the
 // owner pays to by hand, not a card processed by this app.
@@ -1653,7 +1665,12 @@ function summary(session) {
   lines.push(`💰 Ціни · Pricing: ${esc(d.pricing || '—')}`);
   if (d.lastDelivery === 'daily') lines.push('📦 Останній завіз · Last delivery: 🔄 Щоденне/сезонне · Daily/seasonal');
   else if (d.lastDelivery) lines.push(`📦 Останній завіз · Last delivery: ${esc(d.lastDelivery)}`);
-  lines.push(`🕐 Години · Hours: ${esc(d.hours || '—')}`);
+  if (d.hours && typeof d.hours === 'object') {
+    lines.push(`🕐 Будні · Weekday: ${esc(d.hours.weekday || '—')}`);
+    lines.push(`🕐 Вихідні · Weekend: ${esc(d.hours.weekend || '—')}`);
+  } else {
+    lines.push(`🕐 Години · Hours: ${esc(d.hours || '—')}`);
+  }
   lines.push(`🪧 Плакат · Poster: ${d.poster ? (d.posterPhotoFileId ? '✅ 📷' : '✅') : '❌'}`);
   lines.push(`🤝 Контакт · Contact: ${d.contact ? '✅' : '❌'}`);
   if (d.notes && d.notes !== '-') lines.push(`📝 ${esc(d.notes)}`);
@@ -1670,7 +1687,15 @@ async function bump(env, key, by = 1) {
 // agent left unknown is omitted rather than written as a guess.
 function visitToUpdates(rec) {
   const u = {};
-  if (rec.hours) {
+  if (rec.hours && typeof rec.hours === 'object') {
+    const wd = normalizeHours(rec.hours.weekday);
+    const we = normalizeHours(rec.hours.weekend);
+    if (wd || we) {
+      u.hours = {};
+      if (wd) for (const d of ['mon','tue','wed','thu','fri']) u.hours[d] = wd;
+      if (we) for (const d of ['sat','sun']) u.hours[d] = we;
+    }
+  } else if (rec.hours) {
     const h = normalizeHours(rec.hours);
     if (h) { u.hours = {}; for (const d of ['mon','tue','wed','thu','fri','sat','sun']) u.hours[d] = h; }
   }
@@ -1807,6 +1832,11 @@ async function ownerReport(env, c, chatId) {
 }
 
 const csvCell = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+// hours may be a flat string or a {weekday, weekend} split — flatten the
+// split shape to one readable cell rather than "[object Object]".
+const hoursCell = (h) => (h && typeof h === 'object')
+  ? `${h.weekday || '?'} будні/weekday, ${h.weekend || '?'} вихідні/weekend`
+  : (h || '');
 
 async function sendCsv(env, chatId, filename, caption, rows) {
   const csvText = rows.map((row) => row.join(',')).join('\n');
@@ -1823,7 +1853,7 @@ async function ownerExport(env, chatId) {
   for (const k of list.keys) {
     const r = await env.VISITS.get(k.name, { type: 'json' });
     if (!r) continue;
-    rows.push([r.ts, r.agentId, r.agentName, r.store?.id || '', r.store?.name || '', r.lat, r.lng, r.distM, r.pricing, r.lastDelivery, r.hours, r.poster, r.contact, r.mapChecked, r.notes, r.photoFileId].map(csvCell));
+    rows.push([r.ts, r.agentId, r.agentName, r.store?.id || '', r.store?.name || '', r.lat, r.lng, r.distM, r.pricing, r.lastDelivery, hoursCell(r.hours), r.poster, r.contact, r.mapChecked, r.notes, r.photoFileId].map(csvCell));
   }
   const date = new Date().toISOString().slice(0, 10);
   await sendCsv(env, chatId, `visits-${date}.csv`, `📄 ${rows.length - 1} visit(s)`, rows);
@@ -2697,6 +2727,41 @@ async function handleVisit(env, c, msg, ctx) {
     return askNext(env, userId, chatId, session);
   }
 
+  // Hours follow-ups from the 'hours' question above: one flat range for
+  // stores that don't vary, or a weekday/weekend pair for the common case
+  // that does — a store's own door sign almost always splits along that
+  // line, so this covers real variation without asking all 7 days.
+  if (session.step === 'hours_uniform') {
+    const val = (text || '').trim();
+    if (!val) { await say(env, chatId, '🕐 Надішліть години. · Send the hours.'); return true; }
+    session.data.hours = normalizeHours(val);
+    session.step = 'question';
+    session.qi++;
+    await putSession(env, userId, session);
+    return askNext(env, userId, chatId, session);
+  }
+
+  if (session.step === 'hours_weekday') {
+    const val = (text || '').trim();
+    if (!val) { await say(env, chatId, '🕐 Надішліть години. · Send the hours.'); return true; }
+    session.data.hoursWeekday = normalizeHours(val);
+    session.step = 'hours_weekend';
+    await putSession(env, userId, session);
+    await say(env, chatId, '🕐 Години у вихідні (Сб–Нд)? (напр. 10:00–18:00, або «зачинено») · Weekend hours (Sat–Sun)?');
+    return true;
+  }
+
+  if (session.step === 'hours_weekend') {
+    const val = (text || '').trim();
+    if (!val) { await say(env, chatId, '🕐 Надішліть години. · Send the hours.'); return true; }
+    session.data.hours = { weekday: session.data.hoursWeekday, weekend: normalizeHours(val) };
+    delete session.data.hoursWeekday;
+    session.step = 'question';
+    session.qi++;
+    await putSession(env, userId, session);
+    return askNext(env, userId, chatId, session);
+  }
+
   if (session.step === 'question') {
     const question = QUESTIONS[session.qi];
     const val = (text || '').trim();
@@ -2715,7 +2780,16 @@ async function handleVisit(env, c, msg, ctx) {
         break;
       }
       case 'lastdel': session.data.lastDelivery = readLastDelivery(val); break;
-      case 'hours': session.data.hours = normalizeHours(val); break;
+      case 'hours': {
+        const same = readHoursSame(val);
+        if (same == null) return reprompt();
+        session.step = same ? 'hours_uniform' : 'hours_weekday';
+        await putSession(env, userId, session);
+        await say(env, chatId, same
+          ? '🕐 Які саме години? (напр. 10:00–20:00, або «зачинено») · What are the hours? (e.g. 10:00–20:00, or "closed")'
+          : '🕐 Години в будні (Пн–Пт)? (напр. 10:00–20:00, або «зачинено») · Weekday hours (Mon–Fri)?');
+        return true;
+      }
       case 'poster': {
         const v = readYesNo(val);
         if (v == null) return reprompt();
