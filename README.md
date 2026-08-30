@@ -400,6 +400,7 @@ Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The 
 | `/cheap` | Which stores have gone longest since a restock |
 | `/submit` | Submit your own store (for shop owners) |
 | `/materials` | Printable flyers, posters and QR stickers |
+| `/apply` | Apply to become a field agent |
 | `/feedback` | Send the maintainer a note about the bot or the map |
 | `/leaderboard` | Top 10 community contributors by points |
 | `/stop` | Unsubscribe from everything — restock alerts *and* flash-deal alerts |
@@ -709,6 +710,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | `/cheap` | Хто найдовше без завозу |
 | `/submit` | Додати свій магазин (для власників) |
 | `/materials` | Матеріали для друку: флаєри, постери, QR-наліпки |
+| `/apply` | Податися в польові агенти |
 | `/feedback` | Надіслати власнику відгук про бота чи карту |
 | `/leaderboard` | Топ-10 учасників спільноти за балами |
 | `/stop` | Відписатися від усіх сповіщень про спалах-знижки |

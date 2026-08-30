@@ -242,6 +242,7 @@ function helpText() {
     '/rare — stores that restock every 14+ days · рідко оновлювані магазини',
     '/cheap — longest since a restock · найдовше без завозу',
     '/submit — add your store (for owners) · додати свій магазин',
+    '/apply — apply to be a field agent · податися в польові агенти',
     '/feedback — tell the maintainer something · залишити відгук',
     '/materials — print-ready flyers, stickers, poster · рекламні матеріали для друку',
     '/help — this message · ця довідка',
@@ -983,6 +984,74 @@ async function handleFeedbackFlow(env, ctx) {
   return await submitFeedback(env, ctx, raw);
 }
 
+// Application to become a field agent, reachable from Довідка/help (/apply).
+// Same shape as the feedback flow above — a short-lived KV wait flag
+// captures the next free-text message — but pushes straight to the owner
+// via Telegram rather than through /api/submit, since a hire isn't a
+// map-data change and has no business in a GitHub issue. Approving still
+// means adding the id to AGENT_IDS and redeploying, same as today; this
+// only replaces the manual "copy my id out of a message" step (notAgentMsg)
+// with an application the owner can act on directly.
+const APPLY_WAIT_TTL = 300; // 5 min
+const applyWaitKey = (uid) => `applywait:${uid}`;
+
+async function submitAgentApplication(env, c, ctx, whyText) {
+  const { chatId, from } = ctx;
+  const text = String(whyText || '').trim().slice(0, 2000);
+  if (!text) return false;
+  const name = [from.first_name, from.last_name].filter(Boolean).join(' ') || String(chatId);
+  const handle = from.username ? `@${from.username}` : '—';
+  if (c.ownerId) {
+    await tg(env, 'sendMessage', {
+      chat_id: c.ownerId, parse_mode: 'HTML',
+      text: `🧭 <b>Заявка в польові агенти · Field agent application</b>\n` +
+        `${esc(name)} (${esc(handle)})\n` +
+        `ID: <code>${chatId}</code>\n\n` +
+        `${esc(text)}\n\n` +
+        `Додайте id до AGENT_IDS у telegram-bot/wrangler.toml і розгорніть, щоб надати доступ. · ` +
+        `Add the id to AGENT_IDS in telegram-bot/wrangler.toml and redeploy to grant access.`,
+    });
+  }
+  await tg(env, 'sendMessage', {
+    chat_id: chatId,
+    text: '🧭 Дякуємо! Заявку надіслано власнику. · Thanks — your application was sent to the owner.',
+  });
+  return true;
+}
+
+async function handleAgentApplyFlow(env, c, ctx) {
+  if (!env.BOT_TOKEN || !env.VISITS) return false;
+  const { userId, chatId, text } = ctx;
+  const raw = String(text || '').trim();
+  const command = raw ? (/^\/([a-z]+)(?:@\w+)?/i.exec(raw) || [])[1]?.toLowerCase() : null;
+  if (command === 'apply') {
+    const isOwner = Boolean(c.ownerId) && String(userId) === c.ownerId;
+    const isAgent = c.agentIds.includes(String(userId));
+    if (isOwner || isAgent) {
+      await tg(env, 'sendMessage', { chat_id: chatId, text: '🧭 У вас вже є доступ. · You already have access.' });
+      return true;
+    }
+    await env.VISITS.put(applyWaitKey(userId), '1', { expirationTtl: APPLY_WAIT_TTL });
+    await tg(env, 'sendMessage', {
+      chat_id: chatId, parse_mode: 'HTML',
+      text: `🧭 <b>Заявка в польові агенти · Field agent application</b>\n` +
+        `Спершу прочитайте опис ролі: <a href="${JOB_BRIEF_URL}">Опис вакансії · Job brief</a>\n\n` +
+        `Напишіть одним повідомленням: чому цікавить, доступність (дні/години), чи є телефон з GPS. · ` +
+        `Send one message: why you're interested, your availability (days/hours), and whether you have a GPS-capable phone.`,
+    });
+    return true;
+  }
+  // Not a command — might be the pending application text the prompt above
+  // asked for. Bail on anything command-shaped so this can never swallow an
+  // unrelated command as an application.
+  if (!raw || raw.startsWith('/')) return false;
+  let waiting = null;
+  try { waiting = await env.VISITS.get(applyWaitKey(userId)); } catch (e) {}
+  if (!waiting) return false;
+  await env.VISITS.delete(applyWaitKey(userId));
+  return await submitAgentApplication(env, c, ctx, raw);
+}
+
 // `/start bounty_{token}` — the deep-link entry point. Returns true if it
 // consumed the update (whether or not the token was valid).
 async function handleBountyStart(env, c, ctx) {
@@ -1244,6 +1313,7 @@ const PUBLIC_CMDS = [
   { command: 'cheap', description: '🛍 Хто найдовше без завозу' },
   { command: 'submit', description: '🏪 Додати свій магазин (власникам)' },
   { command: 'materials', description: '🏪 Матеріали для друку: флаєри, наліпки' },
+  { command: 'apply', description: '🧭 Податися в польові агенти · Apply to be a field agent' },
   { command: 'feedback', description: '💬 Залишити відгук власнику' },
   { command: 'leaderboard', description: '🏆 Топ учасників за балами' },
   { command: 'stop', description: '🔕 Вимкнути всі сповіщення' },
@@ -1754,7 +1824,8 @@ async function ownerExport(env, chatId) {
 
 function notAgentMsg(uid) {
   return `🔒 Ви не в списку польових агентів. · You're not a registered field agent.\n` +
-    `Надішліть власнику цей ID, щоб отримати доступ · Send this ID to the owner to get access:\n<code>${uid}</code>`;
+    `Надішліть заявку командою /apply · Apply with /apply\n` +
+    `(або надішліть власнику цей ID напряму · or send the owner this ID directly: <code>${uid}</code>)`;
 }
 
 // Job brief for a prospective/onboarding agent to read and review.
@@ -2784,6 +2855,14 @@ export default {
     // pending feedback text.
     try {
       if (await handleFeedbackFlow(env, mctx)) return ok();
+    } catch (e) {}
+
+    // Field-agent application (/apply), reachable from Довідка/help. Same
+    // tier as feedback above — open to anyone, not gated on already being an
+    // agent — and checked after it for the same reason: an in-progress
+    // /visit's free text should never be mistaken for a pending application.
+    try {
+      if (await handleAgentApplyFlow(env, c, mctx)) return ok();
     } catch (e) {}
 
     // Public, stateless commands (answered in the webhook response — no token).
