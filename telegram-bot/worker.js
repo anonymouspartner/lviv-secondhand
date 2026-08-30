@@ -1394,12 +1394,27 @@ function distM(a, b) {
 // Nearest `n` stores to a point, closest first. The agent is standing at the
 // shop, so proximity identifies it far more reliably than typing a Cyrillic
 // name into a phone — and half the map is called some variant of "Second hand".
-function nearestStores(from, n) {
-  return STORES
+// Same as nearestStores() used to be, but skips any store still inside
+// AGENT_REVISIT_DAYS -- used everywhere a list of stores is SUGGESTED to an
+// agent (the /visit picker, /route), so a recently-surveyed store never even
+// shows up to be picked by mistake. pickStore() below is the actual hard
+// gate that applies regardless of how a store was reached (this list, a name
+// search, /route); filtering it out here too just means an agent is steered
+// toward stores that are actually due, not shown a dead end. Over-fetches
+// from the plain distance sort since some nearby candidates will be skipped.
+async function nearestUnvisitedStores(env, from, n) {
+  const candidates = STORES
     .filter((s) => !s.watermark && typeof s.lat === 'number' && typeof s.lng === 'number')
     .map((s) => ({ s, d: distM(from, s) }))
-    .sort((a, b) => a.d - b.d)
-    .slice(0, n);
+    .sort((a, b) => a.d - b.d);
+  const result = [];
+  for (const c of candidates) {
+    if (result.length >= n) break;
+    const days = await daysSinceLastVisit(env, c.s.id);
+    if (days != null && days < AGENT_REVISIT_DAYS) continue;
+    result.push(c);
+  }
+  return result;
 }
 
 // Greedy nearest-neighbour walking order — deliberately the same algorithm as
@@ -1462,6 +1477,26 @@ function readLastDelivery(t) {
 // surveyed (and paid) twice by accident. One tiny key per store beats scanning
 // every visit:* record.
 const lastVisitKey = (storeId) => `lastvisit:${storeId}`;
+// Field agents shouldn't re-survey a store inside this window -- store data
+// (hours, address, chain) rarely changes, so a repeat visit this soon is
+// wasted time better spent on a store that's never been checked. This is a
+// hard gate, applied regardless of the store's own restock cycle -- see
+// pickStore()'s refusal below and nearestUnvisitedStores() above, which
+// keeps a gated store from being suggested in the first place. It does not
+// touch the app's own "edit this store's listing" flow, which stays open
+// any time -- only the formal /visit survey is gated.
+const AGENT_REVISIT_DAYS = 180; // 6 months
+async function daysSinceLastVisit(env, storeId) {
+  if (!storeId) return null;
+  try {
+    const last = await env.VISITS.get(lastVisitKey(storeId));
+    if (!last) return null;
+    const days = Math.floor((Date.now() - Date.parse(last)) / 86400000);
+    return days >= 0 ? days : null;
+  } catch (e) {
+    return null;
+  }
+}
 const ROUTE_TTL = 60 * 60 * 12;
 const routeKey = (uid) => `route:${uid}`;
 
@@ -1509,7 +1544,6 @@ function readCardNumber(t) {
 const cardKey = (uid) => `card:${uid}`;
 
 const ROUTE_SIZE = 12;        // a day's zone, matching the handbook's 10–15
-const DUP_WINDOW_DAYS = 30;   // fallback when a store's own cycle is unknown
 
 async function startVisit(env, uid, chatId) {
   await putSession(env, uid, { step: 'location', qi: 0, data: {} });
@@ -1524,7 +1558,7 @@ async function startVisit(env, uid, chatId) {
 // route marker so someone following /route knows which stop is which.
 async function promptStorePick(env, uid, chatId, session) {
   const from = { lat: session.data.lat, lng: session.data.lng };
-  const near = nearestStores(from, 8);
+  const near = await nearestUnvisitedStores(env, from, 8);
   let routeIds = [];
   try {
     const r = await env.VISITS.get(routeKey(uid), { type: 'json' });
@@ -1559,36 +1593,35 @@ async function promptStorePick(env, uid, chatId, session) {
     near.map((_, i) => [String(i + 1)]));
 }
 
-// Common tail for every way of choosing a store: distance sanity-check against
-// the map pin, duplicate-survey warning, then on to the photo.
+// Common tail for every way of choosing a store: the AGENT_REVISIT_DAYS
+// gate, a distance sanity-check against the map pin, then on to the photo.
+// This is the one choke point every path (the nearby list, a name search,
+// /route) funnels through, so it's the actual hard gate -- filtering a
+// gated store out of nearestUnvisitedStores() is just there to steer an
+// agent away from a dead end before they reach it, not to enforce anything
+// on its own.
 async function pickStore(env, uid, chatId, session, store) {
+  if (store.id) {
+    const days = await daysSinceLastVisit(env, store.id);
+    if (days != null && days < AGENT_REVISIT_DAYS) {
+      const again = AGENT_REVISIT_DAYS - days;
+      await say(env, chatId,
+        `🚫 <b>${esc(store.name)}</b> обстежували ${days} дн. тому — наступний огляд можливий через ${again} дн. · ` +
+        `Surveyed ${days} day(s) ago — next check-in available in ${again} day(s).\n\n` +
+        'Оберіть інший магазин зі списку, або надішліть назву. · Pick a different store from the list, or send a name.');
+      return;
+    }
+  }
   session.data.store = store;
   session.data.distM = (store.lat != null && session.data.lat != null)
     ? distM({ lat: store.lat, lng: store.lng }, { lat: session.data.lat, lng: session.data.lng })
     : null;
-  session.data.dupDays = null;
-  if (store.id) {
-    try {
-      const last = await env.VISITS.get(lastVisitKey(store.id));
-      if (last) {
-        const days = Math.floor((Date.now() - Date.parse(last)) / 86400000);
-        // A store's own cycle length, when known, is the true "same survey
-        // cycle" window — a fixed 30 days under-warns a 35-day-cycle store
-        // and over-warns a 7-day one.
-        const window = (store.cycle && store.cycle > 0) ? store.cycle : DUP_WINDOW_DAYS;
-        if (days >= 0 && days < window) session.data.dupDays = days;
-      }
-    } catch (e) {}
-  }
   session.step = 'photo';
   await putSession(env, uid, session);
   const warn = session.data.distM != null && session.data.distM > NEAR_METERS
     ? `\n⚠️ ~${session.data.distM} м від точки на карті — переконайтесь, що ви біля магазину. · ~${session.data.distM} m from the map pin.`
     : '';
-  const dup = session.data.dupDays != null
-    ? `\n⚠️ Цей магазин уже обстежували <b>${session.data.dupDays} дн. тому</b> — база за візит НЕ буде нарахована (бонус — можна). · Already surveyed ${session.data.dupDays} day(s) ago — the visit base won't be paid (a new bonus still can be).`
-    : '';
-  await say(env, chatId, `✅ ${esc(store.name)}${store.isNew ? ' <i>(новий · new)</i>' : ''}${warn}${dup}\n\n📷 Надішліть <b>одне фото</b> вітрини/входу. · Send <b>one photo</b> of the storefront.`);
+  await say(env, chatId, `✅ ${esc(store.name)}${store.isNew ? ' <i>(новий · new)</i>' : ''}${warn}\n\n📷 Надішліть <b>одне фото</b> вітрини/входу. · Send <b>one photo</b> of the storefront.`);
 }
 
 // Advance to the next questionnaire step.
@@ -1620,7 +1653,6 @@ function summary(session) {
   lines.push(`💰 Ціни · Pricing: ${esc(d.pricing || '—')}`);
   if (d.lastDelivery === 'daily') lines.push('📦 Останній завіз · Last delivery: 🔄 Щоденне/сезонне · Daily/seasonal');
   else if (d.lastDelivery) lines.push(`📦 Останній завіз · Last delivery: ${esc(d.lastDelivery)}`);
-  if (d.dupDays != null) lines.push(`⚠️ <b>Цей магазин уже обстежували ${d.dupDays} дн. тому.</b> · Already surveyed ${d.dupDays} day(s) ago.`);
   lines.push(`🕐 Години · Hours: ${esc(d.hours || '—')}`);
   lines.push(`🪧 Плакат · Poster: ${d.poster ? (d.posterPhotoFileId ? '✅ 📷' : '✅') : '❌'}`);
   lines.push(`🤝 Контакт · Contact: ${d.contact ? '✅' : '❌'}`);
@@ -1672,8 +1704,8 @@ async function finishVisit(env, c, uid, chatId, session, from) {
   };
   // Key sorts chronologically; include uid so two agents can't collide on a ts.
   await env.VISITS.put(`visit:${rec.ts}:${uid}`, JSON.stringify(rec));
-  // Stamp the store so a re-walk inside DUP_WINDOW_DAYS warns next time, and
-  // tick it off the agent's route if they're following one.
+  // Stamp the store so it's gated for AGENT_REVISIT_DAYS, and tick it off
+  // the agent's route if they're following one.
   if (rec.store && rec.store.id) {
     await env.VISITS.put(lastVisitKey(rec.store.id), rec.ts);
     try {
@@ -1685,24 +1717,18 @@ async function finishVisit(env, c, uid, chatId, session, from) {
     } catch (e) {}
   }
   const bonusUnits = (rec.poster ? 1 : 0) + (rec.contact ? 1 : 0);
-  // "No double-pay" (FIELD_AGENT.md §2): a re-survey inside the store's own
-  // cycle (see pickStore()'s dupDays) doesn't earn a second visit base — it
-  // can still earn a bonus for a genuinely new poster/sign-up.
-  const isDup = d.dupDays != null;
-  if (!isDup) {
-    await bump(env, 'total');
-    await bump(env, 'agent:' + uid);
-  }
+  // A visit reaching this point already passed pickStore()'s AGENT_REVISIT_DAYS
+  // gate, so it's never a re-survey of a recently-checked store -- the base
+  // is always earned.
+  await bump(env, 'total');
+  await bump(env, 'agent:' + uid);
   if (bonusUnits) await bump(env, 'bonus', bonusUnits);
   await clearSession(env, uid);
 
-  const earned = (isDup ? 0 : c.rateVisit) + bonusUnits * c.rateBonus;
-  const fragments = [];
-  if (!isDup) fragments.push(`+₴${c.rateVisit}`);
+  const earned = c.rateVisit + bonusUnits * c.rateBonus;
+  const fragments = [`+₴${c.rateVisit}`];
   if (bonusUnits) fragments.push(`+₴${bonusUnits * c.rateBonus} бонус/bonus`);
-  const payLine = fragments.length
-    ? `💵 ${fragments.join(' ')} = <b>₴${earned}</b>`
-    : '⏭️ Нічого не нараховано — цей магазин уже обстежували цього циклу, нового бонусу немає. · Nothing earned — already surveyed this cycle, no new bonus.';
+  const payLine = `💵 ${fragments.join(' ')} = <b>₴${earned}</b>`;
   const mine = Number((await env.VISITS.get('count:agent:' + uid)) || 0);
   await sayMenu(env, c, uid, chatId,
     `✅ <b>Візит записано! · Visit logged!</b>\n` +
@@ -2270,12 +2296,12 @@ async function cmdPurgeDo(env, c, chatId, targetId) {
     await say(env, chatId, `Немає збережених візитів для <code>${targetId}</code>. · No stored visits for that id.`);
     return;
   }
-  // count:total and count:agent:<uid> are only ever bumped together (both sit
-  // under finishVisit's `if (!isDup)`), so the agent's own tally is exactly how
-  // much of count:total belongs to them — no need to know which visits were dups.
+  // count:total and count:agent:<uid> are always bumped together in
+  // finishVisit, so the agent's own tally is exactly how much of
+  // count:total belongs to them.
   const agentCount = Number((await env.VISITS.get('count:agent:' + targetId)) || 0);
-  // count:bonus is bumped per poster/contact on every visit, dup or not, so it
-  // is recomputed straight from the records instead.
+  // count:bonus is bumped per poster/contact on every visit, so it is
+  // recomputed straight from the records instead.
   let bonusUnits = 0;
   const touchedStores = new Set();
   for (const { rec } of found) {
@@ -2533,7 +2559,7 @@ async function handleVisit(env, c, msg, ctx) {
   if (session.step === 'route_loc') {
     if (!msg.location) { await say(env, chatId, '📍 Потрібна геолокація: 📎 → Location. · Please share a location.'); return true; }
     const from = { lat: msg.location.latitude, lng: msg.location.longitude };
-    const near = nearestStores(from, ROUTE_SIZE).map((x) => x.s);
+    const near = (await nearestUnvisitedStores(env, from, ROUTE_SIZE)).map((x) => x.s);
     await clearSession(env, userId);
     if (!near.length) { await say(env, chatId, '🤷 Поблизу нічого не знайшов. · No stores found nearby.'); return true; }
     const ordered = walkOrder(near, from);
