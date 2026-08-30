@@ -1624,7 +1624,8 @@ async function promptStorePick(env, uid, chatId, session) {
   await say(env, chatId,
     '2️⃣ Який це магазин? Надішліть номер · Which store? Reply with the number:\n' + lines.join('\n') +
     `\n\n🗺️ <a href="${APP_URL}?route=${mapIds}">Ці магазини на карті · These stores on the map</a>` +
-    '\n\nНемає у списку — надішліть назву, або <code>new Назва</code>.\nNot listed — send a name, or <code>new Name</code>.',
+    '\n\nНемає у списку — надішліть назву, або <code>new Назва</code>.\nNot listed — send a name, or <code>new Name</code>.' +
+    '\n\n/cancel щоб вийти · to abort',
     near.map((_, i) => [String(i + 1)]));
 }
 
@@ -1656,7 +1657,7 @@ async function pickStore(env, uid, chatId, session, store) {
   const warn = session.data.distM != null && session.data.distM > NEAR_METERS
     ? `\n⚠️ ~${session.data.distM} м від точки на карті — переконайтесь, що ви біля магазину. · ~${session.data.distM} m from the map pin.`
     : '';
-  await say(env, chatId, `✅ ${esc(store.name)}${store.isNew ? ' <i>(новий · new)</i>' : ''}${warn}\n\n📷 Надішліть <b>одне фото</b> вітрини/входу. · Send <b>one photo</b> of the storefront.`);
+  await say(env, chatId, `✅ ${esc(store.name)}${store.isNew ? ' <i>(новий · new)</i>' : ''}${warn}\n\n📷 Надішліть <b>одне фото</b> вітрини/входу. · Send <b>one photo</b> of the storefront.\n\n/cancel щоб вийти · to abort`);
 }
 
 // Advance to the next questionnaire step.
@@ -1667,7 +1668,7 @@ async function askNext(env, uid, chatId, session) {
     session.qi = i;
     session.step = 'question';
     await putSession(env, uid, session);
-    return say(env, chatId, question.q, question.kb);
+    return say(env, chatId, question.q + '\n\n/cancel щоб вийти · to abort', question.kb);
   }
   // Questions done → confirmation.
   session.step = 'confirm';
@@ -2676,7 +2677,8 @@ async function handleVisit(env, c, msg, ctx) {
     const list = session.data.candidates.map((s, i) => `${i + 1}. ${esc(s.name)}${s.address ? ' — ' + esc(s.address) : ''}`).join('\n');
     // searchStores() over-fetches by one precisely to detect this case.
     const more = hits.length > MATCH_LIMIT ? '\n…і ще — уточніть назву. · …and more — try a more specific name.' : '';
-    await say(env, chatId, 'Кілька збігів — надішліть номер · Several matches — reply with the number:\n' + list + more,
+    await say(env, chatId, 'Кілька збігів — надішліть номер · Several matches — reply with the number:\n' + list + more +
+      '\n\n/cancel щоб вийти · to abort',
       session.data.candidates.map((_, i) => [String(i + 1)]));
     return true;
   }
@@ -2725,7 +2727,7 @@ async function handleVisit(env, c, msg, ctx) {
     session.data.posterLng = msg.location.longitude;
     session.step = 'visit_poster_photo';
     await putSession(env, userId, session);
-    await say(env, chatId, '📷 Тепер надішліть фото плаката на місці. · Now send a photo of the poster in place.');
+    await say(env, chatId, '📷 Тепер надішліть фото плаката на місці. · Now send a photo of the poster in place.\n\n/cancel щоб вийти · to abort');
     return true;
   }
 
@@ -2770,7 +2772,7 @@ async function handleVisit(env, c, msg, ctx) {
     session.data.hoursWeekday = normalizeHours(val);
     session.step = 'hours_weekend';
     await putSession(env, userId, session);
-    await say(env, chatId, '🕐 Години у вихідні (Сб–Нд)? (напр. 10:00–18:00, або «зачинено») · Weekend hours (Sat–Sun)?');
+    await say(env, chatId, '🕐 Години у вихідні (Сб–Нд)? (напр. 10:00–18:00, або «зачинено») · Weekend hours (Sat–Sun)?\n\n/cancel щоб вийти · to abort');
     return true;
   }
 
@@ -2808,9 +2810,10 @@ async function handleVisit(env, c, msg, ctx) {
         if (same == null) return reprompt();
         session.step = same ? 'hours_uniform' : 'hours_weekday';
         await putSession(env, userId, session);
-        await say(env, chatId, same
+        await say(env, chatId, (same
           ? '🕐 Які саме години? (напр. 10:00–20:00, або «зачинено») · What are the hours? (e.g. 10:00–20:00, or "closed")'
-          : '🕐 Години в будні (Пн–Пт)? (напр. 10:00–20:00, або «зачинено») · Weekday hours (Mon–Fri)?');
+          : '🕐 Години в будні (Пн–Пт)? (напр. 10:00–20:00, або «зачинено») · Weekday hours (Mon–Fri)?') +
+          '\n\n/cancel щоб вийти · to abort');
         return true;
       }
       case 'poster': {
@@ -2825,7 +2828,7 @@ async function handleVisit(env, c, msg, ctx) {
         if (v) {
           session.step = 'visit_poster_loc';
           await putSession(env, userId, session);
-          await say(env, chatId, '📍 Надішліть геолокацію місця розміщення плаката. · Share the location where you placed the poster.');
+          await say(env, chatId, '📍 Надішліть геолокацію місця розміщення плаката. · Share the location where you placed the poster.\n\n/cancel щоб вийти · to abort');
           return true;
         }
         break;
@@ -2869,7 +2872,7 @@ async function handleVisit(env, c, msg, ctx) {
     session.data.lng = msg.location.longitude;
     session.step = 'poster_photo';
     await putSession(env, userId, session);
-    await say(env, chatId, '2️⃣ Тепер надішліть <b>фото плаката</b> на місці. · Now send a <b>photo of the poster</b> in place.');
+    await say(env, chatId, '2️⃣ Тепер надішліть <b>фото плаката</b> на місці. · Now send a <b>photo of the poster</b> in place.\n\n/cancel щоб вийти · to abort');
     return true;
   }
 
@@ -2885,7 +2888,7 @@ async function handleVisit(env, c, msg, ctx) {
     session.data.photoFileId = msg.photo[msg.photo.length - 1].file_id;
     session.step = 'expense_amount';
     await putSession(env, userId, session);
-    await say(env, chatId, '2️⃣ Яка сума, ₴? · What amount, in ₴?');
+    await say(env, chatId, '2️⃣ Яка сума, ₴? · What amount, in ₴?\n\n/cancel щоб вийти · to abort');
     return true;
   }
 
