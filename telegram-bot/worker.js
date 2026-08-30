@@ -433,16 +433,17 @@ function submitText() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PERSISTENT REPLY-KEYBOARD (#209, Phase G 3/3) — a one-tap menu layered on
-// top of the slash commands above, entered via /start. Every button just
-// sends its own label back as an ordinary text message, so the whole thing
-// stays in the stateless, no-BOT_TOKEN-needed tier (same as /today/day/rare):
-// Telegram keeps whatever reply_markup a chat last received, so only /start
-// and the two taps that switch keyboards (day submenu ⇄ main menu) need to
-// resend one — everything else can omit it and the visible keyboard just
-// stays put. 💬 Залишити відгук is the one exception: it re-dispatches to
-// handleFeedbackFlow (Feature 7), which does need BOT_TOKEN + VISITS, exactly
-// as bare /feedback already does.
+// PERSISTENT REPLY-KEYBOARD (#209, Phase G 3/3; made the ONLY menu in #315) —
+// a one-tap menu, entered via /start. Every button just sends its own label
+// back as an ordinary text message, so the whole thing stays in the
+// stateless, no-BOT_TOKEN-needed tier (same as /today/day/rare). #315 removed
+// Telegram's own commands menu (the ☰ button) entirely, universally, so this
+// keyboard is now the only way most people find anything — replyFor()
+// re-attaches it on every single reply rather than relying on Telegram
+// leaving the previous one in place, so there's no path through which
+// someone ends up without it. 💬 Залишити відгук is the one exception to
+// "handled here": it re-dispatches to handleFeedbackFlow (Feature 7), which
+// does need BOT_TOKEN + VISITS, exactly as bare /feedback already does.
 // ─────────────────────────────────────────────────────────────────────────────
 const MENU_DAY = '📅 За днем тижня';
 const MENU_CHEAP = '🕒 Найдовше без завозу';
@@ -495,10 +496,15 @@ function daySubmenuPrompt() {
 }
 
 // Map a public command OR a tapped menu-keyboard button to { text, markup }.
-// markup is only set when the visible keyboard should change; omitting it
-// leaves whatever keyboard the chat already has in place. isOwner/isAgent
-// only affect which keyboard comes back (mainMenuMarkupFor) — actual access
-// to /agent and /admin is still enforced where those commands are handled
+// #315: every path now attaches the persistent keyboard unconditionally
+// (not just start/help) — Telegram's own commands menu is deliberately kept
+// empty (see syncBotCommands), so the reply-keyboard is the only navigation
+// surface left. A brand-new user's very first message, whatever it is, has
+// to leave them with working buttons, not a blank composer; re-sending the
+// same markup on every reply costs nothing (no one_time_keyboard here) and
+// makes that guaranteed rather than incidental. isOwner/isAgent only affect
+// which keyboard comes back (mainMenuMarkupFor) — actual access to /agent
+// and /admin is still enforced where those commands are handled
 // (handleVisit), same as if someone typed them without ever seeing a button.
 function replyFor(text, isOwner, isAgent) {
   const trimmed = text.trim();
@@ -510,9 +516,9 @@ function replyFor(text, isOwner, isAgent) {
   if (trimmed === MENU_DAY) return { text: daySubmenuPrompt(), markup: DAY_MENU_MARKUP };
   if (trimmed === MENU_BACK) return { text: 'Головне меню · Main menu', markup: menuMarkup };
   if (trimmed in DAY_LABEL_TO_CODE) return { text: dayText(DAY_LABEL_TO_CODE[trimmed]), markup: DAY_MENU_MARKUP };
-  if (trimmed === MENU_CHEAP) return { text: cheapText() };
-  if (trimmed === MENU_RARE) return { text: rareText() };
-  if (trimmed === MENU_ADD) return { text: submitText() };
+  if (trimmed === MENU_CHEAP) return { text: cheapText(), markup: menuMarkup };
+  if (trimmed === MENU_RARE) return { text: rareText(), markup: menuMarkup };
+  if (trimmed === MENU_ADD) return { text: submitText(), markup: menuMarkup };
   if (trimmed === MENU_HELP) return { text: helpText(), markup: menuMarkup };
   // MENU_FEEDBACK, MENU_AGENT and MENU_ADMIN are deliberately not handled
   // here — handleFeedbackFlow (Feature 7) and handleVisit's command router
@@ -520,33 +526,33 @@ function replyFor(text, isOwner, isAgent) {
 
   // Strip a leading /command, tolerate "/today@BotName" and trailing args.
   const m = /^\/([a-z]+)(?:@\w+)?/i.exec(trimmed);
-  if (!m) return { text: "I only understand commands. Send /help to see them." };
+  if (!m) return { text: "I only understand commands. Send /help to see them.", markup: menuMarkup };
   switch (m[1].toLowerCase()) {
     case 'start':
     case 'help':
       return { text: helpText(), markup: menuMarkup };
     case 'today':
-      return { text: todayText() };
+      return { text: todayText(), markup: menuMarkup };
     case 'day': {
       const arg = trimmed.replace(/^\/day(?:@\w+)?\s*/i, '').trim();
-      if (!arg) return { text: dayPickerHelp() };
+      if (!arg) return { text: dayPickerHelp(), markup: menuMarkup };
       const wd = parseDayArg(arg);
-      if (!wd) return { text: `Не розпізнав день · Didn't recognize that day: "${arg}".\n\n` + dayPickerHelp() };
-      return { text: dayText(wd) };
+      if (!wd) return { text: `Не розпізнав день · Didn't recognize that day: "${arg}".\n\n` + dayPickerHelp(), markup: menuMarkup };
+      return { text: dayText(wd), markup: menuMarkup };
     }
     case 'rare':
-      return { text: rareText() };
+      return { text: rareText(), markup: menuMarkup };
     case 'cheap':
-      return { text: cheapText() };
+      return { text: cheapText(), markup: menuMarkup };
     case 'submit':
     case 'owner':
-      return { text: submitText() };
+      return { text: submitText(), markup: menuMarkup };
     case 'materials':
     case 'print':
     case 'flyers':
-      return { text: materialsText() };
+      return { text: materialsText(), markup: menuMarkup };
     default:
-      return { text: 'Unknown command. Send /help to see what I can do.' };
+      return { text: 'Unknown command. Send /help to see what I can do.', markup: menuMarkup };
   }
 }
 
@@ -1211,12 +1217,17 @@ async function handleAgentCallback(env, c, cq) {
   }
 }
 
-// Telegram command menus. Everyone gets PUBLIC_CMDS; agents additionally get a
-// single /agent entry (opens an inline submenu — see cmdAgentMenu) and the
-// owner also gets /admin (see cmdAdminMenu), instead of every task getting its
-// own top-level command. Bump CMD_VER to force a re-sync after editing the
-// lists. Self-managing → no BotFather /setcommands needed.
-const CMD_VER = 'v10';
+// Telegram command menus. #315: the persistent reply-keyboard (below) is now
+// the ONLY navigation surface — Telegram's own commands menu (the ☰ button)
+// is deliberately left empty, universally, rather than advertising a second,
+// parallel way to do the same things. These three lists are kept as the
+// internal registry of what exists and what it does (read by
+// scripts/check-wiring.mjs to confirm every listed command still has a real
+// handler) — they're just no longer sent to setMyCommands. Typed commands
+// keep working exactly as before if someone types one from memory; only the
+// advertised list is gone. Bump CMD_VER to force the (now-empty) menu to
+// re-sync after editing these lists or this policy.
+const CMD_VER = 'v11';
 // Telegram renders setMyCommands as one flat list in exactly the order given,
 // with no headers or sections available. So the menu is categorised the only
 // two ways it can be: the order groups related commands into contiguous bands,
@@ -1273,15 +1284,20 @@ async function syncBotCommands(env, userId, isOwner, isAgent) {
     if (res && res.ok) await env.VISITS.put(key, CMD_VER);
     return !!(res && res.ok);
   };
-  // Public default menu — set once globally.
+  // Public default menu — cleared once globally. An empty list is what
+  // actually removes the ☰ button's contents; Telegram doesn't offer a way
+  // to hide the button itself, only to leave it with nothing to show.
   if ((await env.VISITS.get('cmds:default')) !== CMD_VER) {
-    await publish('cmds:default', { commands: PUBLIC_CMDS });
+    await publish('cmds:default', { commands: [] });
   }
-  // Extended menu — only for owner/agents, scoped to their own chat, once each.
+  // Extended (agent/owner) chat-scoped menu — also cleared, once each. A
+  // per-chat scope overrides the default one in Telegram's own precedence,
+  // so an agent/owner who already had AGENT_CMDS/OWNER_CMDS registered here
+  // needs this explicit overwrite — clearing only the default scope above
+  // would leave their old menu stuck showing.
   if (!(isOwner || isAgent)) return;
   if ((await env.VISITS.get('cmds:' + userId)) === CMD_VER) return;
-  const cmds = PUBLIC_CMDS.concat(AGENT_CMDS, isOwner ? OWNER_CMDS : []);
-  await publish('cmds:' + userId, { commands: cmds, scope: { type: 'chat', chat_id: userId } });
+  await publish('cmds:' + userId, { commands: [], scope: { type: 'chat', chat_id: userId } });
 }
 
 function norm(s) {
@@ -2265,7 +2281,7 @@ async function cmdFireDo(env, c, chatId, targetId) {
     // Drop /agent from their command list right away; without this it lingers
     // in the Telegram UI (harmlessly — tapping it still hits notAgentMsg) until
     // the next CMD_VER bump. Clear the sync cache too so a later rehire re-adds it.
-    await tg(env, 'setMyCommands', { commands: PUBLIC_CMDS, scope: { type: 'chat', chat_id: targetId } });
+    await tg(env, 'setMyCommands', { commands: [], scope: { type: 'chat', chat_id: targetId } });
     await env.VISITS.delete('cmds:' + targetId);
   } catch (e) {}
 }
