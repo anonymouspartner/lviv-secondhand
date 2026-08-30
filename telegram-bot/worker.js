@@ -1501,9 +1501,6 @@ async function daysSinceLastVisit(env, storeId) {
     return null;
   }
 }
-const ROUTE_TTL = 60 * 60 * 12;
-const routeKey = (uid) => `route:${uid}`;
-
 const sessionKey = (uid) => `session:${uid}`;
 const getSession = (env, uid) => env.VISITS.get(sessionKey(uid), { type: 'json' });
 const putSession = (env, uid, s) => env.VISITS.put(sessionKey(uid), JSON.stringify(s), { expirationTtl: SESSION_TTL });
@@ -1566,60 +1563,26 @@ async function startVisit(env, uid, chatId) {
     '/cancel щоб вийти · to abort');
 }
 
-// Offer the stores closest to where the agent is standing, numbered, with a
-// route marker so someone following /route knows which stop is which.
+// Offer the stores closest to where the agent is standing, numbered.
+// Deliberately independent of /route: an earlier version scoped and ordered
+// this list to match an active route's remaining stops, but a field test
+// showed that just moved the confusion rather than removing it -- pinning
+// the list to a plan computed from a single earlier GPS point meant the
+// numbers, and even the map link, changed shape after every single /visit
+// as the agent's real position diverged from that plan. /route is a
+// standalone planning aid (a suggested walking order + map link); this
+// picker always reflects only where the agent is standing right now, and
+// the agent is free to work through stores in whatever order suits the day.
 async function promptStorePick(env, uid, chatId, session) {
   const from = { lat: session.data.lat, lng: session.data.lng };
-  let routeIds = [];
-  let routeDone = [];
-  try {
-    const r = await env.VISITS.get(routeKey(uid), { type: 'json' });
-    if (r && Array.isArray(r.ids)) { routeIds = r.ids; routeDone = Array.isArray(r.done) ? r.done : []; }
-  } catch (e) {}
-  // With an active /route, scope the picker to that route's own remaining
-  // stops instead of a fresh "nearest 8" — otherwise a store that was never
-  // part of the plan can sneak into the numbered list, and the whole set
-  // can reshuffle between one /visit and the next as the agent walks, which
-  // defeats the point of having a fixed day plan. Falls back to the normal
-  // nearest-unvisited list once the route is empty or fully done.
-  const remainingRouteIds = routeIds.filter((id) => !routeDone.includes(id));
-  let near;
-  if (remainingRouteIds.length) {
-    const candidates = [];
-    for (const id of remainingRouteIds) {
-      const s = STORES.find((st) => st.id === id);
-      if (!s || typeof s.lat !== 'number' || typeof s.lng !== 'number') continue;
-      const days = await daysSinceLastVisit(env, id);
-      if (days != null && days < AGENT_REVISIT_DAYS) continue;
-      candidates.push({ s, d: distM(from, s) });
-    }
-    near = candidates.sort((a, b) => a.d - b.d);
-  } else {
-    near = await nearestUnvisitedStores(env, from, 8);
-  }
+  const near = await nearestUnvisitedStores(env, from, 8);
   session.data.nearby = near.map(({ s }) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng, cycle: s.cycle }));
   session.step = 'store';
   await putSession(env, uid, session);
-  const lines = near.map(({ s, d }, i) => {
-    // Route-stop number is unrelated to this list's own reply-index below, and
-    // a bare digit right after the name reads exactly like an alternative
-    // pick number -- a field report showed exactly that: a store's route-stop
-    // number visually matched a *different* store's list position, and the
-    // agent replied with the route number, picking the wrong store. Spelling
-    // it out removes the ambiguity.
-    const onRoute = routeIds.includes(s.id) ? ` (🧭 маршрут, зупинка ${routeIds.indexOf(s.id) + 1} · route stop ${routeIds.indexOf(s.id) + 1})` : '';
-    return `${i + 1}. <b>${esc(s.name)}</b>${onRoute} · ${fmtDist(d)}${s.address ? ' — ' + esc(s.address) : ''}`;
-  });
-  // Always this list's own stores, in this list's own order -- not the
-  // agent's whole day's route (even when this list IS scoped to the route's
-  // remaining stops above, it's a subset in this message's own order, not
-  // the route's walking order). A field report showed why that distinction
-  // matters: this used to link to the FULL route, whose pins are numbered
-  // by route-walking-order -- a third, independent numbering next to this
-  // message's own 1-N -- so "pin 3 on the map" ended up meaning a completely
-  // different store than "item 3 in the list" (an early, already-visited
-  // stop vs. the nearby store she was trying to identify). Scoping the link
-  // to exactly what's listed here means pin N is always item N.
+  const lines = near.map(({ s, d }, i) =>
+    `${i + 1}. <b>${esc(s.name)}</b> · ${fmtDist(d)}${s.address ? ' — ' + esc(s.address) : ''}`);
+  // Always this list's own stores, in this list's own order -- so pin N on
+  // the map link below is always item N in the message above it.
   const mapIds = near.map(({ s }) => s.id).join(',');
   await say(env, chatId,
     '2️⃣ Який це магазин? Надішліть номер · Which store? Reply with the number:\n' + lines.join('\n') +
@@ -1753,17 +1716,9 @@ async function finishVisit(env, c, uid, chatId, session, from) {
   };
   // Key sorts chronologically; include uid so two agents can't collide on a ts.
   await env.VISITS.put(`visit:${rec.ts}:${uid}`, JSON.stringify(rec));
-  // Stamp the store so it's gated for AGENT_REVISIT_DAYS, and tick it off
-  // the agent's route if they're following one.
+  // Stamp the store so it's gated for AGENT_REVISIT_DAYS.
   if (rec.store && rec.store.id) {
     await env.VISITS.put(lastVisitKey(rec.store.id), rec.ts);
-    try {
-      const r = await env.VISITS.get(routeKey(uid), { type: 'json' });
-      if (r && Array.isArray(r.ids) && r.ids.includes(rec.store.id) && !r.done.includes(rec.store.id)) {
-        r.done.push(rec.store.id);
-        await env.VISITS.put(routeKey(uid), JSON.stringify(r), { expirationTtl: ROUTE_TTL });
-      }
-    } catch (e) {}
   }
   const bonusUnits = (rec.poster ? 1 : 0) + (rec.contact ? 1 : 0);
   // A visit reaching this point already passed pickStore()'s AGENT_REVISIT_DAYS
@@ -2622,7 +2577,6 @@ async function handleVisit(env, c, msg, ctx) {
       const leg = distM(cur, s); total += leg; cur = s;
       return `${i + 1}. <b>${esc(s.name)}</b>${s.address ? ' — ' + esc(s.address) : ''} · ${fmtDist(leg)}`;
     });
-    await env.VISITS.put(routeKey(userId), JSON.stringify({ ids: ordered.map((s) => s.id), done: [], ts: Date.now() }), { expirationTtl: ROUTE_TTL });
     // Google Maps caps a walking URL at ~10 waypoints; keep the link inside that.
     const mapsUrl = 'https://www.google.com/maps/dir/?api=1&travelmode=walking'
       + `&origin=${from.lat},${from.lng}`
