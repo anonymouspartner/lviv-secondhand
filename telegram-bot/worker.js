@@ -242,7 +242,7 @@ function helpText() {
     '/rare — stores that restock every 14+ days · рідко оновлювані магазини',
     '/cheap — longest since a restock · найдовше без завозу',
     '/submit — add your store (for owners) · додати свій магазин',
-    '/apply — apply to be a field agent · податися в польові агенти',
+    '/job — vacancy: field agent · вакансії: польовий агент',
     '/feedback — tell the maintainer something · залишити відгук',
     '/materials — print-ready flyers, stickers, poster · рекламні матеріали для друку',
     '/help — this message · ця довідка',
@@ -1313,6 +1313,7 @@ const PUBLIC_CMDS = [
   { command: 'cheap', description: '🛍 Хто найдовше без завозу' },
   { command: 'submit', description: '🏪 Додати свій магазин (власникам)' },
   { command: 'materials', description: '🏪 Матеріали для друку: флаєри, наліпки' },
+  { command: 'job', description: '🧭 Вакансія польового агента · Field agent vacancy' },
   { command: 'apply', description: '🧭 Податися в польові агенти · Apply to be a field agent' },
   { command: 'feedback', description: '💬 Залишити відгук власнику' },
   { command: 'leaderboard', description: '🏆 Топ учасників за балами' },
@@ -1834,11 +1835,13 @@ function jobText() {
   return [
     '📋 <b>Опис вакансії · Job brief</b>',
     'Повний опис ролі, як це працює та схема оплати (UA/EN):',
-    'Full role, workflow and pay scheme:',
+    'Full role, workflow and pay scheme.',
     '',
     `👉 <a href="${JOB_BRIEF_URL}">Відкрити опис вакансії · Open the job brief</a>`,
     '',
-    'Питання? Пишіть власнику напряму. · Questions? Message the owner directly.',
+    'Готові податися? Натисніть /apply. · Ready to apply? Tap /apply.',
+    '',
+    'Питання? Скористайтесь /feedback. · Questions? Use /feedback.',
   ].join('\n');
 }
 
@@ -2439,8 +2442,10 @@ async function handleVisit(env, c, msg, ctx) {
     await cmdCard(env, userId, chatId, arg);
     return true;
   }
+  // #316: public, not gated on isAgent/isOwner — this is the job brief a
+  // prospective applicant reads before they have any access at all
+  // (Довідка → Вакансії), not just a reference for existing agents.
   if (command === 'job' || command === 'brief') {
-    if (!(isAgent || isOwner)) { await say(env, chatId, notAgentMsg(userId)); return true; }
     await cmdJob(env, chatId);
     return true;
   }
