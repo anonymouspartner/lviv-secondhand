@@ -1630,6 +1630,15 @@ function isOpenNow(s) {
 // another map, that map copied our dataset. Keep the filter centralized here.
 function allStores() { return [...STORES, ...getCustomStores()].filter(s => !s.watermark); }
 
+// How close a store is to the end of its restock cycle — the same day/cycle
+// ratio that already drives its fresh/mid/old badge, reused here as a sort
+// key instead of just a label. Unranked (no cycle data) sorts last: nothing
+// to prioritize it for, not a claim that it's freshest.
+function cycleUrgency(s) {
+  const cs = calculateStoreCycleState(getStoreData(s));
+  return cs ? cs.day / cs.cycle : -1;
+}
+
 function filtered() {
   const hidden = new Set(getHiddenStores());
   // A planned route replaces the filters entirely — the agent asked for these
@@ -1657,6 +1666,14 @@ function filtered() {
   });
   if (currentFilter === 'nearby' && filterUserPos) {
     list = list.map(s => [s, distMeters(filterUserPos, s)]).sort((a,b) => a[1]-b[1]).map(x => x[0]);
+  } else {
+    // #323: the list used to keep stores.json's own insertion order, which
+    // happened to cluster HUMANA branches near the top and read as
+    // favoritism. Sort by cycle urgency instead — closest to a restock
+    // first, the one thing most worth leading with for someone browsing
+    // without a specific chain in mind. "nearby" keeps its own distance
+    // sort above, a different deliberate choice the user already made.
+    list = list.map(s => [s, cycleUrgency(s)]).sort((a,b) => b[1]-a[1]).map(x => x[0]);
   }
   // Sponsored stores float to the top of whatever view is showing (stable — the
   // rest keep their order). Clearly badged as advertising in the card.
