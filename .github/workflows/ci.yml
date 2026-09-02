@@ -47,6 +47,15 @@ jobs:
       - name: Check cross-system wiring
         run: node scripts/check-wiring.mjs
 
+      # /route-map's initData verification (telegram-bot/worker.js) can't be
+      # exercised against a real Telegram client here -- this is a
+      # self-consistency check instead: build a synthetic initData string,
+      # compute its expected hash independently, and assert the Worker's own
+      # verifyInitData() agrees. Catches a decode/encode mismatch or wrong
+      # HMAC key order before it silently 401s every submission in production.
+      - name: Check Mini App initData verification
+        run: node scripts/check-init-data.mjs
+
       # The automated map-patch path had never run in production, and the first
       # real dispatch would have reformatted all 130 records — the applier wrote
       # stores.json with indent 1 while every other writer uses 2. This drives
