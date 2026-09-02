@@ -70,6 +70,7 @@ import {
   getCycleLengthKeyboard, getDayOfWeekKeyboard, getOpenTimeKeyboard, getCloseTimeKeyboard,
   getConfirmKeyboard, summaryText, sessionToUpdates, DAY_OPTIONS,
 } from './telegram-agent-keyboards.js';
+import { ROUTE_MAP_PAGE } from './route-map-page.mjs';
 
 const APP_URL = 'https://www.lvivsecondhand.com/';
 const METRICS_WORKER_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
@@ -565,6 +566,7 @@ function sendMessage(chatId, text, markup) {
 }
 
 const ok = (body = 'ok') => new Response(body, { status: 200 });
+const jsonRes = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIELD-AGENT VISIT SUBSYSTEM
@@ -641,6 +643,49 @@ async function tg(env, method, params) {
     body: JSON.stringify(params),
   });
   return res.json().catch(() => ({}));
+}
+
+// Proves a Telegram Mini App request really came from Telegram, per
+// Telegram's documented initData algorithm: HMAC_SHA256(bot_token) keyed on
+// the literal string "WebAppData" gives a secret key, which then
+// HMAC_SHA256s the sorted "key=value\n..." pairs (everything except `hash`
+// itself). Deliberately a pure function (no `env`) so it can be unit-tested
+// on its own. Built straight from URLSearchParams' own decoded entries --
+// never re-encoded via .toString(), and the `user` field is parsed only
+// AFTER the hash check, never reparsed/reserialized before it -- either
+// would silently change the bytes being hashed and break every comparison.
+// Returns the verified numeric Telegram user id, or null if the signature
+// is wrong or initData is stale.
+const INIT_DATA_MAX_AGE_SECONDS = 60 * 60; // our own replay-protection policy, not a Telegram-mandated window
+export async function verifyInitData(botToken, initDataRaw) {
+  if (!botToken || !initDataRaw) return null;
+  try {
+    const params = new URLSearchParams(initDataRaw);
+    const hash = params.get('hash');
+    if (!hash) return null;
+    params.delete('hash');
+    const dataCheckString = [...params.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n');
+
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode('WebAppData'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const secretKeyBytes = await crypto.subtle.sign('HMAC', keyMaterial, enc.encode(botToken));
+    const hmacKey = await crypto.subtle.importKey('raw', secretKeyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const computedBytes = await crypto.subtle.sign('HMAC', hmacKey, enc.encode(dataCheckString));
+    const computedHex = [...new Uint8Array(computedBytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (computedHex !== hash) return null;
+
+    const authDate = Number(params.get('auth_date'));
+    if (!authDate || Math.abs(Date.now() / 1000 - authDate) > INIT_DATA_MAX_AGE_SECONDS) return null;
+
+    const user = JSON.parse(params.get('user') || 'null');
+    if (!user || !Number.isFinite(user.id)) return null;
+    return user.id;
+  } catch (e) {
+    return null;
+  }
 }
 
 // #309 follow-up: this used to send remove_keyboard:true whenever no keyboard
@@ -1109,7 +1154,7 @@ async function handleBountyText(env, c, ctx) {
 }
 
 // Every callback_query (inline-keyboard tap) for the bounty flow.
-async function handleAgentCallback(env, c, cq) {
+async function handleAgentCallback(env, c, cq, origin) {
   await tg(env, 'answerCallbackQuery', { callback_query_id: cq.id });
   if (!c.enabled) return;
   const uid = cq.from.id;
@@ -1178,7 +1223,7 @@ async function handleAgentCallback(env, c, cq) {
       if (!(isAgent2 || isOwner2)) return;
       if (val === 'route' || val === 'visit') {
         if (!isAgent2) { await say(env, chatId, notAgentMsg(uid)); return; }
-        await (val === 'route' ? cmdRoute(env, uid, chatId) : cmdVisit(env, uid, chatId));
+        await (val === 'route' ? cmdRoute(env, uid, chatId, origin) : cmdVisit(env, uid, chatId));
         return;
       }
       if (val === 'poster') { if (!isAgent2) return; await cmdPoster(env, uid, chatId); return; }
@@ -1330,7 +1375,7 @@ const PUBLIC_CMDS = [
 const AGENT_CMDS = [
   { command: 'agent', description: '🧭 Меню агента · Agent menu' },
   { command: 'visit', description: '🧭 Записати відвідування магазину' },
-  { command: 'route', description: '🧭 Маршрут обходу від вашої локації' },
+  { command: 'route', description: '🧭 Маршрут: обрати магазини на карті · Pick stores on the map' },
   { command: 'poster', description: '🧭 Публічний плакат (зупинка/ВНЗ) · Public poster' },
   { command: 'expense', description: '🧭 Витрата на матеріали (чек) · Material expense' },
   { command: 'myvisits', description: '🧭 Мої відвідування та заробіток' },
@@ -1415,10 +1460,8 @@ async function nearestUnvisitedStores(env, uid, from, n) {
   const result = [];
   for (const c of candidates) {
     if (result.length >= n) break;
-    const days = await daysSinceLastVisit(env, c.s.id);
-    if (days != null && days < AGENT_REVISIT_DAYS) continue;
-    const claim = await getClaim(env, c.s.id);
-    if (claim && String(claim.agentId) !== String(uid)) continue;
+    const { available } = await isStoreAvailable(env, c.s.id, uid);
+    if (!available) continue;
     result.push(c);
   }
   return result;
@@ -1522,6 +1565,25 @@ async function getClaim(env, storeId) {
 async function claimStore(env, storeId, uid) {
   await env.VISITS.put(claimKey(storeId), JSON.stringify({ agentId: uid, ts: Date.now() }), { expirationTtl: CLAIM_TTL });
 }
+
+// Single source of truth for "can agent `uid` pick store `storeId` right
+// now" -- both checks above (AGENT_REVISIT_DAYS, claim) in one place, so
+// nearestUnvisitedStores(), pickStore()'s hard gate, and the /route-map
+// endpoints all agree instead of three copies of the same logic drifting
+// apart. gatedDays carries the specific day-count when the refusal is the
+// revisit gate, so a caller can still word "next check-in in N days"
+// without re-deriving it.
+async function isStoreAvailable(env, storeId, uid) {
+  const days = await daysSinceLastVisit(env, storeId);
+  if (days != null && days < AGENT_REVISIT_DAYS) {
+    return { available: false, gatedDays: days, ownClaim: false };
+  }
+  const claim = await getClaim(env, storeId);
+  if (claim && String(claim.agentId) !== String(uid)) {
+    return { available: false, gatedDays: null, ownClaim: false };
+  }
+  return { available: true, gatedDays: null, ownClaim: Boolean(claim) };
+}
 const sessionKey = (uid) => `session:${uid}`;
 const getSession = (env, uid) => env.VISITS.get(sessionKey(uid), { type: 'json' });
 const putSession = (env, uid, s) => env.VISITS.put(sessionKey(uid), JSON.stringify(s), { expirationTtl: SESSION_TTL });
@@ -1613,29 +1675,29 @@ async function promptStorePick(env, uid, chatId, session) {
     near.map((_, i) => [String(i + 1)]));
 }
 
-// Common tail for every way of choosing a store: the AGENT_REVISIT_DAYS
-// gate, the claim check/claim itself, a distance sanity-check against the
-// map pin, then on to the photo. This is the one choke point every path
-// (the nearby list, a name search, /route) funnels through, so it's the
-// actual hard gate -- filtering a gated or claimed store out of
-// nearestUnvisitedStores() is just there to steer an agent away from a dead
-// end before they reach it, not to enforce anything on its own.
+// Common tail for every way of choosing a store: the isStoreAvailable()
+// gate (AGENT_REVISIT_DAYS + claim), the claim itself, a distance
+// sanity-check against the map pin, then on to the photo. This is the one
+// choke point every path (the nearby list, a name search, /route-map)
+// funnels through, so it's the actual hard gate -- filtering an
+// unavailable store out of nearestUnvisitedStores() is just there to steer
+// an agent away from a dead end before they reach it, not to enforce
+// anything on its own.
 async function pickStore(env, uid, chatId, session, store) {
   if (store.id) {
-    const days = await daysSinceLastVisit(env, store.id);
-    if (days != null && days < AGENT_REVISIT_DAYS) {
-      const again = AGENT_REVISIT_DAYS - days;
-      await say(env, chatId,
-        `🚫 <b>${esc(store.name)}</b> обстежували ${days} дн. тому — наступний огляд можливий через ${again} дн. · ` +
-        `Surveyed ${days} day(s) ago — next check-in available in ${again} day(s).\n\n` +
-        'Оберіть інший магазин зі списку, або надішліть назву. · Pick a different store from the list, or send a name.');
-      return;
-    }
-    const claim = await getClaim(env, store.id);
-    if (claim && String(claim.agentId) !== String(uid)) {
-      await say(env, chatId,
-        `🔒 <b>${esc(store.name)}</b> зараз обстежує інший агент. · Another agent is currently checking <b>${esc(store.name)}</b>.\n\n` +
-        'Оберіть інший магазин зі списку, або надішліть назву. · Pick a different store from the list, or send a name.');
+    const status = await isStoreAvailable(env, store.id, uid);
+    if (!status.available) {
+      if (status.gatedDays != null) {
+        const again = AGENT_REVISIT_DAYS - status.gatedDays;
+        await say(env, chatId,
+          `🚫 <b>${esc(store.name)}</b> обстежували ${status.gatedDays} дн. тому — наступний огляд можливий через ${again} дн. · ` +
+          `Surveyed ${status.gatedDays} day(s) ago — next check-in available in ${again} day(s).\n\n` +
+          'Оберіть інший магазин зі списку, або надішліть назву. · Pick a different store from the list, or send a name.');
+      } else {
+        await say(env, chatId,
+          `🔒 <b>${esc(store.name)}</b> зараз обстежує інший агент. · Another agent is currently checking <b>${esc(store.name)}</b>.\n\n` +
+          'Оберіть інший магазин зі списку, або надішліть назву. · Pick a different store from the list, or send a name.');
+      }
       return;
     }
     await claimStore(env, store.id, uid);
@@ -2130,24 +2192,125 @@ async function cmdStoreQr(env, chatId, rawId) {
       `🖼️ <a href="${photo}">QR (PNG)</a>`);
   }
 }
-async function cmdRoute(env, userId, chatId) {
-  await putSession(env, userId, { step: 'route_loc', qi: 0, data: {} });
-  await say(env, chatId,
-    '🧭 <b>Маршрут на сьогодні · Today\u2019s route</b>\n' +
-    'Надішліть свою <b>геолокацію</b> — складу маршрут по найближчих магазинах.\n' +
-    'Share your <b>location</b> and I\u2019ll plan a walking route through the nearest stores.\n\n' +
-    '/cancel щоб вийти · to abort');
+// GET /route-map -- serves the Mini App page itself. Static, no auth needed
+// here; the page authenticates its own data/submit calls with initData.
+async function handleRouteMapGet() {
+  return new Response(ROUTE_MAP_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+// GET /route-map/data -- every store currently available to this agent (not
+// gated by AGENT_REVISIT_DAYS, not claimed by someone else), for the Mini
+// App to render as pins. ownClaim lets the page show an agent's own
+// already-claimed stores distinctly instead of hiding them, so they can see
+// their whole day's plan at a glance and still add more.
+async function handleRouteMapData(env, request) {
+  const uid = await verifyInitData(env.BOT_TOKEN, request.headers.get('X-Telegram-Init-Data'));
+  if (!uid) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
+
+  const stores = [];
+  for (const s of STORES) {
+    if (s.watermark || typeof s.lat !== 'number' || typeof s.lng !== 'number') continue;
+    const status = await isStoreAvailable(env, s.id, uid);
+    if (!status.available) continue;
+    stores.push({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng, ownClaim: status.ownClaim });
+  }
+  return jsonRes({ ok: true, stores, maxSelect: ROUTE_SIZE });
+}
+
+// POST /route-map/submit body: {initData, storeIds, lat?, lng?}. Re-checks
+// availability (the client's list may already be stale -- someone else
+// could have claimed a store in the meantime) and claims every surviving
+// id, the exact same primitive pickStore() uses for a single store: a
+// submitted route IS a batch of 12h claims, nothing more. Builds the same
+// two-link message shape /route always sent, sends + pins it in the
+// agent's own chat (chat_id == the verified Telegram user id, since this
+// is always a private bot DM -- no separate chat-id capture needed), and
+// reports what got claimed vs. skipped.
+async function handleRouteMapSubmit(env, request) {
+  let body;
+  try { body = await request.json(); } catch (e) { return jsonRes({ ok: false, error: 'bad_json' }, 400); }
+  const uid = await verifyInitData(env.BOT_TOKEN, body.initData);
+  if (!uid) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
+
+  const ids = Array.isArray(body.storeIds) ? [...new Set(body.storeIds.map(String))].slice(0, ROUTE_SIZE) : [];
+  if (!ids.length) return jsonRes({ ok: false, error: 'no_stores' }, 400);
+
+  const claimed = [];
+  const skipped = [];
+  for (const id of ids) {
+    const s = STORES.find((st) => st.id === id);
+    if (!s) { skipped.push(id); continue; }
+    const status = await isStoreAvailable(env, id, uid);
+    if (!status.available) { skipped.push(s.name); continue; }
+    await claimStore(env, id, uid);
+    claimed.push(s);
+  }
+  if (!claimed.length) return jsonRes({ ok: false, error: 'none_available', skipped });
+
+  const from = (typeof body.lat === 'number' && typeof body.lng === 'number') ? { lat: body.lat, lng: body.lng } : null;
+  const ordered = from ? walkOrder(claimed, from) : claimed;
+  let cur = from, total = 0;
+  const lines = ordered.map((s, i) => {
+    let leg = '';
+    if (cur) { const d = distM(cur, s); total += d; leg = ` · ${fmtDist(d)}`; cur = s; }
+    return `${i + 1}. <b>${esc(s.name)}</b>${s.address ? ' — ' + esc(s.address) : ''}${leg}`;
+  });
+  const totalLine = from ? ` — ~${fmtDist(total)} пішки · ~${fmtDist(total)} on foot` : '';
+  // Google Maps caps a walking URL at ~10 waypoints; keep the link inside
+  // that. Omitting origin when there's no geolocation lets Google Maps
+  // default to the phone's own live location once the link is opened.
+  const mapsUrl = 'https://www.google.com/maps/dir/?api=1&travelmode=walking'
+    + (from ? `&origin=${from.lat},${from.lng}` : '')
+    + `&destination=${ordered[ordered.length - 1].lat},${ordered[ordered.length - 1].lng}`
+    + (ordered.length > 1 ? '&waypoints=' + ordered.slice(0, -1).slice(0, 9).map((s) => `${s.lat},${s.lng}`).join('|') : '');
+  const routeUrl = `${APP_URL}?route=${ordered.map((s) => s.id).join(',')}`;
+  const skipNote = skipped.length
+    ? `\n\n⚠️ Пропущено (вже зайнято іншим агентом): ${skipped.map((n) => esc(n)).join(', ')}. · ` +
+      `Skipped (already taken by another agent): ${skipped.map((n) => esc(n)).join(', ')}.`
+    : '';
+  const text = `🧭 <b>Маршрут · Route</b> — ${ordered.length} магазинів${totalLine}\n\n` +
+    lines.join('\n') +
+    `\n\n🗺️ <a href="${routeUrl}">Показати на карті · See it on the map</a>` +
+    `\n🧭 <a href="${mapsUrl}">Навігація в Google Maps · Turn-by-turn in Google Maps</a>` +
+    `\n\nЦей маршрут закріплений за вами на 12 годин. На місці надішліть /visit. · ` +
+    `This route is claimed for you for 12 hours. Send /visit once you're there.` +
+    skipNote;
+
+  const sent = await tg(env, 'sendMessage', { chat_id: uid, parse_mode: 'HTML', disable_web_page_preview: true, text });
+  if (sent && sent.ok && sent.result && sent.result.message_id) {
+    // Pinning is a convenience, not the record -- the message itself is,
+    // so a failed pin (unexpected in a private chat, which needs no
+    // can_pin_messages right) doesn't fail the whole submission.
+    await tg(env, 'pinChatMessage', { chat_id: uid, message_id: sent.result.message_id, disable_notification: true }).catch(() => {});
+  }
+  return jsonRes({ ok: true, claimed: claimed.length, skipped });
+}
+
+// Opens the Mini App map (route-map-page.mjs) instead of asking for a
+// location share -- the agent picks their own stores on it rather than the
+// bot auto-computing a walking order. `origin` is this Worker's own base
+// URL, derived from the incoming request (see fetch()) rather than
+// hardcoded, since unlike APP_URL (the public site's stable custom domain)
+// this Worker has no configured domain of its own.
+async function cmdRoute(env, userId, chatId, origin) {
+  await tg(env, 'sendMessage', {
+    chat_id: chatId, parse_mode: 'HTML',
+    text: '🧭 <b>Маршрут · Route</b>\n' +
+      `Оберіть на карті магазини, які хочете відвідати сьогодні (до ${ROUTE_SIZE}) — там показані лише вільні: не обстежені останні 6 місяців і не закріплені за іншим агентом. · ` +
+      `Pick the stores you want to visit today on the map (up to ${ROUTE_SIZE}) — it only shows ones that are free: not surveyed in the last 6 months, and not claimed by another agent.`,
+    reply_markup: { inline_keyboard: [[{ text: '🗺 Відкрити карту вибору · Open selection map', web_app: { url: origin + '/route-map' } }]] },
+  });
 }
 const VISIT_STEPS = new Set(['store', 'store_pick', 'photo', 'question', 'visit_poster_loc', 'visit_poster_photo', 'confirm', 'resume_ask']);
 async function cmdVisit(env, userId, chatId, session) {
   if (session === undefined) session = await getSession(env, userId);
-  if (session && session.step !== 'route_loc' && session.step !== 'done' && !VISIT_STEPS.has(session.step)) {
+  if (session && session.step !== 'done' && !VISIT_STEPS.has(session.step)) {
     await say(env, chatId, busySessionMsg(session));
     return;
   }
   // Don't silently discard a half-finished survey -- losing a photo and six
   // answers to a mistyped command is the worst thing this flow can do.
-  if (session && session.step !== 'route_loc' && session.step !== 'done') {
+  if (session && session.step !== 'done') {
     session.step = 'resume_ask';
     await putSession(env, userId, session);
     await say(env, chatId,
@@ -2442,7 +2605,7 @@ async function cmdRehire(env, c, chatId, targetId) {
 
 // Handle an update for the visit subsystem. Returns true if it consumed the update.
 async function handleVisit(env, c, msg, ctx) {
-  const { userId, chatId, text, from } = ctx;
+  const { userId, chatId, text, from, origin } = ctx;
   const isOwner = c.ownerId && String(userId) === c.ownerId;
   const isAgent = c.agentIds.includes(String(userId));
   const command = text ? (/^\/([a-z]+)(?:@\w+)?/i.exec(text.trim()) || [])[1]?.toLowerCase() : null;
@@ -2525,7 +2688,7 @@ async function handleVisit(env, c, msg, ctx) {
   }
   if (command === 'route') {
     if (!isAgent) { await say(env, chatId, notAgentMsg(userId)); return true; }
-    await cmdRoute(env, userId, chatId);
+    await cmdRoute(env, userId, chatId, origin);
     return true;
   }
 
@@ -2590,35 +2753,6 @@ async function handleVisit(env, c, msg, ctx) {
       return true;
     }
     await startVisit(env, userId, chatId);
-    return true;
-  }
-
-  // /route — one location in, a walking order out.
-  if (session.step === 'route_loc') {
-    if (!msg.location) { await say(env, chatId, '📍 Потрібна геолокація: 📎 → Location. · Please share a location.'); return true; }
-    const from = { lat: msg.location.latitude, lng: msg.location.longitude };
-    const near = (await nearestUnvisitedStores(env, userId, from, ROUTE_SIZE)).map((x) => x.s);
-    await clearSession(env, userId);
-    if (!near.length) { await say(env, chatId, '🤷 Поблизу нічого не знайшов. · No stores found nearby.'); return true; }
-    const ordered = walkOrder(near, from);
-    let cur = from, total = 0;
-    const lines = ordered.map((s, i) => {
-      const leg = distM(cur, s); total += leg; cur = s;
-      return `${i + 1}. <b>${esc(s.name)}</b>${s.address ? ' — ' + esc(s.address) : ''} · ${fmtDist(leg)}`;
-    });
-    // Google Maps caps a walking URL at ~10 waypoints; keep the link inside that.
-    const mapsUrl = 'https://www.google.com/maps/dir/?api=1&travelmode=walking'
-      + `&origin=${from.lat},${from.lng}`
-      + `&destination=${ordered[ordered.length - 1].lat},${ordered[ordered.length - 1].lng}`
-      + (ordered.length > 1 ? '&waypoints=' + ordered.slice(0, -1).slice(0, 9).map((s) => `${s.lat},${s.lng}`).join('|') : '');
-    const routeUrl = `${APP_URL}?route=${ordered.map((s) => s.id).join(',')}`;
-    await say(env, chatId,
-      `🧭 <b>Маршрут · Route</b> — ${ordered.length} магазинів, ~${fmtDist(total)} пішки\n\n` +
-      lines.join('\n') +
-      `\n\n🗺️ <a href="${routeUrl}">Показати на карті · See it on the map</a>` +
-      `\n🧭 <a href="${mapsUrl}">Навігація в Google Maps · Turn-by-turn in Google Maps</a>\n\n` +
-      'Далі — рухайтесь до першого магазину і на місці надішліть /visit. Прибувши до наступної точки, знову оберіть /visit. · ' +
-      'Now go to your first store and send /visit once there. When you arrive at your next location, select /visit again.');
     return true;
   }
 
@@ -2897,6 +3031,28 @@ async function handleQuestionsStart(env, uid, chatId, session) {
 
 export default {
   async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    // This Worker's own base URL, for building web_app button links
+    // (cmdRoute) -- derived from the incoming request rather than
+    // hardcoded, since unlike APP_URL (the public site's stable custom
+    // domain) this Worker has no configured domain of its own.
+    const origin = url.origin;
+
+    // The Mini App map (route-map-page.mjs) and its two endpoints. These
+    // are plain HTTP calls from the WebView, not Telegram webhook
+    // deliveries -- authenticated via Telegram's own initData (see
+    // verifyInitData), so they're routed here, before the webhook-secret
+    // gate below, which they'd never be able to satisfy.
+    if (request.method === 'GET' && url.pathname === '/route-map') {
+      return handleRouteMapGet();
+    }
+    if (request.method === 'GET' && url.pathname === '/route-map/data') {
+      return handleRouteMapData(env, request);
+    }
+    if (request.method === 'POST' && url.pathname === '/route-map/submit') {
+      return handleRouteMapSubmit(env, request);
+    }
+
     // Health check.
     if (request.method === 'GET') {
       return ok('Lviv Second Hand Telegram bot is running.');
@@ -2927,7 +3083,7 @@ export default {
     // an edit-review approval, fixed in #135. ctx.waitUntil keeps the Worker
     // alive to finish the call after the response is already sent.
     if (update.callback_query) {
-      ctx.waitUntil(handleAgentCallback(env, c, update.callback_query).catch(() => {}));
+      ctx.waitUntil(handleAgentCallback(env, c, update.callback_query, origin).catch(() => {}));
       return ok();
     }
 
@@ -2936,7 +3092,7 @@ export default {
     const from = msg.from || {};
     const chatId = msg.chat.id;
     const text = typeof msg.text === 'string' ? msg.text : null;
-    const mctx = { userId: from.id, chatId, text, from };
+    const mctx = { userId: from.id, chatId, text, from, origin };
 
     // Flash-deal subscribe/unsubscribe (Feature 5). Only needs BOT_TOKEN.
     try {
