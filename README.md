@@ -412,7 +412,7 @@ Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The 
 | --- | --- |
 | `/agent` | The agent menu — everything below, as tappable buttons |
 | `/visit` | Log a store visit — GPS, storefront photo, questionnaire |
-| `/route` | A walking route between stores from your location |
+| `/route` | Opens a map (Telegram Mini App) of every available store — pick up to 12, submit, and they're claimed for you for 12 hours |
 | `/poster` | Log a poster placed in a public space (bus stop, university) |
 | `/expense` | Log a material expense with a photo receipt |
 | `/myvisits` | Your own logged visits and earnings |
@@ -722,7 +722,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | --- | --- |
 | `/agent` | Меню агента — усе нижче у вигляді кнопок |
 | `/visit` | Записати візит: GPS, фото вітрини, анкета |
-| `/route` | Маршрут обходу магазинів від вашої локації |
+| `/route` | Відкриває карту (Telegram Mini App) вільних магазинів — оберіть до 12, надішліть, і вони закріпляться за вами на 12 годин |
 | `/poster` | Записати плакат у публічному місці (зупинка, ВНЗ) |
 | `/expense` | Записати витрату на матеріали з фото-чеком |
 | `/myvisits` | Ваші записані візити та заробіток |
