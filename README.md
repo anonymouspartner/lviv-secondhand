@@ -46,6 +46,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
 - 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): a tap-through menu plus `/today`, `/day` (any weekday), `/rare` and `/cheap`
 - 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): which stores have gone longest since a restock, posted automatically every Monday
+- 📢 **Telegram channel** — the same posts, mirrored where the links are actually clickable and a post can be forwarded
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
 - ⚡ **Flash deals** — a store can run a short paid sale (3h / 24h) with a live countdown banner and toast; follow a store on Telegram to hear the moment one goes live
 - ✏️ **Suggest a correction** — send a fix via Telegram; a moderator reviews it, or a trusted contributor's own edit publishes instantly
@@ -260,6 +261,12 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 
 Anything else is posted by hand: **Actions → Post to Instagram → Run workflow**, picking one of the images in `marketing/instagram/`. Tick **`dry_run`** to run the pre-flights and stop before posting — use it after changing a secret, so verifying a config change doesn't cost a real post.
 
+**Everything automatic goes to both surfaces.** The Monday ranking and the Thursday store-of-the-week are each posted to Instagram *and* mirrored to the Telegram channel, from the same image and the same caption, by [`telegram-channel-post.yml`](.github/workflows/telegram-channel-post.yml). Each surface is a separate job, so an expired Instagram token cannot stop the channel post and a misconfigured channel cannot stop the Instagram one.
+
+The channel is where the links actually work — an Instagram caption's `?store=…` is dead text, and on Telegram it is a tap. Setup is three steps (create it, make the bot an administrator, set one `TG_CHANNEL` variable) and lives in **[`docs/TELEGRAM_CHANNEL.md`](docs/TELEGRAM_CHANNEL.md)**. Until that variable is set the mirror jobs no-op green, so nothing here is waiting on it.
+
+**Paid ads are deliberately not mirrored.** A store buys an Instagram advertisement, and the approval you tap approves that one post — putting a second, unapproved copy of buyer-written text in a public channel is not something anyone bought.
+
 ### For maintainers
 
 | Piece | What it is |
@@ -268,6 +275,8 @@ Anything else is posted by hand: **Actions → Post to Instagram → Run workflo
 | `tools/social/avatar.mjs` | Profile photo, 3 variants, drawn from `favicon.svg`'s vector geometry |
 | `.github/workflows/instagram-post.yml` | Publishes one image. `workflow_dispatch` + `workflow_call`; no-ops without secrets |
 | `.github/workflows/instagram-token-check.yml` | Weekly token check that **messages the owner on Telegram** when it breaks |
+| `.github/workflows/telegram-channel-post.yml` | Posts one image + caption to the Telegram channel. Same inputs as the Instagram poster; no-ops without `TG_CHANNEL` |
+| `tools/social/pick-feature.mjs` | Chooses the week's store to feature — skips paid and thin-data stores, rotates through the rest |
 
 Setup lives in **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Two things that will bite otherwise:
 
@@ -275,6 +284,8 @@ Setup lives in **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Two things that wil
 - **Tokens expire 60 days after issue, and this path cannot report how long is left.** That's what the token-check workflow is for: it turns a silent two-month failure into a Telegram message the same week. Refresh with `refresh_access_token` (no app secret needed).
 
 Images must be **JPEG** — the API rejects PNG with a generic container error that never mentions the format.
+
+**Beyond Instagram.** A channel-by-channel brainstorm — Telegram channel, short video, Facebook groups, what to skip, and what to build so it stays automatic — is in **[`docs/SOCIAL_MEDIA.md`](docs/SOCIAL_MEDIA.md)**.
 
 ### Paid ads on Instagram — you approve, then it posts
 
@@ -326,15 +337,18 @@ A missing `BOT_TOKEN`/`OWNER_ID` **fails the run**, deliberately: this workflow'
 
 ### Featuring a store without claiming it paid
 
-Not every store post is an ad. `Feature a store on Instagram (not an ad)`
+Not every store post is an ad. `Feature a store (not an ad)`
 (`.github/workflows/instagram-feature.yml`) renders a card for any store on the
-map and posts it — with **no** sponsorship claim on it.
+map and posts it — to Instagram and the Telegram channel — with **no**
+sponsorship claim on it.
+
+It runs **every Thursday on its own**, and that is the store-of-the-week slot.
 
 The differences from the paid template are deliberate:
 
 | | Paid ad | Feature |
 | --- | --- | --- |
-| Trigger | a completed payment | you, typing a store id |
+| Trigger | a completed payment | the weekly schedule, or you typing a store id |
 | Says | `РЕКЛАМА · SPONSORED`, `Розміщення оплачене магазином` | `Не реклама. Магазин не платив за це розміщення.` |
 | Look | dark green ground, acid slab | paper ground, green ink |
 | Copy | the store's own offer line, buyer-supplied | nothing but `stores.json` fields |
@@ -350,11 +364,32 @@ be bought, and no sentence can be put in a shop's mouth. A store with neither a
 restock day nor a cycle gets no schedule claim at all rather than a
 plausible-sounding guess.
 
-`publish` is **false by default** — the first run renders, commits and sends the
-card to Telegram to look at; run it again with `publish` ticked to post that same
-committed file. There is no approval queue here because there is nothing to
-approve against: a payment triggers an ad, but a person triggers a feature, and
-adding a token endpoint would guard a decision that was never automatic.
+**Which store** a scheduled run picks is decided by
+[`tools/social/pick-feature.mjs`](tools/social/pick-feature.mjs), re-evaluated
+against `stores.json` every week rather than kept in a rotation list someone has
+to maintain. It refuses two kinds of store outright:
+
+- **A store currently paying for placement.** The card says "Не реклама — магазин
+  не платив за це розміщення", which for an advertiser is still literally true
+  (they bought a pin, not this post) — and that is exactly what makes it the
+  wrong sentence to print, because a reader cannot tell the difference. Both the
+  static `promo` field and the live `/promos` set are checked.
+- **A store whose card would be mostly blanks** — no address, no restock claim,
+  or hours nobody has surveyed. Not rejected forever; just until a field agent
+  fills it in.
+
+The rest rotate: never-featured first, then least-recently-featured, tracked in
+`marketing/instagram/features/history.json`. When nothing qualifies, the run
+posts nothing rather than a weak card. Today that leaves **80 of 126** stores
+eligible.
+
+On a **manual** run `publish` is still **false by default** — it renders, commits
+and sends the card to Telegram for you to look at; run it again with `publish`
+ticked to post that same committed file. A scheduled run publishes on its own and
+sends you the card as it goes out, because a slot that needs a human tap is not a
+slot. That is safe here for a reason that does not hold for ads: there is **no
+text input**, so no scheduled run can put a sentence in a shop's mouth. Comment
+out the `schedule:` block to stop it.
 
 ### Why approval links carry a token, not the admin key
 
@@ -523,6 +558,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - ✅ Позначення магазинів як **відвіданих**
 - 🔔 **Сповіщення про завезення** — стежте за магазином і дізнавайтеся про завіз того ж ранку. Через push там, де браузер це вміє; де не вміє (iOS без встановленого застосунку) та сама кнопка пропонує Telegram, тож сповіщення доступні на будь-якому пристрої
 - 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): хто найдовше без завозу, автоматично щопонеділка
+- 📢 **Telegram-канал** — ті самі дописи, але там, де посилання клікабельні, а допис можна переслати
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
@@ -688,7 +724,15 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 Решта — вручну: **Actions → Post to Instagram → Run workflow**. Позначка **`dry_run`** проганяє перевірки й зупиняється перед публікацією — зручно після зміни секрета, щоб перевірка налаштувань не коштувала справжнього допису.
 
+**Автоматичні дописи йдуть на обидві платформи.** Щопонеділковий рейтинг і щочетверговий «магазин тижня» публікуються в Instagram **і** дублюються в Telegram-канал — те саме зображення, той самий підпис — через [`telegram-channel-post.yml`](.github/workflows/telegram-channel-post.yml). Кожна платформа — окреме завдання, тож прострочений токен Instagram не зупиняє допис у каналі, і навпаки.
+
+Саме в каналі посилання працюють: `?store=…` в підписі Instagram — мертвий текст, а в Telegram — дотик. Налаштування (створити канал, зробити бота адміністратором, задати змінну `TG_CHANNEL`) — у **[`docs/TELEGRAM_CHANNEL.md`](docs/TELEGRAM_CHANNEL.md)**. Доки змінної немає, дублювання просто не виконується — зелено й без помилок.
+
+**Платну рекламу свідомо не дублюємо.** Магазин купує рекламу в Instagram, і ваше підтвердження стосується саме того допису.
+
 Налаштування — у **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Два підводні камені: використовується шлях **Instagram Login** (`graph.instagram.com`), а не Facebook Login — вони несумісні, і більшість інструкцій в інтернеті описують саме інший; і **токен діє 60 днів**, а дізнатися залишок цим шляхом неможливо, тому щотижневий `instagram-token-check.yml` пише власнику в Telegram, щойно токен перестає працювати.
+
+**Далі за межами Instagram.** Розбір каналів — Telegram-канал, короткі відео, групи у Facebook, від чого свідомо відмовляємось і що варто автоматизувати — у **[`docs/SOCIAL_MEDIA.md`](docs/SOCIAL_MEDIA.md)**.
 
 Зображення мають бути у форматі **JPEG** — PNG API відхиляє.
 

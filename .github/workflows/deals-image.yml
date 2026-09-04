@@ -82,3 +82,15 @@ jobs:
     with:
       image: marketing/deals-this-week.jpg
       caption: ${{ needs.deals.outputs.caption }}
+
+  # Same image, same caption, second surface. A separate job rather than a step
+  # inside `post` so Instagram being broken (an expired token, most likely)
+  # cannot stop the channel from getting the week's ranking, and vice versa.
+  mirror:
+    needs: deals
+    if: needs.deals.outputs.changed == 'true'
+    uses: ./.github/workflows/telegram-channel-post.yml
+    secrets: inherit
+    with:
+      image: marketing/deals-this-week.jpg
+      caption: ${{ needs.deals.outputs.caption }}

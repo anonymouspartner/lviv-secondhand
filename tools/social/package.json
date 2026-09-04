@@ -15,7 +15,8 @@
     "promo": "node promo.mjs",
     "avatar": "node avatar.mjs",
     "stories": "node stories.mjs",
-    "ad": "node ad-image.mjs"
+    "ad": "node ad-image.mjs",
+    "pick-feature": "node pick-feature.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",
