@@ -276,6 +276,8 @@ Setup lives in **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Two things that wil
 
 Images must be **JPEG** — the API rejects PNG with a generic container error that never mentions the format.
 
+**Beyond Instagram.** A channel-by-channel brainstorm — Telegram channel, short video, Facebook groups, what to skip, and what to build so it stays automatic — is in **[`docs/SOCIAL_MEDIA.md`](docs/SOCIAL_MEDIA.md)**.
+
 ### Paid ads on Instagram — you approve, then it posts
 
 A store buying a flash deal now also queues an **Instagram advertisement**. It is queued, never posted: the only route from a completed payment to the public feed is you tapping approve.
@@ -689,6 +691,8 @@ PWA (прогресивний веб-додаток) для пошуку та в
 Решта — вручну: **Actions → Post to Instagram → Run workflow**. Позначка **`dry_run`** проганяє перевірки й зупиняється перед публікацією — зручно після зміни секрета, щоб перевірка налаштувань не коштувала справжнього допису.
 
 Налаштування — у **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Два підводні камені: використовується шлях **Instagram Login** (`graph.instagram.com`), а не Facebook Login — вони несумісні, і більшість інструкцій в інтернеті описують саме інший; і **токен діє 60 днів**, а дізнатися залишок цим шляхом неможливо, тому щотижневий `instagram-token-check.yml` пише власнику в Telegram, щойно токен перестає працювати.
+
+**Далі за межами Instagram.** Розбір каналів — Telegram-канал, короткі відео, групи у Facebook, від чого свідомо відмовляємось і що варто автоматизувати — у **[`docs/SOCIAL_MEDIA.md`](docs/SOCIAL_MEDIA.md)**.
 
 Зображення мають бути у форматі **JPEG** — PNG API відхиляє.
 
