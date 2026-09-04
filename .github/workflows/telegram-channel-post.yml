@@ -1,0 +1,263 @@
+name: Post to the Telegram channel
+
+# Publishes one image + caption to the public Telegram channel. It is the mirror
+# of instagram-post.yml and takes deliberately IDENTICAL inputs (image, caption,
+# dry_run), so any pipeline that already posts to Instagram can post here by
+# adding one more `uses:` job rather than by growing a second caption format.
+#
+# WHY A CHANNEL AT ALL, GIVEN THE BOT EXISTS
+# The bot reaches people who already found us. A channel is the forwardable,
+# public surface: someone forwarding "Bomba has gone 6 days" into a friends'
+# chat is the distribution. It also fixes the one structural problem with the
+# Instagram feed — a channel post's link is CLICKABLE, so the caption's
+# https://www.lvivsecondhand.com/?store=… actually goes somewhere.
+#
+# WHY THIS IS CHEAP
+# Telegram has no equivalent of Meta's container/publish dance, no 60-day token
+# expiry, and no JPEG-only rule. It is one sendPhoto call with a URL, using the
+# BOT_TOKEN this repo already holds. Everything below that is not that one call
+# is a pre-flight, because a channel post that fails silently at 07:00 on a
+# Monday is worse than one that never ran.
+#
+# SAFE UNTIL CONFIGURED
+# Exits green and posts nothing until TG_CHANNEL is set, exactly like the
+# Instagram poster — an unconfigured repo accumulates no failed runs. Setup is
+# three steps and lives in docs/TELEGRAM_CHANNEL.md.
+#
+# NO parse_mode, ON PURPOSE
+# Captions can carry store-supplied fragments elsewhere in this repo, and the
+# same rule the Worker's Telegram notifications follow applies here: no
+# parse_mode means no text can be made to render as markup, and no post can be
+# broken by an unbalanced asterisk in a shop's name. Bare URLs still auto-link
+# in Telegram, so nothing is lost.
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: "Repo-relative image path under marketing/. Empty posts text only."
+        type: string
+        required: false
+        default: ""
+      caption:
+        type: string
+        required: true
+      dry_run:
+        type: boolean
+        required: false
+        default: false
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "Image path in this repo (committed and served). Empty posts text only."
+        required: false
+        type: string
+        default: marketing/deals-this-week.jpg
+      caption:
+        description: "Caption. Links are clickable here — put the real URL in it."
+        required: true
+        type: string
+        default: |
+          Усі секонд-хенди Львова на одній карті 🧥
+
+          Адреси, години роботи — і скільки днів минуло від останнього завозу в кожному магазині.
+
+          Безкоштовно, без реєстрації → https://www.lvivsecondhand.com
+      dry_run:
+        description: "Check config only — run the pre-flights and stop before posting"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  SITE: https://www.lvivsecondhand.com
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Exit 0, not 1: an unconfigured repo should be a no-op, not a red run.
+      # TG_CHANNEL is read from `vars` first because a channel handle is not a
+      # credential — it is public by definition, and worker/wrangler.toml
+      # already keeps OWNER_ID as a plain var for the same reason. The secrets
+      # fallback is for a private channel, whose numeric id is worth hiding.
+      - name: Check the channel is configured
+        id: guard
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL: ${{ vars.TG_CHANNEL || secrets.TG_CHANNEL }}
+        run: |
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CHANNEL" ]; then
+            echo "::notice::BOT_TOKEN / TG_CHANNEL not set — skipping the channel post. See docs/TELEGRAM_CHANNEL.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Telegram fetches the URL itself, exactly like Meta, so the same reasoning
+      # applies: verify the file the API will actually fetch, not the one in this
+      # checkout. A caller that commits its image in an earlier job of the same
+      # run is checked out at the SHA that triggered the run, which predates that
+      # commit — testing `-f "$IMG"` locally would fail for a file that is live.
+      - name: Pre-flight — image is committed and publicly reachable
+        if: steps.guard.outputs.ready == 'true' && inputs.image != ''
+        env:
+          IMG: ${{ inputs.image }}
+        run: |
+          # Path containment first: this value can arrive from a caller workflow
+          # and it becomes a public URL below.
+          case "$IMG" in
+            *..*) echo "::error::image path $IMG contains '..' — refusing."; exit 1 ;;
+          esac
+          case "$IMG" in
+            marketing/*) ;;
+            *) echo "::error::$IMG is outside marketing/."; exit 1 ;;
+          esac
+
+          URL="$SITE/$IMG"
+          CODE=$(curl -s -o /tmp/tg-probe.bin -w '%{http_code}' -L "$URL")
+          if [ "$CODE" != "200" ]; then
+            echo "::error::$URL returned HTTP $CODE. Telegram fetches this URL itself, so it must be live first (Pages may lag a commit by a minute)."
+            exit 1
+          fi
+
+          # Unlike Instagram, Telegram accepts PNG as happily as JPEG, so there
+          # is no format gate here — only the size one. sendPhoto by URL caps at
+          # 5 MB, and its rejection names a limit without naming which file blew
+          # it, so the check is worth making here where the path is in hand.
+          SIZE=$(wc -c < /tmp/tg-probe.bin)
+          if [ "$SIZE" -ge 5242880 ]; then
+            echo "::error::$URL is $SIZE bytes. Telegram's sendPhoto caps URL-fetched photos at 5 MB — render a smaller image."
+            exit 1
+          fi
+          echo "IMAGE_URL=$URL" >> "$GITHUB_ENV"
+          echo "Image OK: $URL (${SIZE} bytes)"
+
+      # The failure this catches is THE setup mistake: a bot that is a member of
+      # the channel but not an administrator. Telegram accepts the token, resolves
+      # the chat, and then refuses the post with "not enough rights" — at post
+      # time, on a real schedule. Checking the right up front turns that into a
+      # legible error on a dry run.
+      - name: Pre-flight — token, channel, and post rights
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL: ${{ vars.TG_CHANNEL || secrets.TG_CHANNEL }}
+        run: |
+          API="https://api.telegram.org/bot$BOT_TOKEN"
+
+          ME=$(curl -s "$API/getMe")
+          if [ "$(echo "$ME" | jq -r '.ok // false')" != "true" ]; then
+            echo "::error::Telegram rejected BOT_TOKEN: $(echo "$ME" | jq -c '{error_code, description}' 2>/dev/null || echo "$ME")"
+            exit 1
+          fi
+          BOT_ID=$(echo "$ME" | jq -r '.result.id')
+          echo "Token valid — bot @$(echo "$ME" | jq -r '.result.username')."
+
+          CHAT=$(curl -sG "$API/getChat" --data-urlencode "chat_id=$CHANNEL")
+          if [ "$(echo "$CHAT" | jq -r '.ok // false')" != "true" ]; then
+            echo "::error::Cannot resolve channel '$CHANNEL': $(echo "$CHAT" | jq -c '{error_code, description}' 2>/dev/null || echo "$CHAT")"
+            echo "::error::A public channel is addressed as @handle; a private one by its -100… id. The bot must already be a member. See docs/TELEGRAM_CHANNEL.md."
+            exit 1
+          fi
+          TITLE=$(echo "$CHAT" | jq -r '.result.title // empty')
+          USERNAME=$(echo "$CHAT" | jq -r '.result.username // empty')
+          echo "Channel resolved: ${TITLE:-$CHANNEL}${USERNAME:+ (@$USERNAME)}"
+          echo "CHANNEL_USERNAME=$USERNAME" >> "$GITHUB_ENV"
+
+          MEMBER=$(curl -sG "$API/getChatMember" --data-urlencode "chat_id=$CHANNEL" --data-urlencode "user_id=$BOT_ID")
+          STATUS=$(echo "$MEMBER" | jq -r '.result.status // empty')
+          CAN_POST=$(echo "$MEMBER" | jq -r '.result.can_post_messages // false')
+          if [ "$STATUS" != "administrator" ] && [ "$STATUS" != "creator" ]; then
+            echo "::error::The bot is '${STATUS:-not a member}' in this channel, not an administrator, so it cannot post. Channel → Administrators → Add admin → the bot."
+            exit 1
+          fi
+          if [ "$STATUS" = "administrator" ] && [ "$CAN_POST" != "true" ]; then
+            echo "::error::The bot is an administrator but its 'Post messages' right is off. Turn it on in the channel's admin settings."
+            exit 1
+          fi
+          echo "Post rights confirmed."
+
+      # Without this a dry run ends green with no output, which reads exactly
+      # like a successful post — the one confusion this feature must not create.
+      - name: Dry run — report and stop
+        if: steps.guard.outputs.ready == 'true' && inputs.dry_run == true
+        run: |
+          {
+            echo "### Dry run — nothing was posted"
+            echo ""
+            echo "Pre-flights passed: the image is reachable, the token is valid, and the bot can post to the channel."
+            echo "Re-run with **dry_run unchecked** to publish."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Dry run complete — config is good, nothing posted."
+
+      - name: Post to the channel
+        if: steps.guard.outputs.ready == 'true' && inputs.dry_run != true
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          CHANNEL: ${{ vars.TG_CHANNEL || secrets.TG_CHANNEL }}
+          CAPTION: ${{ inputs.caption }}
+          IMG: ${{ inputs.image }}
+        run: |
+          API="https://api.telegram.org/bot$BOT_TOKEN"
+
+          # Counted with jq, not ${#CAPTION}: the caption is Ukrainian, and the
+          # shell's idea of a character depends on the runner's locale while
+          # jq's is always codepoints. The threshold is 1000 rather than
+          # Telegram's actual 1024 because Telegram counts UTF-16 units, where
+          # an emoji outside the BMP counts twice — the margin covers the gap
+          # without needing to reimplement its counting.
+          LEN=$(jq -rn --arg c "$CAPTION" '$c | length')
+
+          send() {
+            curl -s -X POST "$API/$1" -H 'Content-Type: application/json' -d "$2"
+          }
+          check() {
+            if [ "$(echo "$1" | jq -r '.ok // false')" != "true" ]; then
+              echo "::error::Telegram rejected $2: $(echo "$1" | jq -c '{error_code, description}' 2>/dev/null || echo "$1")"
+              exit 1
+            fi
+          }
+
+          if [ -z "$IMG" ]; then
+            if [ "$LEN" -gt 4096 ]; then
+              echo "::error::Text post is $LEN characters; Telegram's limit is 4096."
+              exit 1
+            fi
+            RESP=$(send sendMessage "$(jq -nc --arg c "$CHANNEL" --arg t "$CAPTION" '{chat_id:$c, text:$t}')")
+            check "$RESP" "the text post"
+            MSG_ID=$(echo "$RESP" | jq -r '.result.message_id')
+          elif [ "$LEN" -le 1000 ]; then
+            RESP=$(send sendPhoto "$(jq -nc --arg c "$CHANNEL" --arg p "$IMAGE_URL" --arg cap "$CAPTION" '{chat_id:$c, photo:$p, caption:$cap}')")
+            check "$RESP" "the photo"
+            MSG_ID=$(echo "$RESP" | jq -r '.result.message_id')
+          else
+            # Too long for a photo caption. Truncating would drop the URL, which
+            # is the whole point of posting here, so the photo goes up bare and
+            # the full text follows as a reply — nothing is lost and the two stay
+            # visually joined in the channel.
+            RESP=$(send sendPhoto "$(jq -nc --arg c "$CHANNEL" --arg p "$IMAGE_URL" '{chat_id:$c, photo:$p}')")
+            check "$RESP" "the photo"
+            MSG_ID=$(echo "$RESP" | jq -r '.result.message_id')
+            RESP2=$(send sendMessage "$(jq -nc --arg c "$CHANNEL" --arg t "$CAPTION" --argjson r "$MSG_ID" '{chat_id:$c, text:$t, reply_to_message_id:$r}')")
+            check "$RESP2" "the caption follow-up"
+            echo "::notice::Caption was $LEN characters — posted as a reply under the photo."
+          fi
+
+          if [ -n "$CHANNEL_USERNAME" ]; then
+            LINK="https://t.me/$CHANNEL_USERNAME/$MSG_ID"
+          else
+            LINK="message $MSG_ID"
+          fi
+          echo "::notice::Posted to the Telegram channel: $LINK"
+          {
+            echo "### Posted to the Telegram channel"
+            echo ""
+            echo "- **Image:** \`${IMG:-none (text only)}\`"
+            echo "- **Post:** $LINK"
+          } >> "$GITHUB_STEP_SUMMARY"

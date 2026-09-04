@@ -1,33 +1,46 @@
-name: Feature a store on Instagram (not an ad)
+name: Feature a store (not an ad)
 
-# Renders a store card from stores.json and, optionally, posts it.
+# Renders a store card from stores.json and posts it — to Instagram and, when a
+# channel is configured, to Telegram.
 #
 # This is the UNPAID counterpart to instagram-ad.yml. Nobody bought this
 # placement, so the card and the caption both say so outright — "Не реклама" —
 # rather than staying silent. Once some store posts are paid, an unlabelled one
 # is ambiguous rather than neutral, and the ambiguity flatters us.
 #
-# WHY THERE IS NO APPROVAL QUEUE HERE
-# instagram-ad.yml needs one because a payment triggers it: a machine decides to
-# make a post, so a human has to decide whether it goes out. This workflow is
-# already a human decision — you typed a store id into it. Adding a Worker row,
-# a token and an approve endpoint would add a security surface to guard a
-# decision that was never automatic.
+# TWO WAYS IN, AND THEY DIFFER ON PURPOSE
 #
-# So `publish` is false by default: the first run renders, commits and sends the
-# card to Telegram so you can look at it. Run it again with publish ticked to
-# post the same committed file. Two deliberate acts, no new endpoints.
+#   Weekly schedule — pick-feature.mjs chooses the store and the run publishes
+#   on its own. This is the "store of the week" slot: unattended, or it does not
+#   happen.
 #
-# There is NO text input. Every word comes from stores.json, so this workflow
-# cannot be used to put a sentence in a shop's mouth.
+#   By hand — you type a store id. `publish` is false by default, so the first
+#   run renders, commits and sends the card to Telegram for you to look at; run
+#   it again with publish ticked to post that same committed file.
+#
+# WHY AUTO-PUBLISHING IS SAFE HERE AND NOT IN instagram-ad.yml
+# The ad pipeline needs a human gate because a payment triggers it and the ad
+# carries text the buyer wrote. This workflow has NO text input: every word on
+# the card is either fixed chrome or a field of stores.json, so no scheduled run
+# can put a sentence in a shop's mouth. What a schedule does add is a machine
+# choosing WHICH shop, and that is what pick-feature.mjs's rules are for — it
+# refuses stores that are currently paying for placement (whose card would say
+# "not an ad" to a reader who cannot tell), and stores whose card would be
+# mostly blanks. The owner still gets the card on Telegram as it goes out.
+#
+# To stop the weekly slot, comment out the `schedule:` block below. Nothing else
+# depends on it.
 
 on:
+  schedule:
+    - cron: "0 10 * * 4" # Thursdays 10:00 UTC (~13:00 Europe/Kyiv)
   workflow_dispatch:
     inputs:
       store_id:
-        description: "Store id from stores.json, e.g. s10"
-        required: true
+        description: "Store id from stores.json, e.g. s10. Leave empty to let the picker choose."
+        required: false
         type: string
+        default: ""
       publish:
         description: "Post it. Leave unticked to only render and preview on Telegram."
         required: false
@@ -47,6 +60,8 @@ jobs:
       image: ${{ steps.render.outputs.image }}
       caption: ${{ steps.render.outputs.caption }}
       caption_path: ${{ steps.render.outputs.caption_path }}
+      store: ${{ steps.pick.outputs.store }}
+      publish: ${{ steps.pick.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
 
@@ -54,7 +69,57 @@ jobs:
         with:
           node-version: 22
 
+      # Before the npm install, because the picker deliberately has no
+      # dependencies — a week with no eligible store should cost seconds, not a
+      # Chromium download.
+      - name: Choose the store
+        id: pick
+        env:
+          # Via env, never interpolated into the script body. A dispatch input
+          # substituted as ${{ }} inside `run:` is pasted into the shell before
+          # bash sees it, so a value containing a quote or a semicolon executes.
+          # Only collaborators can dispatch this, but instagram-ad.yml takes the
+          # same care with its inputs and the reason is the same.
+          GIVEN: ${{ inputs.store_id }}
+          EVENT: ${{ github.event_name }}
+          WANT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          if [ -n "$GIVEN" ]; then
+            STORE="$GIVEN"
+            echo "Store given by hand: $STORE"
+          else
+            # Prints the id on stdout and its reasoning on stderr; prints
+            # nothing when no store qualifies.
+            STORE=$(cd tools/social && node pick-feature.mjs)
+          fi
+
+          if [ -z "$STORE" ]; then
+            echo "::notice::No store qualifies for a feature this week — skipping. A weak card is worse than no post."
+            echo "store=" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Shape check before the id is ever used to build a path. stores.json
+          # ids are short alphanumerics; anything else cannot match a store, so
+          # rejecting it here costs nothing and keeps '..' and '/' out of $IMG.
+          case "$STORE" in
+            ''|*[!a-zA-Z0-9_]*)
+              echo "::error::store id '$STORE' is not a plain alphanumeric id."
+              exit 1 ;;
+          esac
+
+          # A scheduled run has no inputs at all, so `publish` is empty there —
+          # and an unattended slot that renders without posting is not a slot.
+          if [ "$EVENT" = "schedule" ] || [ "$WANT_PUBLISH" = "true" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "store=$STORE" >> "$GITHUB_OUTPUT"
+
       - name: Install deps + Chromium
+        if: steps.pick.outputs.store != ''
         working-directory: tools/social
         run: |
           npm install
@@ -62,22 +127,10 @@ jobs:
 
       - name: Render the card and its caption
         id: render
+        if: steps.pick.outputs.store != ''
         env:
-          # Via env, never interpolated into the script body. A dispatch input
-          # substituted as ${{ }} inside `run:` is pasted into the shell before
-          # bash sees it, so a value containing a quote or a semicolon executes.
-          # Only collaborators can dispatch this, but instagram-ad.yml takes the
-          # same care with its inputs and the reason is the same.
-          FEATURE_STORE_ID: ${{ inputs.store_id }}
+          FEATURE_STORE_ID: ${{ steps.pick.outputs.store }}
         run: |
-          # Shape check before the id is ever used to build a path. stores.json
-          # ids are short alphanumerics; anything else cannot match a store, so
-          # rejecting it here costs nothing and keeps '..' and '/' out of $IMG.
-          case "$FEATURE_STORE_ID" in
-            ''|*[!a-zA-Z0-9_]*)
-              echo "::error::store id '$FEATURE_STORE_ID' is not a plain alphanumeric id."
-              exit 1 ;;
-          esac
           IMG="marketing/instagram/features/${FEATURE_STORE_ID}.jpg"
           CAP="marketing/instagram/features/${FEATURE_STORE_ID}.txt"
           # The generator rejects any id not in stores.json, so a typo fails
@@ -95,18 +148,44 @@ jobs:
             echo 'FEATURE_CAPTION_EOF'
           } >> "$GITHUB_OUTPUT"
 
-      # Committed because Meta fetches image_url over HTTP at publish time, and
-      # GitHub Pages serves the repo root — so committing IS how the image gets
-      # a public URL. Same mechanism the ad and deals pipelines rely on.
+      # Only a run that actually posts advances the rotation — a preview must
+      # not consume a store's turn. The trade-off is the other way round: if the
+      # publish below fails after this commit lands, the store is recorded as
+      # featured without having been posted. Re-run by hand with its id to fix
+      # that; leaving it unrecorded would instead re-post it every week forever.
+      - name: Record it in the rotation history
+        if: steps.pick.outputs.store != '' && steps.pick.outputs.publish == 'true'
+        env:
+          STORE: ${{ steps.pick.outputs.store }}
+        run: |
+          HIST=marketing/instagram/features/history.json
+          [ -f "$HIST" ] || echo '{}' > "$HIST"
+          TMP=$(mktemp)
+          jq --arg id "$STORE" --arg d "$(date -u +%F)" '.[$id] = $d' "$HIST" > "$TMP"
+          mv "$TMP" "$HIST"
+
+      # Committed because Meta and Telegram both fetch the image over HTTP at
+      # publish time, and GitHub Pages serves the repo root — so committing IS
+      # how the image gets a public URL. Same mechanism the ad and deals
+      # pipelines rely on.
       - name: Commit the card
+        if: steps.pick.outputs.store != ''
         env:
           IMG: ${{ steps.render.outputs.image }}
           CAP: ${{ steps.render.outputs.caption_path }}
-          STORE: ${{ inputs.store_id }}
+          STORE: ${{ steps.pick.outputs.store }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add "$IMG" "$CAP"
+          # Only present once a publishing run has recorded one; `git add` on a
+          # missing path is a fatal pathspec error, which would fail every
+          # preview run. Written as an `if` rather than `[ -f … ] && git add`
+          # because steps run under `bash -e`, where a false test at the head of
+          # an && list is itself a non-zero status that ends the step.
+          if [ -f marketing/instagram/features/history.json ]; then
+            git add marketing/instagram/features/history.json
+          fi
           if git diff --cached --quiet; then
             echo "Card is unchanged since the last run — nothing to commit."
           else
@@ -115,6 +194,7 @@ jobs:
           fi
 
       - name: Wait for Pages to serve it
+        if: steps.pick.outputs.store != ''
         env:
           IMG: ${{ steps.render.outputs.image }}
         run: |
@@ -128,6 +208,7 @@ jobs:
           exit 1
 
       - name: Send the preview to Telegram
+        if: steps.pick.outputs.store != ''
         env:
           # Same fallback chain the rest of the repo uses; BOT_TOKEN did not
           # exist when this repo's token was first stored.
@@ -135,7 +216,7 @@ jobs:
           OWNER_ID: ${{ secrets.OWNER_ID }}
           IMG: ${{ steps.render.outputs.image }}
           CAPTION_BODY: ${{ steps.render.outputs.caption }}
-          WILL_PUBLISH: ${{ inputs.publish }}
+          WILL_PUBLISH: ${{ steps.pick.outputs.publish }}
         run: |
           # OWNER_ID is a chat id, not a credential — it is already committed as
           # a plain var in worker/wrangler.toml, so read it from there rather
@@ -144,6 +225,12 @@ jobs:
             OWNER_ID=$(sed -n 's/^OWNER_ID *= *"\([0-9-]*\)".*/\1/p' worker/wrangler.toml | head -1)
           fi
           if [ -z "$BOT_TOKEN" ] || [ -z "$OWNER_ID" ]; then
+            if [ "$WILL_PUBLISH" = "true" ]; then
+              # The post is going out either way; losing the heads-up is not a
+              # reason to fail the run and leave a half-done pipeline behind.
+              echo "::warning::No Telegram bot token or OWNER_ID — publishing without sending you the heads-up."
+              exit 0
+            fi
             echo "::error::No Telegram bot token or OWNER_ID, so the preview cannot be sent — and the preview is the point of a publish:false run."
             exit 1
           fi
@@ -158,14 +245,35 @@ jobs:
             -d "$(jq -nc --arg c "$OWNER_ID" --arg p "$SITE/$IMG" --arg cap "$MSG" \
                   '{chat_id:$c, photo:$p, caption:$cap}')" || echo '{}')
           if [ "$(echo "$RESP" | jq -r '.ok // false')" != "true" ]; then
-            echo "::error::Telegram rejected the preview: $(echo "$RESP" | jq -c '{error_code, description}' 2>/dev/null || echo "$RESP")"
+            DETAIL=$(echo "$RESP" | jq -c '{error_code, description}' 2>/dev/null || echo "$RESP")
+            # Same reasoning as the missing-token branch above: on a publishing
+            # run the heads-up is a courtesy and the post is the job, so a
+            # Telegram hiccup must not leave the pipeline half-done. On a
+            # preview-only run the heads-up IS the job, so it stays fatal.
+            if [ "$WILL_PUBLISH" = "true" ]; then
+              echo "::warning::Telegram rejected the heads-up ($DETAIL) — publishing anyway."
+              exit 0
+            fi
+            echo "::error::Telegram rejected the preview: $DETAIL"
             exit 1
           fi
 
   publish:
     needs: render
-    if: ${{ inputs.publish }}
+    if: needs.render.outputs.publish == 'true'
     uses: ./.github/workflows/instagram-post.yml
+    secrets: inherit
+    with:
+      image: ${{ needs.render.outputs.image }}
+      caption: ${{ needs.render.outputs.caption }}
+
+  # The store card is the post that benefits most from the channel: its caption
+  # ends in a /?store=… deep link, which is dead text on Instagram and a working
+  # link here. Separate job so one surface failing cannot take the other down.
+  mirror:
+    needs: render
+    if: needs.render.outputs.publish == 'true'
+    uses: ./.github/workflows/telegram-channel-post.yml
     secrets: inherit
     with:
       image: ${{ needs.render.outputs.image }}

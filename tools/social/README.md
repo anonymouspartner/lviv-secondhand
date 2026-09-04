@@ -31,6 +31,7 @@ its bundled browser.
 | `npm run avatar` | `marketing/instagram/avatar-*.png` (1080×1080) + `avatar-preview.png` | **Instagram profile photo**, 3 variants, drawn from `favicon.svg`'s vector geometry rather than upscaling the app icon. Tuned for the circle crop: the hanger scales ~46%→60% of the width so it fills the circle instead of floating in a square with dead corners, and stroke weight rides the transform so it stays legible at 32px. `avatar-preview.png` shows each circle-cropped at 320/110/32px on light and dark feeds — the only view that settles the choice. |
 | `npm run ad` | `marketing/instagram/ads/<id>.jpg` (1080x1350) | **One paid store advertisement.** Reads `AD_STORE_ID`, `AD_TEXT`, `AD_TIER` from the environment. Carries the mandatory `РЕКЛАМА · SPONSORED` mark — the app promises shoppers that "paid placements are always labelled", so that is not a styling choice. Buyer text is HTML-escaped and capped at 120 chars; the name and address come from `stores.json`, so an advertiser cannot invent an address. Normally invoked by `instagram-ad.yml`, not by hand. |
 | `npm run stories` | `marketing/instagram/story-*.jpg` (4 files, 1080x1350) | **Four posts that argue from a point of view** rather than listing features: the shopper (the falling tag), the store owner (the map at night), the field-agent job (the survey card it produces), and running a flash deal (the countdown). Each gets its own visual treatment on purpose - one template recoloured four ways reads as one advertiser talking four times. Prices are parsed out of `worker.js` and `index.html`, never retyped, and no per-kilogram figure appears anywhere. |
+| `npm run pick-feature` | *(prints a store id)* | **Chooses the week's store to feature** for the scheduled run of `instagram-feature.yml`. Not an image generator — it prints one id on stdout and its reasoning on stderr, and prints nothing when no store qualifies, which the workflow reads as "skip this week". Refuses stores that are currently **paying** for placement (the card's "Не реклама" line is unreadable as anything but a claim about the shop) and stores whose card would be mostly blanks; rotates the rest never-featured-first via `marketing/instagram/features/history.json`. Set `PROMOS_URL=` empty to skip the live promo lookup. |
 | `npm run promo` | `marketing/instagram/*.jpg` (8 files) | **Instagram posts advertising the app itself** — 4 messages (coverage, the price-cycle idea, restock alerts, free/no-account) × 2 sizes (1080×1080 square, 1080×1350 portrait). Emitted as **JPEG**, not PNG — Instagram's publishing API accepts JPEG only. Every post ends on the site URL. Override with `PROMO_URL=…`. |
 
 ### Notes on the Instagram set
@@ -44,6 +45,13 @@ its bundled browser.
   `line-height:.94`, and a class outranks a bare element selector, so an `h1`
   rule is silently ignored. Uppercase Cyrillic (Й, Ї) needs more leading than
   that Latin-tuned default or the diacritics clip into the line above.
+
+Everything the automatic pipelines post to Instagram is also mirrored to the
+Telegram channel by
+[`.github/workflows/telegram-channel-post.yml`](../../.github/workflows/telegram-channel-post.yml),
+which takes the same `image` + `caption` inputs — see
+[`docs/TELEGRAM_CHANNEL.md`](../../docs/TELEGRAM_CHANNEL.md). It no-ops until the
+channel is configured.
 
 Posting the Instagram set is manual by default; [`.github/workflows/instagram-post.yml`](../../.github/workflows/instagram-post.yml) can publish one via the Meta Graph API once the account is set up for it — see [`docs/INSTAGRAM.md`](../../docs/INSTAGRAM.md). It is `workflow_dispatch`-only and no-ops without the secrets, so it never fires on its own.
 
