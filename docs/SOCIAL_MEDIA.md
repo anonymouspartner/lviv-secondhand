@@ -3,8 +3,9 @@
 A brainstorm, not a commitment. This doc lays out what is worth doing, what it
 would cost, what to build so it stays cheap, and what to deliberately skip.
 
-> **Shipped since this was written:** the Telegram channel mirror (§3A) and the
-> weekly store-of-the-week slot (pillar 2). Setup for the channel is in
+> **Shipped since this was written:** the Telegram channel mirror (§3A), the
+> weekly store-of-the-week slot (pillar 2), and the daily restock line
+> (pillar 4). Setup for the channel is in
 > [`TELEGRAM_CHANNEL.md`](TELEGRAM_CHANNEL.md). The rest of this document is
 > still a proposal.
 
@@ -19,7 +20,7 @@ above both: which channels, which content, in what order.
 | | Status |
 | --- | --- |
 | Instagram [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/) | Two automatic posts/week (Monday deals ranking, Thursday store of the week), plus ~12 evergreen images posted by hand |
-| Telegram **channel** | ✅ Built — both automatic posts mirror to it. Needs one `TG_CHANNEL` variable to go live |
+| Telegram **channel** | ✅ Built — two mirrored posts plus a channel-only daily restock line. Needs one `TG_CHANNEL` variable to go live |
 | Telegram **bot** | A product, not a channel — reaches people who already found us |
 | Web push | Built, opt-in, same problem: existing users only |
 | Facebook / TikTok / Threads / YouTube | Nothing |
@@ -85,12 +86,13 @@ same inputs as the Instagram poster, so the Monday and Thursday pipelines each m
 with one extra `uses:` job. It no-ops green until `TG_CHANNEL` is set —
 [`TELEGRAM_CHANNEL.md`](TELEGRAM_CHANNEL.md) is the three-step setup.
 
-**What it carries today:** the Monday ranking and the Thursday store feature.
-**Not yet wired:** "who restocks tomorrow" (daily, one line, no image needed — the
-poster already accepts an empty `image` for exactly this), new stores as they land,
-and flash deals (already broadcast to bot subscribers; the channel would be the
-public, forwardable version). Paid ads are deliberately excluded — a store bought an
-Instagram post, and the approval covers that one post.
+**What it carries today:** the Monday ranking, the Thursday store feature, and the
+daily "who restocks tomorrow" line — the last of which is channel-only, because it
+stops being useful the next morning and a tappable link is most of its value.
+**Not yet wired:** new stores as they land, and flash deals (already broadcast to bot
+subscribers; the channel would be the public, forwardable version). Paid ads are
+deliberately excluded — a store bought an Instagram post, and the approval covers
+that one post.
 
 **Watch out:** a channel that posts more than ~1×/day gets muted. Daily restock
 line + Monday ranking is about right; hold everything else.
@@ -183,7 +185,7 @@ rather than a wish list.
 | 1 | **The cycle** — who has gone longest without a restock | `deals-image.mjs` | Monday | ✅ automatic |
 | 2 | **Store of the week** — one shop, hours, restock day, honestly labelled not-an-ad | `store-feature.mjs` + `pick-feature.mjs` + `instagram-feature.yml` | Thursday | ✅ automatic |
 | 3 | **What's new on the map** — stores added since last time | *(new)* diff of `stores.json` | Monthly | ❌ |
-| 4 | **Restock tomorrow** — one line, who to be at when they open | `restockDay` / `restockDates` | Daily, Telegram only | ⚠️ poster ready, job not written |
+| 4 | **Restock tomorrow** — one line, who to be at when they open | `restock-tomorrow.mjs` + `restock-tomorrow.yml` | Daily, Telegram only | ✅ automatic |
 | 5 | **How the cycle works** — education: why day 6 is cheaper than day 1, per-kg vs per-item | evergreen, written once | Every ~2 weeks | ❌ |
 
 Plus two loops that are not slots but changes in posture:
@@ -291,8 +293,9 @@ long; it should stay long.
 ## 8. Sequence
 
 **First 30 days — cheap and mostly automatic**
-1. ✅ Mirror the Monday post to a channel. **Left to do:** open the channel and set
-   `TG_CHANNEL` — the code is inert until then — and add the daily restock line.
+1. ✅ Mirror the Monday post to a channel, ✅ add the daily restock line.
+   **Left to do:** open the channel and set `TG_CHANNEL` — all of it is inert
+   until then.
 2. Add `?src=` and the Worker pass-through so everything after this is measurable.
 3. ✅ Schedule store-of-the-week.
 4. Post once, by hand, in three Facebook groups and once in `r/lviv`. Watch what happens.

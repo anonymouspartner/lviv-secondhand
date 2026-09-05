@@ -16,7 +16,8 @@
     "avatar": "node avatar.mjs",
     "stories": "node stories.mjs",
     "ad": "node ad-image.mjs",
-    "pick-feature": "node pick-feature.mjs"
+    "pick-feature": "node pick-feature.mjs",
+    "restock-tomorrow": "node restock-tomorrow.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",

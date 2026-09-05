@@ -85,10 +85,18 @@ scheduled post will work.
 | --- | --- | --- |
 | Mondays ~07:00 Kyiv | The week's "longest since a restock" ranking — **only when the ranking actually moved** | `deals-image.yml` → `telegram-channel-post.yml` |
 | Thursdays ~13:00 Kyiv | Store of the week — one shop, chosen by `pick-feature.mjs`, labelled *not an ad* | `instagram-feature.yml` → `telegram-channel-post.yml` |
+| Every evening ~19:00 Kyiv | **Who restocks tomorrow** — text only, and silent on days with nothing on record | `restock-tomorrow.yml` → `telegram-channel-post.yml` |
 
-Both mirror what goes to Instagram, from the same image and the same caption.
-Each surface is its own job, so an expired Instagram token cannot stop the
-channel post, and a misconfigured channel cannot stop the Instagram post.
+The first two mirror what goes to Instagram, from the same image and the same
+caption. Each surface is its own job, so an expired Instagram token cannot stop
+the channel post, and a misconfigured channel cannot stop the Instagram post.
+
+The daily line is **channel-only** and has no Instagram counterpart, because it
+is the one post that stops being useful the next morning — and a link you can
+tap is most of its value. It lists the shops with a restock on record for
+tomorrow and ends in one `?route=` link that opens exactly those shops on the
+map. It is silent whenever nothing is on record: no store currently has a
+Sunday restock day, so Saturdays are quiet by design.
 
 Anything else goes out by hand: **Actions → Post to the Telegram channel → Run
 workflow**, with an image path and a caption. Leave `image` empty to post text
@@ -105,8 +113,14 @@ If it should become part of the product, sell it as part of the product.
 ## Cadence
 
 A channel that posts more than about once a day gets muted, and a muted channel
-is worse than a small one. The two automatic slots above are roughly right; add
-a third only when you have something people would forward.
+is worse than a small one. That is the budget the three slots above are built
+to: at most one post on most days, two on a Monday or Thursday, and none at all
+on a day with no restocks on record. Add a fourth only when you have something
+people would forward.
+
+If the daily line proves too much, it is the one to cut first — comment out the
+`schedule:` block in `restock-tomorrow.yml`. It is also the easiest to make
+*less* frequent (weekdays only: `0 16 * * 1-5`).
 
 ---
 

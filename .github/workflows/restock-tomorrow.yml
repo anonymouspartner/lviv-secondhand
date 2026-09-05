@@ -1,0 +1,84 @@
+name: Daily restock line
+
+# Posts "who restocks tomorrow" to the Telegram channel, every evening Kyiv
+# time — early enough to plan the next morning around it.
+#
+# WHY THIS IS THE ONE POST THAT EARNS A DAILY SLOT
+# The bot already answers "today" on demand. What a broadcast can do that a
+# command cannot is arrive BEFORE you need it: a restock is worth knowing the
+# evening before, while you can still decide to be there when the doors open.
+# Everything else the channel carries is weekly for a reason.
+#
+# IT STAYS SILENT WHEN THERE IS NOTHING TO SAY
+# restock-tomorrow.mjs prints nothing when no store has a restock on record for
+# tomorrow, and this workflow then posts nothing — no empty run, no "nobody
+# restocks tomorrow" filler. That is not hypothetical: no store on the map has a
+# Sunday restock day, so every Saturday is a silent day by design.
+#
+# TEXT ONLY, NO IMAGE
+# The channel poster takes an empty `image` and sends a plain message for
+# exactly this. A rendered card would add a Chromium download and a commit to a
+# post whose whole value is that it is short and arrives on time.
+#
+# To stop it, comment out the `schedule:` block. Nothing else depends on it.
+
+on:
+  schedule:
+    - cron: "0 16 * * *" # Daily 16:00 UTC (~19:00 Europe/Kyiv)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Compose the line and check config, but post nothing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    outputs:
+      text: ${{ steps.line.outputs.text }}
+      has: ${{ steps.line.outputs.has }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # No npm install: the generator reads stores.json and prints text, so it
+      # has no dependencies and a silent day costs seconds.
+      - name: Compose tomorrow's line
+        id: line
+        run: |
+          TEXT=$(cd tools/social && node restock-tomorrow.mjs)
+          if [ -z "$TEXT" ]; then
+            echo "::notice::No store restocks tomorrow — posting nothing."
+            echo "has=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has=true" >> "$GITHUB_OUTPUT"
+          {
+            echo 'text<<RESTOCK_EOF'
+            echo "$TEXT"
+            echo 'RESTOCK_EOF'
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Tomorrow's restock line"
+            echo ""
+            echo '```'
+            echo "$TEXT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  post:
+    needs: compose
+    if: needs.compose.outputs.has == 'true'
+    uses: ./.github/workflows/telegram-channel-post.yml
+    secrets: inherit
+    with:
+      caption: ${{ needs.compose.outputs.text }}
+      dry_run: ${{ inputs.dry_run == true }}
