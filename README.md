@@ -291,6 +291,8 @@ Images must be **JPEG** — the API rejects PNG with a generic container error t
 
 **Beyond Instagram.** A channel-by-channel brainstorm — Telegram channel, short video, Facebook groups, what to skip, and what to build so it stays automatic — is in **[`docs/SOCIAL_MEDIA.md`](docs/SOCIAL_MEDIA.md)**.
 
+**Music in videos needs written permission first.** This project posts from a Business account, which cannot use the platform music libraries' popular tracks — so a commercial song under a Reel gets muted or pulled unless the rights holder has cleared it in writing. The rule, the safe alternatives, and which tracks are cleared: **[`docs/MUSIC.md`](docs/MUSIC.md)**.
+
 ### Paid ads on Instagram — you approve, then it posts
 
 A store buying a flash deal now also queues an **Instagram advertisement**. It is queued, never posted: the only route from a completed payment to the public feed is you tapping approve.
