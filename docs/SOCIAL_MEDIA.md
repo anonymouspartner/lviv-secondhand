@@ -20,7 +20,7 @@ above both: which channels, which content, in what order.
 | | Status |
 | --- | --- |
 | Instagram [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/) | Two automatic posts/week (Monday deals ranking, Thursday store of the week), plus ~12 evergreen images posted by hand |
-| Telegram **channel** | ✅ Built — two mirrored posts plus a channel-only daily restock line. Needs one `TG_CHANNEL` variable to go live |
+| Telegram **channel** | ✅ **Live** at [@Lviv_Secondhand](https://t.me/Lviv_Secondhand) — two mirrored posts plus a channel-only daily restock line |
 | Telegram **bot** | A product, not a channel — reaches people who already found us |
 | Web push | Built, opt-in, same problem: existing users only |
 | Facebook / TikTok / Threads / YouTube | Nothing |
@@ -293,9 +293,8 @@ long; it should stay long.
 ## 8. Sequence
 
 **First 30 days — cheap and mostly automatic**
-1. ✅ Mirror the Monday post to a channel, ✅ add the daily restock line.
-   **Left to do:** open the channel and set `TG_CHANNEL` — all of it is inert
-   until then.
+1. ✅ Mirror the Monday post to a channel, ✅ add the daily restock line,
+   ✅ open the channel and set `TG_CHANNEL`. All three slots are running.
 2. Add `?src=` and the Worker pass-through so everything after this is measurable.
 3. ✅ Schedule store-of-the-week.
 4. Post once, by hand, in three Facebook groups and once in `r/lviv`. Watch what happens.

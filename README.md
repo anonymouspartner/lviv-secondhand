@@ -46,7 +46,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 🔗 **Link to a store** — copy a direct `?store=<id>` link that opens straight on that store
 - 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): a tap-through menu plus `/today`, `/day` (any weekday), `/rare` and `/cheap`
 - 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): which stores have gone longest since a restock, posted automatically every Monday
-- 📢 **Telegram channel** — the same posts where the links are actually clickable, plus a nightly line naming the shops that restock tomorrow
+- 📢 **Telegram channel** — [@Lviv_Secondhand](https://t.me/Lviv_Secondhand): the same posts where the links are actually clickable, plus a nightly line naming the shops that restock tomorrow
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
 - ⚡ **Flash deals** — a store can run a short paid sale (3h / 24h) with a live countdown banner and toast; follow a store on Telegram to hear the moment one goes live
 - ✏️ **Suggest a correction** — send a fix via Telegram; a moderator reviews it, or a trusted contributor's own edit publishes instantly
@@ -263,7 +263,7 @@ Anything else is posted by hand: **Actions → Post to Instagram → Run workflo
 
 **Everything automatic goes to both surfaces.** The Monday ranking and the Thursday store-of-the-week are each posted to Instagram *and* mirrored to the Telegram channel, from the same image and the same caption, by [`telegram-channel-post.yml`](.github/workflows/telegram-channel-post.yml). Each surface is a separate job, so an expired Instagram token cannot stop the channel post and a misconfigured channel cannot stop the Instagram one.
 
-The channel is where the links actually work — an Instagram caption's `?store=…` is dead text, and on Telegram it is a tap. Setup is three steps (create it, make the bot an administrator, set one `TG_CHANNEL` variable) and lives in **[`docs/TELEGRAM_CHANNEL.md`](docs/TELEGRAM_CHANNEL.md)**. Until that variable is set the mirror jobs no-op green, so nothing here is waiting on it.
+The channel is [**@Lviv_Secondhand**](https://t.me/Lviv_Secondhand), and it is where the links actually work — an Instagram caption's `?store=…` is dead text, and on Telegram it is a tap. It is live: the bot is an administrator with post rights and the `TG_CHANNEL` repository **variable** points at the handle. Setup, cadence and the failure modes are in **[`docs/TELEGRAM_CHANNEL.md`](docs/TELEGRAM_CHANNEL.md)**. Unset that variable and every channel job no-ops green rather than failing, so the pipeline degrades quietly if the channel ever goes away.
 
 **One post is channel-only: the nightly restock line.** [`restock-tomorrow.yml`](.github/workflows/restock-tomorrow.yml) names the shops with a restock on record for tomorrow and ends in a single `?route=` link that opens exactly those shops on the map. It has no Instagram counterpart because it stops being useful the next morning, and a tappable link is most of its value. It reads only the two forward-looking signals the bot's `/today` uses — a fixed `restockDay` and a published `restockDates` calendar — never `cycle`, because a cycle says a restock is *due*, not that it happens, and sending people to a closed rail is the one thing the map promises not to do. When tomorrow has nothing on record it posts nothing: no store has a Sunday restock day, so Saturdays are silent by design.
 
@@ -562,7 +562,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - ✅ Позначення магазинів як **відвіданих**
 - 🔔 **Сповіщення про завезення** — стежте за магазином і дізнавайтеся про завіз того ж ранку. Через push там, де браузер це вміє; де не вміє (iOS без встановленого застосунку) та сама кнопка пропонує Telegram, тож сповіщення доступні на будь-якому пристрої
 - 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): хто найдовше без завозу, автоматично щопонеділка
-- 📢 **Telegram-канал** — ті самі дописи там, де посилання клікабельні, плюс щовечірній рядок: хто завозить завтра
+- 📢 **Telegram-канал** — [@Lviv_Secondhand](https://t.me/Lviv_Secondhand): ті самі дописи там, де посилання клікабельні, плюс щовечірній рядок: хто завозить завтра
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
@@ -730,7 +730,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **Автоматичні дописи йдуть на обидві платформи.** Щопонеділковий рейтинг і щочетверговий «магазин тижня» публікуються в Instagram **і** дублюються в Telegram-канал — те саме зображення, той самий підпис — через [`telegram-channel-post.yml`](.github/workflows/telegram-channel-post.yml). Кожна платформа — окреме завдання, тож прострочений токен Instagram не зупиняє допис у каналі, і навпаки.
 
-Саме в каналі посилання працюють: `?store=…` в підписі Instagram — мертвий текст, а в Telegram — дотик. Налаштування (створити канал, зробити бота адміністратором, задати змінну `TG_CHANNEL`) — у **[`docs/TELEGRAM_CHANNEL.md`](docs/TELEGRAM_CHANNEL.md)**. Доки змінної немає, дублювання просто не виконується — зелено й без помилок.
+Канал — [**@Lviv_Secondhand**](https://t.me/Lviv_Secondhand), і саме там посилання працюють: `?store=…` в підписі Instagram — мертвий текст, а в Telegram — дотик. Він уже працює: бот — адміністратор із правом публікації, а змінна репозиторію `TG_CHANNEL` вказує на канал. Налаштування, ритм публікацій і типові помилки — у **[`docs/TELEGRAM_CHANNEL.md`](docs/TELEGRAM_CHANNEL.md)**. Приберіть змінну — і всі завдання каналу просто нічого не роблять, без помилок.
 
 **Один допис — лише для каналу: щовечірній рядок про завози.** [`restock-tomorrow.yml`](.github/workflows/restock-tomorrow.yml) називає магазини, у яких завтра завіз за наявними даними, і закінчується одним посиланням `?route=`, що відкриває саме ці магазини на карті. В Instagram його немає, бо вранці він уже неактуальний, а клікабельне посилання — і є більша частина його користі. Береться лише те, що дивиться `/today` бота: фіксований `restockDay` і опублікований календар `restockDates`; ніколи `cycle`, бо цикл каже, що завіз *очікується*, а не що він буде. Якщо на завтра даних немає — допису немає: жоден магазин не має недільного дня завозу, тож субота тиха за задумом.
 
