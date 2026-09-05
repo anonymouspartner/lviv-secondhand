@@ -3,8 +3,10 @@
 The public channel is the second place everything gets posted, and — for a map
 of shops in one city — probably the more important of the two.
 
-Setup is three steps and about five minutes; nothing posts until you finish
-them, and an unconfigured repo produces no failed runs.
+> **Live at [@Lviv_Secondhand](https://t.me/Lviv_Secondhand).** The bot is an
+> administrator with post rights and `TG_CHANNEL` is set, so the setup section
+> below is kept as the record of how it was done — and as what to repeat if the
+> channel is ever recreated. Nothing in it is outstanding.
 
 Instagram's setup lives in [`INSTAGRAM.md`](INSTAGRAM.md). The strategy behind
 having a channel at all is in [`SOCIAL_MEDIA.md`](SOCIAL_MEDIA.md).
@@ -56,7 +58,8 @@ that failure surfaces on demand instead.
 ### 3. Tell the repo where to post
 
 **Settings → Secrets and variables → Actions → Variables → New repository
-variable**, named `TG_CHANNEL`, value `@yourhandle`.
+variable**, named `TG_CHANNEL`, value `@yourhandle` — currently
+`@Lviv_Secondhand`.
 
 A **variable**, not a secret: a public channel handle is public by definition,
 and this repo already keeps `OWNER_ID` as a plain var in `worker/wrangler.toml`
@@ -139,6 +142,17 @@ characters, so this is a guard, not a routine path.
 **Nothing is retracted by deleting the file.** A post is live the moment the API
 returns; removing the committed image later leaves the post in place with a
 broken picture. Delete the post in Telegram.
+
+**Auto-delete erases the archive.** Telegram can expire a channel's messages on
+a timer, and a channel whose posts vanish never accumulates the back catalogue
+that makes it worth subscribing to. The daily line would not miss it — it is
+stale by morning anyway — but the weekly rankings and store features are the
+part a new subscriber scrolls. Check **⋮ → Auto-Delete Messages → Off**.
+
+**A stale number in a committed image is still a public claim.** The promo set
+bakes the store count into the picture (`131 СЕКОНД-ХЕНД…`), so re-run
+`npm run promo` before posting one of them — the generators read `stores.json`
+at render time, and the count only updates when they are re-run.
 
 **No `parse_mode`.** Captions can carry store-supplied fragments, and the same
 rule the Worker's notifications follow applies here: without `parse_mode`, no
