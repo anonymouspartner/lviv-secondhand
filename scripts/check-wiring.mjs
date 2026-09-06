@@ -39,6 +39,12 @@
 //      cheapText() reported days since the restock anchor without reducing
 //      modulo the cycle, inverting its own "longest since a restock" list.
 //
+//   8. Every repository_dispatch a Worker sends has a workflow listening.
+//      A Worker's dispatch returns 204 whether or not anything is subscribed:
+//      GitHub accepts the event and drops it. So a renamed event_type — or a
+//      workflow that never shipped — looks exactly like success from inside
+//      the Worker, and the feature silently does nothing forever.
+//
 // Exit code 1 on any violation.
 
 import fs from 'node:fs';
@@ -306,6 +312,32 @@ const errors = [];
       console.log('bot ranking: day-in-cycle, reduced modulo the cycle');
     }
   }
+}
+
+// ── 8 · every dispatched event_type has a listener ───────────────────────────
+{
+  // The Workers send repository_dispatch events to drive workflows they cannot
+  // run themselves (a map patch, an Instagram mirror). GitHub answers 204 for
+  // an event nobody listens for, so this mismatch is invisible at runtime.
+  const sent = new Set();
+  for (const [file, src] of [['worker/worker.js', worker], ['telegram-bot/worker.js', bot]]) {
+    for (const m of src.matchAll(/event_type:\s*'([^']+)'/g)) sent.add(`${m[1]}\u0000${file}`);
+  }
+  const listening = new Set();
+  for (const f of fs.readdirSync('.github/workflows')) {
+    const y = fs.readFileSync(`.github/workflows/${f}`, 'utf8');
+    // `types: [a, b]` under repository_dispatch. Read as text rather than
+    // parsed: check-workflows.mjs already proves these files are valid YAML.
+    const block = /repository_dispatch:\s*\n\s*types:\s*\[([^\]]*)\]/.exec(y);
+    if (block) for (const t of block[1].split(',')) listening.add(t.trim());
+  }
+  for (const entry of sent) {
+    const [type, file] = entry.split('\u0000');
+    if (!listening.has(type)) {
+      errors.push(`${file} dispatches event_type "${type}" but no workflow listens for it — GitHub would accept and drop it.`);
+    }
+  }
+  console.log(`dispatches: ${sent.size} sent, ${listening.size} listened for`);
 }
 
 if (errors.length) {

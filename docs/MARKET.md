@@ -130,7 +130,7 @@ and a listing with a photo and a price is already useful.
 | 5 | Розмір | buttons: XS S M L XL / «Пропустити» | — |
 | 6 | Стан | buttons: 10/10 … 6/10 / «Пропустити» | — |
 | 7 | Район і як забрати | free text / «Пропустити» | — |
-| 8 | Підтвердження | preview + «Опублікувати» | ✅ |
+| 8 | Підтвердження | preview + «Опублікувати» — and the line naming both surfaces (see [Instagram](#instagram--every-listing-mirrored)) | ✅ |
 
 `/cancel` exits at any step, and the hint repeats at every step — the bot
 already does this everywhere else.
@@ -214,6 +214,56 @@ tap changes anything the bot confirms the id is in the tapping user's own
 second tap on something already closed, gets «Це оголошення не ваше або вже
 закрите» and writes nothing.
 
+## Instagram — every listing mirrored
+
+Every approved listing also becomes its own Instagram post. Instagram cannot
+*be* the market — captions carry no clickable link, so nobody can tap through
+to a seller — but it is where people who have never heard of the channel are,
+and every card says where the market is in text they can retype.
+
+**The seller is told before they publish, not after.** The confirm step names
+both surfaces outright: «Після перевірки воно з'явиться в каналі та в Instagram
+(@secondhandlvivbot) — з фото, ціною і вашим @username». Instagram is a public
+feed outside Telegram and outside our control once posted; publishing there on
+the strength of «з'явиться в каналі» would be publishing something the seller
+did not agree to. That consent is recorded on the row as `ig_ok = 1`, written
+once at creation by the wizard that showed the line — so a listing made before
+the wizard said anything can never be mirrored, however the code later changes.
+
+**Two gates, both in the data**, checked by the workflow rather than assumed:
+
+| Gate | Meaning |
+| --- | --- |
+| `status = live` | The owner approved it. Same human gate as the channel post. |
+| `ig_ok = 1` | Its seller was told it goes to Instagram. |
+
+**A rendered card, not the raw photo.** Three reasons, each sufficient:
+Instagram accepts 4:5 to 1.91:1 and rejects everything else with a generic
+container error — a phone photo is routinely 9:16, so raw photos would fail on
+roughly every second listing, opaquely. A photo alone states no price, size or
+district, and the caption is not clickable, so what a reader needs has to be
+inside the image. And item photos sit in a feed of map posts: the frame, the
+channel handle and «Оголошення користувача · ми не беремо участі в угоді» are
+what tell a reader whose post this is. The photo itself is never cropped to
+fit — it is contained over a blurred copy of itself, because cropping a garment
+someone is trying to sell is the one failure that costs them the sale.
+
+**How it runs.** The bot approves and posts to the channel itself, then sends a
+`repository_dispatch` carrying the listing id and nothing else;
+`.github/workflows/market-listing-ig.yml` re-reads the listing from the metrics
+Worker, downloads the photo from Telegram, renders the card
+(`tools/social/listing-card.mjs`), commits it — GitHub Pages serving the repo
+root is how it gets the public URL Meta insists on fetching — and hands it to
+the existing `instagram-post.yml`. Instagram is deliberately last and
+best-effort: the channel is where the market lives, and a GitHub outage must
+not cost a listing its publication.
+
+**Known limit.** Instagram's publishing API allows 50 posts per rolling 24
+hours. Since there is no cap on listings, a day with more than fifty approvals
+would see the surplus fail in the workflow — the channel posts still go out,
+and the failures show as red runs. Not worth a retry queue at this size; worth
+knowing before it is.
+
 ## Anti-abuse
 
 Per the decision above, there is **no cap on how many listings a seller posts
@@ -260,12 +310,16 @@ CREATE TABLE IF NOT EXISTS listings (
   status          TEXT NOT NULL,   -- pending | live | sold | expired | rejected
   channel_msg_id  INTEGER,
   created_at      TEXT NOT NULL,
-  expires_at      TEXT NOT NULL
+  expires_at      TEXT NOT NULL,
+  nudged_at       TEXT,            -- set when the day-25 "ще актуально?" was sent
+  ig_ok           INTEGER          -- 1 = the seller was told it goes to Instagram
 );
 ```
 
 Photos are stored as Telegram `file_id`s, not re-hosted: Telegram keeps them,
-and the bot can re-send by id indefinitely.
+and the bot can re-send by id indefinitely. The Instagram mirror is the one
+thing that needs the bytes rather than the id, and it fetches them at post
+time from Telegram — nothing here re-hosts a seller's photo.
 
 ## What already exists and gets reused
 
@@ -289,6 +343,7 @@ a plausible quarter:
 📌 Барахолка Львів — правила
 
 1. Оголошення публікує лише бот: @Secondhandlvivbot → /sell
+   Схвалене оголошення йде в канал і в Instagram.
 2. Ми НЕ беремо участі в оплаті й НЕ гарантуємо угоди.
    Зустрічайтеся в людних місцях. Перевіряйте річ до оплати.
 3. Одна річ — одне оголошення. Скільки завгодно оголошень.
