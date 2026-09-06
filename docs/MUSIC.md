@@ -3,7 +3,9 @@
 **The rule: no commercial track goes in a post until written permission is on
 file, recorded in the table below.**
 
-That includes the track this project would most like to use.
+That includes the track this project would most like to use. Any exception
+is a decision by the owner, recorded as such under Status below — it is not a
+clearance, and the difference matters.
 
 ## Why it is a hard rule
 
@@ -56,7 +58,27 @@ When a licence requires credit, put it in the caption and on-screen:
 
 | Track | Rights holder | Asked | Granted | May use? |
 | --- | --- | --- | --- | --- |
-| «Секонд хенд» | Уляна Дель Рей (independent; no label found) | not yet | — | **No** |
+| «Секонд хенд» | Уляна Дель Рей (independent; no label found) | not yet | — | **Owner's call** — see below |
 
 Update this table when an answer arrives — including a refusal, so nobody asks
 twice or assumes silence meant yes.
+
+### Exception on file
+
+**«Секонд хенд» — the owner asserts fair use for clips of 30 seconds or less.
+No licence on file. Recorded 2026-09-06.**
+
+Written down as what it is: a decision by the project owner, not a permission
+from the rights holder. The two are not interchangeable, and a reader a year
+from now needs to be able to tell which one this row is.
+
+Two things it does not change, both worth knowing if a post disappears:
+
+- **Platform audio matching is automated and does not evaluate fair use.** It
+  fingerprints a few seconds and matches regardless of clip length, so a video
+  can still be muted or removed — on the Business account that runs the
+  automated posting.
+- **A claim would be answered with the assertion above, not with a licence.**
+
+The band has not been asked. One message is what would turn this row into a
+clearance and make the point moot.
