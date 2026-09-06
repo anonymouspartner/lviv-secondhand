@@ -178,6 +178,20 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, type TEXT NOT NULL, key TEXT, lang TEXT)"
   ).run();
+  // Барахолка listings (docs/MARKET.md). This table lives here rather than in
+  // the bot Worker because the bot has no D1 binding at all — it reaches this
+  // Worker over the METRICS service binding, which is also the only way it can:
+  // a Worker fetching another Worker on the same zone by its public URL gets
+  // 404 / error 1042.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS listings (id TEXT PRIMARY KEY, seller_id TEXT NOT NULL, seller_username TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, price_uah INTEGER NOT NULL, size TEXT, condition TEXT, area TEXT, photo_ids TEXT NOT NULL, status TEXT NOT NULL, channel_msg_id INTEGER, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, nudged_at TEXT)"
+  ).run();
+  // The sweep runs every five minutes and asks exactly one question — which
+  // live listings are due — so it gets the index that answers it. Without this
+  // it is a full scan of every listing ever made, every five minutes, forever.
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_listings_due ON listings (status, expires_at)"
+  ).run();
   // `src` (where the visitor arrived from) was added after this table already
   // existed in production, so CREATE TABLE above will not add it — an ALTER
   // must, and it throws harmlessly once the column is there. Same shape as the
@@ -185,6 +199,19 @@ async function ensureSchema(env) {
   try { await env.DB.prepare('ALTER TABLE events ADD COLUMN src TEXT').run(); } catch {}
   _schemaReady = true;
 }
+
+// ── Барахолка: the listings store (docs/MARKET.md) ───────────────────────────
+// The bot collects listings and publishes approved ones; this Worker owns the
+// data and the clock. Nothing here touches money — there is none in the design.
+const LISTING_TTL_DAYS = 30;   // a listing removes itself after this
+const LISTING_NUDGE_DAYS = 25; // "ще актуально?" this many days in
+const LISTING_STATUSES = new Set(['pending', 'live', 'sold', 'expired', 'rejected']);
+// Kept in step with the seven categories in docs/MARKET.md. Validated rather
+// than trusted: the value reaches a channel post, and an unbounded set would
+// let a caller invent a category that no reader recognises.
+const LISTING_CATEGORIES = new Set(['women', 'men', 'shoes', 'kids', 'accessories', 'sport', 'other']);
+
+const isoDaysFromNow = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 
 // ── Store promotions ↔ Stripe ────────────────────────────────────────────────
 // The rate card (docs/ADVERTISING.md) as Stripe Price ids, keyed by tier+cadence.
@@ -775,6 +802,55 @@ async function broadcastFlashDeal(env, ctx, storeId, text, expiresAt) {
   }
   const p = Promise.all(tasks);
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p); else await p;
+}
+
+// ── Барахолка lifecycle ──────────────────────────────────────────────────────
+// Stale listings are what kill a барахолка: someone asks about a jacket sold
+// three weeks ago, gets no reply, and stops trusting the feed. So expiry is not
+// housekeeping here, it is the feature.
+//
+// Rides the existing five-minute cron rather than adding one. Two passes:
+//   1. Live listings past expires_at → delete the channel post, mark expired,
+//      tell the seller.
+//   2. Live listings at day 25 → ask the seller once whether it is still
+//      available, so the answer arrives before the post disappears.
+//
+// Every Telegram call is best-effort: a failed delete or DM must not stop the
+// database from being marked, or the sweep would retry the same rows forever.
+async function sweepListings(env) {
+  if (!env.DB) return;
+  await ensureSchema(env);
+  const today = kyivDateStr();
+
+  const due = await env.DB.prepare(
+    "SELECT id, seller_id, title, channel_msg_id FROM listings WHERE status = 'live' AND expires_at <= ? LIMIT 50"
+  ).bind(today).all();
+  for (const r of (due && due.results) || []) {
+    if (r.channel_msg_id && env.BOT_TOKEN && env.TG_CHANNEL) {
+      await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/deleteMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: env.TG_CHANNEL, message_id: r.channel_msg_id }),
+      }).catch(() => {});
+    }
+    await env.DB.prepare("UPDATE listings SET status = 'expired' WHERE id = ?").bind(r.id).run();
+    // No parse_mode: the title is seller-supplied.
+    await tgSend(env, r.seller_id,
+      `\u23f3 \u0412\u0430\u0448\u0435 \u043e\u0433\u043e\u043b\u043e\u0448\u0435\u043d\u043d\u044f \u0437\u043d\u044f\u0442\u043e \u0447\u0435\u0440\u0435\u0437 30 \u0434\u043d\u0456\u0432: ${r.title}\n\n\u0429\u0435 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u043e? \u041d\u0430\u0434\u0456\u0448\u043b\u0456\u0442\u044c /sell \u0449\u0435 \u0440\u0430\u0437.`
+    ).catch(() => {});
+  }
+
+  const soon = await env.DB.prepare(
+    "SELECT id, seller_id, title FROM listings WHERE status = 'live' AND nudged_at IS NULL AND expires_at <= ? LIMIT 50"
+  ).bind(isoDaysFromNow(LISTING_TTL_DAYS - LISTING_NUDGE_DAYS)).all();
+  for (const r of (soon && soon.results) || []) {
+    // Marked before the send, not after: a Telegram hiccup must cost one missed
+    // nudge, not a nudge every five minutes until the listing expires.
+    await env.DB.prepare('UPDATE listings SET nudged_at = ? WHERE id = ?').bind(today, r.id).run();
+    await tgSend(env, r.seller_id,
+      `\u2753 \u0429\u0435 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u043e? ${r.title}\n\n\u042f\u043a\u0449\u043e \u043f\u0440\u043e\u0434\u0430\u043b\u0438 \u2014 /sold. \u0406\u043d\u0430\u043a\u0448\u0435 \u043e\u0433\u043e\u043b\u043e\u0448\u0435\u043d\u043d\u044f \u0437\u043d\u0438\u043a\u043d\u0435 \u0447\u0435\u0440\u0435\u0437 5 \u0434\u043d\u0456\u0432.`
+    ).catch(() => {});
+  }
 }
 
 // Sweeps due pending_broadcasts — called every 5 minutes (see scheduled()
@@ -2000,6 +2076,73 @@ export default {
     // here (it holds no D1 itself). ADMIN_KEY-gated like /admin/test, but the
     // key rides in a POST body between two Workers rather than in a URL a
     // person taps, which is why it is not on the per-item token pattern.
+    // ── Барахолка: create a pending listing ────────────────────────────────
+    // Called by the bot over the METRICS service binding once a seller finishes
+    // /sell. Admin-keyed in the body, matching /api/edit/resolve below: these
+    // are Worker-to-Worker calls, not public ones.
+    if (url.pathname === '/api/listing/create') {
+      if (!env.ADMIN_KEY || (body && body.key) !== env.ADMIN_KEY) return json({ ok: false }, 401, origin);
+      const b = body || {};
+      const photos = Array.isArray(b.photo_ids) ? b.photo_ids.filter((x) => typeof x === 'string').slice(0, 4) : [];
+      const price = Number(b.price_uah);
+      // Every field is re-validated here even though the wizard already
+      // constrained it. The wizard is a convenience on the other side of a
+      // network hop; this is the boundary that actually decides what a channel
+      // post can say.
+      if (typeof b.seller_id !== 'string' || !b.seller_id
+        || typeof b.seller_username !== 'string' || !b.seller_username
+        || !LISTING_CATEGORIES.has(b.category)
+        || typeof b.title !== 'string' || !b.title.trim()
+        || !Number.isFinite(price) || price < 0 || price > 1000000
+        || !photos.length) {
+        return json({ ok: false, reason: 'bad_request' }, 400, origin);
+      }
+      await ensureSchema(env);
+      const id = crypto.randomUUID().slice(0, 8);
+      await env.DB.prepare(
+        'INSERT INTO listings (id, seller_id, seller_username, category, title, price_uah, size, condition, area, photo_ids, status, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(
+        id, b.seller_id, cleanText(b.seller_username, 32), b.category,
+        cleanText(b.title, 60), Math.round(price),
+        cleanText(b.size, 12) || null, cleanText(b.condition, 12) || null, cleanText(b.area, 60) || null,
+        JSON.stringify(photos), 'pending', kyivDateStr(), isoDaysFromNow(LISTING_TTL_DAYS)
+      ).run();
+      return json({ ok: true, id }, 200, origin);
+    }
+
+    // ── Барахолка: move a listing between states ───────────────────────────
+    // approve → live (with the channel message id so the sweep can delete it
+    // later), reject, or sold. The bot owns the Telegram side; this owns truth.
+    if (url.pathname === '/api/listing/status') {
+      if (!env.ADMIN_KEY || (body && body.key) !== env.ADMIN_KEY) return json({ ok: false }, 401, origin);
+      const id = body && body.id;
+      const status = body && body.status;
+      if (typeof id !== 'string' || !LISTING_STATUSES.has(status)) {
+        return json({ ok: false, reason: 'bad_request' }, 400, origin);
+      }
+      await ensureSchema(env);
+      const row = await env.DB.prepare('SELECT * FROM listings WHERE id = ?').bind(id).first();
+      if (!row) return json({ ok: false, reason: 'not_found' }, 404, origin);
+      const msgId = Number.isFinite(Number(body.channel_msg_id)) ? Number(body.channel_msg_id) : row.channel_msg_id;
+      // Publishing restarts the clock: a listing that waited two days in the
+      // approval queue should still get its full thirty days on the channel.
+      const expires = status === 'live' ? isoDaysFromNow(LISTING_TTL_DAYS) : row.expires_at;
+      await env.DB.prepare('UPDATE listings SET status = ?, channel_msg_id = ?, expires_at = ? WHERE id = ?')
+        .bind(status, msgId, expires, id).run();
+      return json({ ok: true, id, status, listing: { ...row, status, channel_msg_id: msgId, expires_at: expires } }, 200, origin);
+    }
+
+    // ── Барахолка: one seller's listings, for /my ──────────────────────────
+    if (url.pathname === '/api/listing/mine') {
+      if (!env.ADMIN_KEY || (body && body.key) !== env.ADMIN_KEY) return json({ ok: false }, 401, origin);
+      if (typeof (body && body.seller_id) !== 'string') return json({ ok: false, reason: 'bad_request' }, 400, origin);
+      await ensureSchema(env);
+      const res = await env.DB.prepare(
+        "SELECT id, title, price_uah, status, expires_at, channel_msg_id FROM listings WHERE seller_id = ? AND status IN ('pending','live') ORDER BY created_at DESC LIMIT 50"
+      ).bind(body.seller_id).all();
+      return json({ ok: true, listings: (res && res.results) || [] }, 200, origin);
+    }
+
     if (url.pathname === '/api/edit/resolve') {
       const id = body && body.id;
       const action = body && body.action;
@@ -2135,7 +2278,13 @@ export default {
     // Two crons share this handler (see worker/wrangler.toml): the daily
     // restock push (below, unchanged) and a 5-minute sweep for early-bird
     // flash-deal broadcasts (Feature 6) that are now due.
-    if (event.cron === '*/5 * * * *') { await sweepPendingBroadcasts(env); return; }
+    if (event.cron === '*/5 * * * *') {
+      await sweepPendingBroadcasts(env);
+      // Separate try: a listings failure must not stop flash-deal broadcasts,
+      // which are time-critical in a way that expiry is not.
+      try { await sweepListings(env); } catch {}
+      return;
+    }
     const today = kyivDateStr(); // 'YYYY-MM-DD' (Europe/Kyiv)
     await ensureSchema(env);
     const res = await env.DB.prepare('SELECT endpoint, p256dh, auth, stores FROM push_subs').all();

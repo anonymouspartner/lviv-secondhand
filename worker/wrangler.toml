@@ -34,6 +34,13 @@ VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYM
 # Not a secret (it is just a chat id, same value as telegram-bot/wrangler.toml).
 # The notification stays off until the BOT_TOKEN secret is also set — see below.
 OWNER_ID = "1212541015"
+# The Барахолка channel, so the listings sweep can delete an expired post.
+# Not a secret — a public channel handle is public by definition, same
+# reasoning as OWNER_ID above and as the TG_CHANNEL repository *variable* the
+# posting workflows read. It is duplicated here rather than shared because a
+# GitHub Actions variable is not a Worker binding: the workflows and the Worker
+# genuinely cannot see each other's configuration.
+TG_CHANNEL = "@Lviv_Secondhand"
 # Optional: a separate group/channel chat id for edit-suggestion moderation
 # (Feature 6, POST /api/edit/stash → claim → the moderator's ✅/❌). Falls
 # back to OWNER_ID above when unset — set this only if you want edit review
