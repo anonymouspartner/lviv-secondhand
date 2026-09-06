@@ -18,7 +18,8 @@
     "ad": "node ad-image.mjs",
     "pick-feature": "node pick-feature.mjs",
     "restock-tomorrow": "node restock-tomorrow.mjs",
-    "listing-card": "node listing-card.mjs"
+    "listing-card": "node listing-card.mjs",
+    "whats-new": "node whats-new.mjs"
   },
   "dependencies": {
     "playwright": "^1.48.0",

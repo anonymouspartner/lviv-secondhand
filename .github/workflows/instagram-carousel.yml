@@ -1,0 +1,282 @@
+name: Post a carousel to Instagram
+
+# Publishes 2–10 images from this repo as ONE swipeable Instagram post.
+#
+# WHY A SEPARATE WORKFLOW FROM instagram-post.yml
+# The single-image path is two API calls; a carousel is a different shape
+# entirely — every slide gets its own container first, then a parent container
+# that references them all, and only then a publish. Folding that into the
+# single poster would have put a branch through every step of a workflow that
+# the Monday and Thursday pipelines depend on. This one has no callers to break.
+#
+# WHY A CAROUSEL AT ALL
+# Explaining a feature takes more than one card: what it is, how to use it, what
+# it costs. Five separate posts is five days of feed or one day of flooding it.
+# A carousel is one post someone swipes through, and it is the only shape in
+# which that sequence holds together.
+#
+# CAPTION COMES FROM A FILE, not a dispatch box: the captions these carousels
+# need run to several hundred characters across several paragraphs, and the
+# generator that renders the cards already writes one beside them.
+#
+# ORDER IS THE FILENAME ORDER you pass. Instagram keeps `children` order, so the
+# list is the sequence a reader swipes through.
+#
+# ASPECT RATIO: Instagram crops every slide to the ratio of the FIRST one. Pass
+# a set rendered at one size (the generators use 1080×1350) or the rest lose
+# their edges.
+#
+# Same API path, secrets and JPEG-only rule as instagram-post.yml — see the long
+# comment there and docs/INSTAGRAM.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: "Comma-separated image paths under marketing/, in order (2–10)"
+        required: true
+        type: string
+        default: "marketing/instagram/whats-new/1-market.jpg,marketing/instagram/whats-new/2-how.jpg,marketing/instagram/whats-new/3-rules.jpg,marketing/instagram/whats-new/4-sold.jpg,marketing/instagram/whats-new/5-channel.jpg"
+      caption_path:
+        description: "Path to the caption .txt in this repo"
+        required: true
+        type: string
+        default: "marketing/instagram/whats-new/caption.txt"
+      dry_run:
+        description: "Check config and build the containers, but do not publish"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  SITE: https://www.lvivsecondhand.com
+  GRAPH: https://graph.instagram.com/v26.0
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Exit 0, not 1: an unconfigured repo should be a no-op, not a red run.
+      - name: Check secrets are configured
+        id: guard
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$IG_USER_ID" ] || [ -z "$IG_ACCESS_TOKEN" ]; then
+            echo "::notice::IG_USER_ID / IG_ACCESS_TOKEN not set — skipping. See docs/INSTAGRAM.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pre-flight — every slide is committed, served and a real JPEG
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          # Via env, never interpolated into the script body: a dispatch input
+          # pasted into `run:` as ${{ }} is substituted before bash parses it.
+          IMAGES: ${{ inputs.images }}
+          CAPTION_PATH: ${{ inputs.caption_path }}
+        run: |
+          COUNT=0
+          URLS=""
+          IFS=','
+          for IMG in $IMAGES; do
+            IMG=$(echo "$IMG" | tr -d '[:space:]')
+            [ -z "$IMG" ] && continue
+            # Path containment first — this value becomes a public URL below.
+            case "$IMG" in
+              *..*) echo "::error::image path $IMG contains '..' — refusing."; exit 1 ;;
+            esac
+            case "$IMG" in
+              marketing/*) ;;
+              *) echo "::error::$IMG is outside marketing/."; exit 1 ;;
+            esac
+            case "$IMG" in
+              *.jpg|*.jpeg) ;;
+              *) echo "::error::$IMG is not a JPEG. Instagram's API accepts JPEG only."; exit 1 ;;
+            esac
+
+            # What is verified is the file Meta will fetch, not the one in this
+            # checkout — the two differ whenever a caller commits in an earlier
+            # job of the same run.
+            URL="$SITE/$IMG"
+            CODE=$(curl -s -o /tmp/slide.bin -w '%{http_code}' -L "$URL")
+            if [ "$CODE" != "200" ]; then
+              echo "::error::$URL returned HTTP $CODE. Every slide must be publicly reachable before Meta can fetch it (Pages may lag a commit by a minute)."
+              exit 1
+            fi
+            MAGIC=$(od -An -N3 -tx1 /tmp/slide.bin | tr -d ' \n')
+            if [ "$MAGIC" != "ffd8ff" ]; then
+              echo "::error::$URL does not serve a JPEG (first bytes: ${MAGIC:-none})."
+              exit 1
+            fi
+            echo "Slide $((COUNT + 1)): $URL ($(wc -c < /tmp/slide.bin) bytes, JPEG confirmed)"
+            URLS="${URLS}${URL}"$'\n'
+            COUNT=$((COUNT + 1))
+          done
+          unset IFS
+
+          # Instagram's own limits. Below two it is not a carousel and the API
+          # rejects it; above ten it refuses the parent container.
+          if [ "$COUNT" -lt 2 ] || [ "$COUNT" -gt 10 ]; then
+            echo "::error::A carousel needs 2–10 images; got $COUNT."
+            exit 1
+          fi
+
+          case "$CAPTION_PATH" in
+            *..*) echo "::error::caption path contains '..' — refusing."; exit 1 ;;
+          esac
+          if [ ! -f "$CAPTION_PATH" ]; then
+            echo "::error::$CAPTION_PATH is not in this checkout."
+            exit 1
+          fi
+          # Instagram's caption limit. Being told by the API at publish time,
+          # after every container is built, is a slow way to learn it.
+          #
+          # LC_ALL is not optional here: with no UTF-8 locale `wc -m` counts
+          # BYTES, and these captions are Cyrillic at ~1.7 bytes a character —
+          # so an 800-character caption would measure 1400 and a legal one could
+          # be refused as too long.
+          CHARS=$(LC_ALL=C.UTF-8 wc -m < "$CAPTION_PATH")
+          if [ "$CHARS" -gt 2200 ]; then
+            echo "::error::the caption is $CHARS characters; Instagram's limit is 2200."
+            exit 1
+          fi
+          echo "Caption: $CAPTION_PATH ($CHARS characters)"
+          echo "$COUNT slides ready."
+          printf '%s' "$URLS" > /tmp/slide-urls.txt
+
+      # No /debug_token on this API path, so `me` is the substitute: it fails on
+      # an expired or wrong-scoped token, and resolves which account to post to.
+      - name: Pre-flight — token validity
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          RESP=$(curl -sG "$GRAPH/me" \
+            --data-urlencode "fields=id,user_id,username" \
+            --data-urlencode "access_token=$IG_ACCESS_TOKEN")
+          ME_ID=$(echo "$RESP" | jq -r '.id // empty')
+          ME_USER_ID=$(echo "$RESP" | jq -r '.user_id // empty')
+          NAME=$(echo "$RESP" | jq -r '.username // empty')
+          if [ -z "$ME_ID" ] && [ -z "$ME_USER_ID" ]; then
+            echo "::error::Token rejected by Instagram: $(echo "$RESP" | jq -c '.error // .')"
+            exit 1
+          fi
+          echo "Token valid — authenticated as @$NAME."
+          echo "PUBLISH_ID=${ME_USER_ID:-$ME_ID}" >> "$GITHUB_ENV"
+          echo "::notice::Instagram Login tokens expire 60 days after issue and cannot be inspected here. Refresh via refresh_access_token (docs/INSTAGRAM.md) roughly every 50 days."
+
+      # Step 1 of 3: one container per slide. is_carousel_item keeps them out of
+      # the feed on their own — without it each would be publishable as its own
+      # post, which is exactly the flooding this workflow exists to avoid.
+      - name: Create a container for each slide
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          CHILDREN=""
+          N=0
+          while IFS= read -r URL; do
+            [ -z "$URL" ] && continue
+            N=$((N + 1))
+            RESP=$(curl -s -X POST "$GRAPH/$PUBLISH_ID/media" \
+              --data-urlencode "image_url=$URL" \
+              --data-urlencode "is_carousel_item=true" \
+              --data-urlencode "access_token=$IG_ACCESS_TOKEN")
+            ID=$(echo "$RESP" | jq -r '.id // empty')
+            if [ -z "$ID" ]; then
+              echo "::error::Slide $N ($URL) failed: $(echo "$RESP" | jq -c '.error // .')"
+              exit 1
+            fi
+            echo "Slide $N container: $ID"
+            CHILDREN="${CHILDREN:+$CHILDREN,}$ID"
+          done < /tmp/slide-urls.txt
+          echo "CHILDREN=$CHILDREN" >> "$GITHUB_ENV"
+
+      # Step 2 of 3: the parent. The caption lives here, not on the children.
+      - name: Create the carousel container
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          CAPTION_PATH: ${{ inputs.caption_path }}
+        run: |
+          RESP=$(curl -s -X POST "$GRAPH/$PUBLISH_ID/media" \
+            --data-urlencode "media_type=CAROUSEL" \
+            --data-urlencode "children=$CHILDREN" \
+            --data-urlencode "caption@$CAPTION_PATH" \
+            --data-urlencode "access_token=$IG_ACCESS_TOKEN")
+          ID=$(echo "$RESP" | jq -r '.id // empty')
+          if [ -z "$ID" ]; then
+            echo "::error::Carousel container failed: $(echo "$RESP" | jq -c '.error // .')"
+            exit 1
+          fi
+          echo "CREATION_ID=$ID" >> "$GITHUB_ENV"
+          echo "Carousel container created: $ID"
+
+      # Publishing a container that is still processing fails, and a carousel
+      # has more to process than a single image — so wait for FINISHED.
+      - name: Wait for the carousel to finish processing
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          for i in $(seq 1 30); do
+            RESP=$(curl -sG "$GRAPH/$CREATION_ID" \
+              --data-urlencode "fields=status_code,status" \
+              --data-urlencode "access_token=$IG_ACCESS_TOKEN")
+            STATUS=$(echo "$RESP" | jq -r '.status_code // empty')
+            case "$STATUS" in
+              FINISHED) echo "Container ready."; exit 0 ;;
+              ERROR|EXPIRED)
+                echo "::error::Container $STATUS: $(echo "$RESP" | jq -c '.status // .')"
+                exit 1 ;;
+              *) echo "status=$STATUS (attempt $i) — waiting…"; sleep 6 ;;
+            esac
+          done
+          echo "::error::Container never reached FINISHED after ~3 minutes."
+          exit 1
+
+      # Without this a dry run ends green with no output, which reads exactly
+      # like a successful post.
+      - name: Dry run — report and stop
+        if: steps.guard.outputs.ready == 'true' && inputs.dry_run == true
+        run: |
+          {
+            echo "### Dry run — nothing was posted"
+            echo ""
+            echo "Every slide is reachable and a real JPEG, the token is valid, and the carousel container built and finished processing."
+            echo "Re-run with **dry_run unchecked** to publish it."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Dry run complete — config is good, nothing posted."
+
+      # Step 3 of 3: publish. This is the irreversible one.
+      - name: Publish
+        if: steps.guard.outputs.ready == 'true' && inputs.dry_run != true
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          RESP=$(curl -s -X POST "$GRAPH/$PUBLISH_ID/media_publish" \
+            --data-urlencode "creation_id=$CREATION_ID" \
+            --data-urlencode "access_token=$IG_ACCESS_TOKEN")
+          MEDIA_ID=$(echo "$RESP" | jq -r '.id // empty')
+          if [ -z "$MEDIA_ID" ]; then
+            echo "::error::Publish failed: $(echo "$RESP" | jq -c '.error // .')"
+            exit 1
+          fi
+          LINK=$(curl -sG "$GRAPH/$MEDIA_ID" \
+            --data-urlencode "fields=permalink" \
+            --data-urlencode "access_token=$IG_ACCESS_TOKEN" | jq -r '.permalink // empty')
+          echo "::notice::Published: ${LINK:-$MEDIA_ID}"
+          {
+            echo "### Carousel posted to Instagram"
+            echo ""
+            echo "- **Post:** ${LINK:-$MEDIA_ID}"
+            echo "- **Slides:** ${{ inputs.images }}"
+          } >> "$GITHUB_STEP_SUMMARY"
