@@ -242,6 +242,12 @@ function helpText() {
     '/day — pick any weekday · обрати будь-який день тижня',
     '/rare — stores that restock every 14+ days · рідко оновлювані магазини',
     '/cheap — longest since a restock · найдовше без завозу',
+    '',
+    '🏷 <b>Барахолка · Flea market</b> — продати свою річ у каналі',
+    '/sell — put an item up for sale · виставити річ на продаж',
+    '/my — your listings · ваші оголошення',
+    '/sold — close a listing you sold · закрити продане',
+    '',
     '/submit — add your store (for owners) · додати свій магазин',
     '/job — vacancy: field agent · вакансії: польовий агент',
     '/feedback — tell the maintainer something · залишити відгук',
@@ -453,6 +459,7 @@ const MENU_RARE = '🐢 Рідко оновлюють';
 const MENU_ADD = '➕ Додати магазин';
 const MENU_FEEDBACK = '💬 Залишити відгук';
 const MENU_SELL = '🏷 Продати річ';
+const MENU_SOLD = '✅ Продано';
 const MENU_HELP = '❓ Довідка';
 const MENU_BACK = '⬅️ Назад';
 // Extra row, appended only for the owner/agents (see mainMenuMarkupFor) — the
@@ -468,8 +475,8 @@ function kbMarkup(rows) {
 const MAIN_MENU_MARKUP = kbMarkup([
   [MENU_DAY, MENU_CHEAP],
   [MENU_RARE, MENU_ADD],
-  [MENU_SELL, MENU_FEEDBACK],
-  [MENU_HELP],
+  [MENU_SELL, MENU_SOLD],
+  [MENU_FEEDBACK, MENU_HELP],
 ]);
 // isOwner/isAgent gate real access everywhere these menus are actually used
 // (handleVisit's command router) — this only controls whether the button is
@@ -483,8 +490,8 @@ function mainMenuMarkupFor(isOwner, isAgent) {
   return kbMarkup([
     [MENU_DAY, MENU_CHEAP],
     [MENU_RARE, MENU_ADD],
-    [MENU_SELL, MENU_FEEDBACK],
-    [MENU_HELP],
+    [MENU_SELL, MENU_SOLD],
+    [MENU_FEEDBACK, MENU_HELP],
     extra,
   ]);
 }
@@ -3333,6 +3340,114 @@ async function handleSellCallback(env, c, cq) {
   return true;
 }
 
+// /my and /sold — a seller's own listings, and closing one.
+//
+// Both read through the metrics Worker, which is also where ownership is
+// established: the callback data carries a listing id, and anyone can craft
+// one, so /sold verifies the id is in the tapping user's OWN list before it
+// changes anything. The status endpoint deliberately does not check ownership
+// — it is a Worker-to-Worker call and the owner's approval uses it too — so
+// the check has to live here.
+async function sellMine(env, uid) {
+  const out = await sellApi(env, '/api/listing/mine', { seller_id: String(uid) });
+  return (out && out.ok && Array.isArray(out.listings)) ? out.listings : null;
+}
+
+async function handleMyListings(env, c, ctx) {
+  if (!c.enabled) return false;
+  const text = ctx.text;
+  if (text !== '/my' && text !== '/mine') return false;
+  const rows = await sellMine(env, ctx.userId);
+  if (rows === null) {
+    // Never invent an empty list from a failed call — an unreachable Worker
+    // must not read as "you have nothing".
+    await say(env, ctx.chatId, '⚠️ Не вдалося отримати ваші оголошення. Спробуйте за хвилину.');
+    return true;
+  }
+  if (!rows.length) {
+    await say(env, ctx.chatId, 'У вас немає активних оголошень.\n\nДодати — /sell');
+    return true;
+  }
+  const label = { pending: '⏳ на перевірці', live: '🟢 в каналі', sold: '✅ продано' };
+  const list = rows.map((r) => `• ${esc(r.title)} — ${r.price_uah} ₴ · ${label[r.status] || r.status}`).join('\n');
+  await say(env, ctx.chatId, `<b>Ваші оголошення</b>\n\n${list}\n\nПродали — ${MENU_SOLD} або /sold`);
+  return true;
+}
+
+async function handleSoldFlow(env, c, ctx) {
+  if (!c.enabled) return false;
+  const text = ctx.text;
+  if (text !== '/sold' && text !== MENU_SOLD) return false;
+  const rows = await sellMine(env, ctx.userId);
+  if (rows === null) {
+    await say(env, ctx.chatId, '⚠️ Не вдалося отримати ваші оголошення. Спробуйте за хвилину.');
+    return true;
+  }
+  const live = rows.filter((r) => r.status === 'live');
+  if (!live.length) {
+    await say(env, ctx.chatId, 'Немає опублікованих оголошень, які можна закрити.');
+    return true;
+  }
+  await tg(env, 'sendMessage', {
+    chat_id: ctx.chatId,
+    text: 'Що продали?',
+    reply_markup: { inline_keyboard: live.slice(0, 20).map((r) => [{ text: `${r.title} — ${r.price_uah} ₴`, callback_data: `sold:${r.id}` }]) },
+  });
+  return true;
+}
+
+// Seller taps one of their own listings in the /sold picker.
+async function handleSoldCallback(env, c, cq) {
+  const data = (cq && cq.data) || '';
+  if (!data.startsWith('sold:')) return false;
+  const id = data.slice(5);
+  const uid = cq.from && cq.from.id;
+  await tg(env, 'answerCallbackQuery', { callback_query_id: cq.id });
+
+  // Ownership: the id must be in this user's own list. Without this, anyone
+  // who guessed an id could close someone else's listing.
+  const rows = await sellMine(env, uid);
+  const mine = (rows || []).find((r) => r.id === id && r.status === 'live');
+  if (!mine) {
+    await tg(env, 'sendMessage', { chat_id: cq.message.chat.id, text: 'Це оголошення не ваше або вже закрите.' });
+    return true;
+  }
+
+  const out = await sellApi(env, '/api/listing/status', { id, status: 'sold' });
+  if (!out || !out.ok) {
+    await tg(env, 'sendMessage', { chat_id: cq.message.chat.id, text: '⚠️ Не вдалося закрити. Спробуйте ще раз.' });
+    return true;
+  }
+  // Mark the channel post rather than deleting it now: a buyer mid-conversation
+  // should see what happened instead of finding a hole. The sweep removes it a
+  // day later.
+  //
+  // The card is rebuilt from the row the status call just returned, not read
+  // off cq.message — the tapped message is the /sold picker in THIS chat, which
+  // has no caption at all, so reading it would replace a full card with a bare
+  // title. Bots cannot fetch a message they did not just send, so rebuilding is
+  // the only way to keep the price, size and district on the post.
+  //
+  // A prefix, not strikethrough. Strikethrough needs parse_mode, and this
+  // caption carries seller-written text — the one thing this repo consistently
+  // refuses to let render as markup.
+  const row = (out && out.listing) || null;
+  const body = row
+    ? sellCard({ category: row.category, title: row.title, size: row.size,
+                 condition: row.condition, price: row.price_uah, area: row.area },
+               row.seller_username || (cq.from && cq.from.username) || '')
+    : mine.title;
+  if (mine.channel_msg_id && env.TG_CHANNEL) {
+    await tg(env, 'editMessageCaption', {
+      chat_id: env.TG_CHANNEL,
+      message_id: mine.channel_msg_id,
+      caption: `🔴 ПРОДАНО\n\n${body}`,
+    }).catch(() => {});
+  }
+  await tg(env, 'sendMessage', { chat_id: cq.message.chat.id, text: `✅ Закрито: ${mine.title}\n\nДопис зникне з каналу завтра.` });
+  return true;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -3389,8 +3504,10 @@ export default {
     if (update.callback_query) {
       // sell:* is claimed here first; handleAgentCallback owns the bounty
       // prefixes and would otherwise treat an unknown payload as malformed.
-      ctx.waitUntil(handleSellCallback(env, c, update.callback_query).then((done) => {
-        if (!done) return handleAgentCallback(env, c, update.callback_query, origin);
+      ctx.waitUntil(handleSellCallback(env, c, update.callback_query).then(async (done) => {
+        if (done) return;
+        if (await handleSoldCallback(env, c, update.callback_query)) return;
+        return handleAgentCallback(env, c, update.callback_query, origin);
       }).catch(() => {}));
       return ok();
     }
@@ -3433,6 +3550,8 @@ export default {
     // answer must never be mistaken for a listing title.
     try {
       if (await handleSellFlow(env, c, msg, mctx)) return ok();
+      if (await handleMyListings(env, c, mctx)) return ok();
+      if (await handleSoldFlow(env, c, mctx)) return ok();
     } catch (e) {}
 
     // General feedback (Feature 7). Only needs BOT_TOKEN + VISITS, not the

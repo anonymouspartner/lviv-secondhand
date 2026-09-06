@@ -205,6 +205,7 @@ async function ensureSchema(env) {
 // data and the clock. Nothing here touches money — there is none in the design.
 const LISTING_TTL_DAYS = 30;   // a listing removes itself after this
 const LISTING_NUDGE_DAYS = 25; // "ще актуально?" this many days in
+const LISTING_SOLD_GRACE_DAYS = 1; // a sold post lingers this long, marked, then goes
 const LISTING_STATUSES = new Set(['pending', 'live', 'sold', 'expired', 'rejected']);
 // Kept in step with the seven categories in docs/MARKET.md. Validated rather
 // than trusted: the value reaches a channel post, and an unbounded set would
@@ -822,8 +823,10 @@ async function sweepListings(env) {
   await ensureSchema(env);
   const today = kyivDateStr();
 
+  // Both 'live' (ran its 30 days) and 'sold' (grace period over): each needs
+  // the channel post gone, and only the message to the seller differs.
   const due = await env.DB.prepare(
-    "SELECT id, seller_id, title, channel_msg_id FROM listings WHERE status = 'live' AND expires_at <= ? LIMIT 50"
+    "SELECT id, seller_id, title, channel_msg_id, status FROM listings WHERE status IN ('live','sold') AND expires_at <= ? LIMIT 50"
   ).bind(today).all();
   for (const r of (due && due.results) || []) {
     if (r.channel_msg_id && env.BOT_TOKEN && env.TG_CHANNEL) {
@@ -833,11 +836,16 @@ async function sweepListings(env) {
         body: JSON.stringify({ chat_id: env.TG_CHANNEL, message_id: r.channel_msg_id }),
       }).catch(() => {});
     }
-    await env.DB.prepare("UPDATE listings SET status = 'expired' WHERE id = ?").bind(r.id).run();
+    const wasSold = r.status === 'sold';
+    // A sold row keeps its status — it is a record of a completed sale, not an
+    // expiry. Only a listing that timed out becomes 'expired'.
+    if (!wasSold) await env.DB.prepare("UPDATE listings SET status = 'expired' WHERE id = ?").bind(r.id).run();
     // No parse_mode: the title is seller-supplied.
-    await tgSend(env, r.seller_id,
-      `\u23f3 \u0412\u0430\u0448\u0435 \u043e\u0433\u043e\u043b\u043e\u0448\u0435\u043d\u043d\u044f \u0437\u043d\u044f\u0442\u043e \u0447\u0435\u0440\u0435\u0437 30 \u0434\u043d\u0456\u0432: ${r.title}\n\n\u0429\u0435 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u043e? \u041d\u0430\u0434\u0456\u0448\u043b\u0456\u0442\u044c /sell \u0449\u0435 \u0440\u0430\u0437.`
-    ).catch(() => {});
+    if (!wasSold) {
+      await tgSend(env, r.seller_id,
+        `\u23f3 \u0412\u0430\u0448\u0435 \u043e\u0433\u043e\u043b\u043e\u0448\u0435\u043d\u043d\u044f \u0437\u043d\u044f\u0442\u043e \u0447\u0435\u0440\u0435\u0437 30 \u0434\u043d\u0456\u0432: ${r.title}\n\n\u0429\u0435 \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u043e? \u041d\u0430\u0434\u0456\u0448\u043b\u0456\u0442\u044c /sell \u0449\u0435 \u0440\u0430\u0437.`
+      ).catch(() => {});
+    }
   }
 
   const soon = await env.DB.prepare(
@@ -2126,7 +2134,12 @@ export default {
       const msgId = Number.isFinite(Number(body.channel_msg_id)) ? Number(body.channel_msg_id) : row.channel_msg_id;
       // Publishing restarts the clock: a listing that waited two days in the
       // approval queue should still get its full thirty days on the channel.
-      const expires = status === 'live' ? isoDaysFromNow(LISTING_TTL_DAYS) : row.expires_at;
+      // Selling shortens it instead — the post stays up one more day so a buyer
+      // mid-conversation sees "ПРОДАНО" rather than finding a hole, then the
+      // sweep removes it.
+      const expires = status === 'live' ? isoDaysFromNow(LISTING_TTL_DAYS)
+        : status === 'sold' ? isoDaysFromNow(LISTING_SOLD_GRACE_DAYS)
+        : row.expires_at;
       await env.DB.prepare('UPDATE listings SET status = ?, channel_msg_id = ?, expires_at = ? WHERE id = ?')
         .bind(status, msgId, expires, id).run();
       return json({ ok: true, id, status, listing: { ...row, status, channel_msg_id: msgId, expires_at: expires } }, 200, origin);
@@ -2138,7 +2151,7 @@ export default {
       if (typeof (body && body.seller_id) !== 'string') return json({ ok: false, reason: 'bad_request' }, 400, origin);
       await ensureSchema(env);
       const res = await env.DB.prepare(
-        "SELECT id, title, price_uah, status, expires_at, channel_msg_id FROM listings WHERE seller_id = ? AND status IN ('pending','live') ORDER BY created_at DESC LIMIT 50"
+        "SELECT id, title, price_uah, status, expires_at, channel_msg_id FROM listings WHERE seller_id = ? AND status IN ('pending','live','sold') ORDER BY created_at DESC LIMIT 50"
       ).bind(body.seller_id).all();
       return json({ ok: true, listings: (res && res.results) || [] }, 200, origin);
     }

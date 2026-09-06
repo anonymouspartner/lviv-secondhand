@@ -187,10 +187,32 @@ three weeks ago, gets no reply, and stops trusting the feed.
 
 - **30-day expiry.** The bot deletes the channel post and marks it `expired`.
 - **Day 25: «Ще актуально?»** — one tap to extend 30 more days or close it.
-- **`/sold`** closes a listing immediately; the bot edits the post to
-  ~~struck-through~~ with «ПРОДАНО» and removes it a day later, so a buyer
-  mid-conversation sees what happened.
-- **`/my`** lists the seller's active items with close buttons.
+- **`/sold`** (also the `✅ Продано` keyboard button) closes a listing
+  immediately: the bot prefixes the channel caption with «🔴 ПРОДАНО» and the
+  sweep removes the post a day later, so a buyer mid-conversation sees what
+  happened instead of finding a hole.
+- **`/my`** lists the seller's own listings — pending, live and just-sold —
+  with their status.
+
+Two things came out differently from the sketch above, both on purpose:
+
+**A prefix, not strikethrough.** Strikethrough needs `parse_mode`, and the
+caption carries seller-written text. Letting a seller's title render as markup
+is the one thing this repo consistently refuses, so «🔴 ПРОДАНО» goes on as a
+plain first line.
+
+**The card is rebuilt, not re-read.** The `sold:` tap arrives on the picker
+message in the bot chat, which has no caption, and a bot cannot fetch a message
+it did not just send. So the new caption is rebuilt from the row the status
+call returns — which is why `/api/listing/status` hands back the whole row and
+not just an ok.
+
+Ownership is checked in the bot, not the Worker: `/api/listing/status` is a
+Worker-to-Worker call that the owner's approval uses too, so before a `sold:`
+tap changes anything the bot confirms the id is in the tapping user's own
+`/api/listing/mine` list and still `live`. A guessed id from a stranger, or a
+second tap on something already closed, gets «Це оголошення не ваше або вже
+закрите» and writes nothing.
 
 ## Anti-abuse
 
@@ -274,7 +296,8 @@ a plausible quarter:
 5. Одяг, взуття та дрібні речі, які можна принести в руках
    (спортінвентар — так; меблі, техніка, авто — ні).
 6. Заборонено: репліки як оригінал, нові речі.
-7. Продали — /sold. Через 30 днів оголошення зникає саме.
+7. Продали — кнопка «✅ Продано» або /sold.
+   Свої оголошення — /my. Через 30 днів зникає саме.
 
 Питання по речі — у коментарях під нею.
 ```
