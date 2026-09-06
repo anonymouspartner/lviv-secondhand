@@ -1,0 +1,145 @@
+name: Pin the барахолка rules
+
+# Posts the flea-market rules to the Telegram channel and pins them.
+#
+# WHY A WORKFLOW AND NOT A COPY-PASTE
+# The rules are what sellers are held to, and docs/MARKET.md is what the next
+# change gets made against. Typing them into Telegram by hand makes those two
+# drift the first time a rule changes — so scripts/channel-rules.mjs reads the
+# fenced block out of the document and this posts exactly that. Edit the doc,
+# re-run this, and the pin matches again.
+#
+# BY HAND ONLY. No schedule: pinning is a deliberate act, and a scheduled
+# re-post would put a duplicate rules message in the channel every time.
+#
+# NOTE ON AUTO-DELETE. If the channel has Telegram's auto-delete timer set, the
+# pinned rules are deleted with everything else when it expires, and this has
+# to be run again. The real fix is turning that setting off in the channel.
+#
+# NO parse_mode, for the same reason as every other channel post here: the text
+# carries «» quotes, emoji and @handles, and no arrangement of them can be made
+# to break a post that is never parsed as markup.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run the pre-flights and print the text, but post nothing"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Post the rules and pin them
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHANNEL: ${{ vars.TG_CHANNEL || secrets.TG_CHANNEL }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ -z "$BOT_TOKEN" ] || [ -z "$TG_CHANNEL" ]; then
+            MISSING=""
+            [ -z "$BOT_TOKEN" ] && MISSING="BOT_TOKEN"
+            [ -z "$TG_CHANNEL" ] && MISSING="${MISSING:+$MISSING and }TG_CHANNEL"
+            echo "::notice::$MISSING not set — nothing to pin to. See docs/TELEGRAM_CHANNEL.md."
+            exit 0
+          fi
+          API="https://api.telegram.org/bot$BOT_TOKEN"
+
+          RULES=$(node scripts/channel-rules.mjs)
+          echo "Rules extracted from docs/MARKET.md:"
+          echo "--------"
+          printf '%s\n' "$RULES"
+          echo "--------"
+
+          # Pre-flights, in the order that makes a failure name its own cause.
+          # A pin that fails after the post has gone out leaves the channel with
+          # an unpinned wall of rules and no explanation.
+          NAME=$(curl -s "$API/getMe" | jq -r '.result.username // empty')
+          if [ -z "$NAME" ]; then
+            echo "::error::Telegram rejected the bot token."
+            exit 1
+          fi
+          echo "Token valid — bot @$NAME"
+
+          CHAT=$(curl -sG "$API/getChat" --data-urlencode "chat_id=$TG_CHANNEL")
+          CHAT_ID=$(echo "$CHAT" | jq -r '.result.id // empty')
+          if [ -z "$CHAT_ID" ]; then
+            echo "::error::Cannot resolve $TG_CHANNEL: $(echo "$CHAT" | jq -c '.description // .')"
+            exit 1
+          fi
+          echo "Channel resolved: $(echo "$CHAT" | jq -r '.result.title') ($TG_CHANNEL)"
+          # Reported, not enforced: without a linked discussion group there are
+          # no comments under a post, which is why the rules name the seller.
+          LINKED=$(echo "$CHAT" | jq -r '.result.linked_chat_id // empty')
+          echo "Discussion group linked: ${LINKED:-no (posts have no comments)}"
+
+          ME=$(curl -sG "$API/getChatMember" \
+                 --data-urlencode "chat_id=$TG_CHANNEL" \
+                 --data-urlencode "user_id=$(curl -s "$API/getMe" | jq -r '.result.id')")
+          CAN_POST=$(echo "$ME" | jq -r '.result.can_post_messages // false')
+          CAN_PIN=$(echo "$ME" | jq -r '.result.can_pin_messages // false')
+          if [ "$CAN_POST" != "true" ]; then
+            echo "::error::@$NAME cannot post in $TG_CHANNEL. Make it an administrator with 'Post messages'."
+            exit 1
+          fi
+          if [ "$CAN_PIN" != "true" ]; then
+            echo "::error::@$NAME can post in $TG_CHANNEL but cannot pin. Grant 'Pin messages' in the channel's administrator settings and re-run — posting an unpinned copy would leave a stray message to delete."
+            exit 1
+          fi
+          echo "Rights confirmed: post ✓ pin ✓"
+
+          if [ "$DRY_RUN" = "true" ]; then
+            {
+              echo "### Dry run — nothing was posted"
+              echo ""
+              echo "The token, the channel and both rights check out, and the text above is what would be pinned."
+              echo "Re-run with **dry_run unchecked** to post and pin it."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::Dry run complete — nothing posted."
+            exit 0
+          fi
+
+          POST=$(curl -s -X POST "$API/sendMessage" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg c "$TG_CHANNEL" --arg t "$RULES" \
+                  '{chat_id:$c, text:$t, disable_web_page_preview:true}')")
+          MSG_ID=$(echo "$POST" | jq -r '.result.message_id // empty')
+          if [ -z "$MSG_ID" ]; then
+            echo "::error::Posting the rules failed: $(echo "$POST" | jq -c '.description // .')"
+            exit 1
+          fi
+          echo "Posted: message $MSG_ID"
+
+          # Silent: subscribers do not need a notification for a housekeeping
+          # post, and a noisy pin is the kind of thing people mute a channel for.
+          PIN=$(curl -s -X POST "$API/pinChatMessage" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg c "$TG_CHANNEL" --argjson m "$MSG_ID" \
+                  '{chat_id:$c, message_id:$m, disable_notification:true}')")
+          if [ "$(echo "$PIN" | jq -r '.ok // false')" != "true" ]; then
+            echo "::error::The rules were posted as message $MSG_ID but pinning failed: $(echo "$PIN" | jq -c '.description // .'). Pin it by hand, or grant the right and re-run (delete message $MSG_ID first)."
+            exit 1
+          fi
+          LINK="https://t.me/${TG_CHANNEL#@}/$MSG_ID"
+          echo "::notice::Rules pinned: $LINK"
+          {
+            echo "### Rules posted and pinned"
+            echo ""
+            echo "- **Post:** $LINK"
+            echo ""
+            echo '```'
+            printf '%s\n' "$RULES"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
