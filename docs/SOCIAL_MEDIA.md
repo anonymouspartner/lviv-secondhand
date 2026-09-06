@@ -19,8 +19,8 @@ above both: which channels, which content, in what order.
 
 | | Status |
 | --- | --- |
-| Instagram [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/) | Two automatic posts/week (Monday deals ranking, Thursday store of the week), plus ~12 evergreen images posted by hand |
-| Telegram **channel** | ✅ **Live** at [@Lviv_Secondhand](https://t.me/Lviv_Secondhand) — two mirrored posts plus a channel-only daily restock line |
+| Instagram [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/) | Two automatic posts/week (Monday deals ranking, Thursday store of the week), plus ~12 evergreen images posted by hand — **and now one post per approved барахолка listing** ([MARKET.md](MARKET.md#instagram--every-listing-mirrored)) |
+| Telegram **channel** | ✅ **Live** at [@Lviv_Secondhand](https://t.me/Lviv_Secondhand) — two mirrored posts, a channel-only daily restock line, and the барахолка |
 | Telegram **bot** | A product, not a channel — reaches people who already found us |
 | Web push | Built, opt-in, same problem: existing users only |
 | Facebook / TikTok / Threads / YouTube | Nothing |
@@ -96,6 +96,25 @@ that one post.
 
 **Watch out:** a channel that posts more than ~1×/day gets muted. Daily restock
 line + Monday ranking is about right; hold everything else.
+
+**The барахолка deliberately breaks that rule, on both surfaces.** Every
+approved listing is a channel post and now an Instagram post too
+([MARKET.md](MARKET.md#instagram--every-listing-mirrored)), and there is no cap
+on listings — that was decided outright. So the volume guidance above no longer
+holds for the channel, and the Instagram feed now mixes the map's own data
+posts with strangers' jackets. Both are real costs, taken knowingly, and both
+are measurable rather than matters of opinion:
+
+- **Channel:** subscriber count and the mute rate. If growth flattens or
+  reverses in a week where listings spiked, listings are the cause.
+- **Instagram:** saves and profile→link taps *on the map posts*, before and
+  after. Item posts earn less engagement than data posts, and Instagram ranks
+  an account partly on its recent average — so the risk is not that listings
+  underperform, it is that they drag the Monday ranking down with them.
+
+If either moves the wrong way, the fix is not to stop mirroring: it is to batch
+listings into one digest post per week and keep the per-item posts on the
+channel, where they cost nothing.
 
 ### B. Short video — the only real discovery surface
 

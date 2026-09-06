@@ -1,0 +1,229 @@
+name: Mirror a listing to Instagram
+
+# Posts one approved барахолка listing to Instagram, as its own post.
+#
+# WHY THIS RUNS HERE AND NOT IN THE BOT
+# The bot approves the listing and posts it to the channel itself — that part
+# needs no runner. Instagram needs two things a Cloudflare Worker cannot give
+# it: a headless browser (the card is rendered, see below) and a PUBLIC image
+# URL for Meta to fetch, which GitHub Pages already serves for anything
+# committed. So the bot sends a repository_dispatch carrying the listing id and
+# nothing else, and this workflow re-reads the listing from the metrics Worker.
+# The id is all it is given and all it needs; nothing in the payload is trusted.
+#
+# WHY A RENDERED CARD RATHER THAN THE SELLER'S PHOTO
+# Instagram accepts 4:5 to 1.91:1 and rejects everything else with a generic
+# container error. A phone photo is routinely 9:16, so posting raw photos would
+# fail on roughly every second listing, opaquely. The card also carries the
+# price, size and district — captions are not clickable on Instagram, so what a
+# reader needs has to be inside the image. See tools/social/listing-card.mjs.
+#
+# TWO GATES, BOTH IN THE DATA
+#   status = live — a pending or rejected listing is never mirrored. The owner's
+#     approval is what makes it live, so the human gate is the same one.
+#   ig_ok = 1     — set only by the /sell wizard, which tells the seller their
+#     listing goes to Instagram before they publish. A listing whose seller was
+#     never told cannot be mirrored no matter who triggers this.
+#
+# Unconfigured is a no-op, not a failure: without BOT_TOKEN or ADMIN_KEY this
+# exits green, same as every other pipeline here.
+
+on:
+  repository_dispatch:
+    types: [listing_to_instagram]
+  workflow_dispatch:
+    inputs:
+      listing_id:
+        description: "Listing id (the 8-character id from the approval message)"
+        required: true
+        type: string
+      dry_run:
+        description: "Render and commit the card, but do not post it"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# Every run commits and pushes. Queued, never cancelled: two listings approved
+# a minute apart are two posts, and dropping one would silently lose it.
+concurrency:
+  group: market-listing-ig
+  cancel-in-progress: false
+
+env:
+  SITE: https://www.lvivsecondhand.com
+  METRICS: https://lviv-metrics.lshanalytic.workers.dev
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.fetch.outputs.ready }}
+      image: ${{ steps.render.outputs.image }}
+      caption: ${{ steps.render.outputs.caption }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Fetch first, install later: a listing that turns out not to qualify
+      # should cost seconds, not a Chromium download. Same ordering as
+      # instagram-feature.yml's picker.
+      - name: Read the listing and its photo
+        id: fetch
+        env:
+          # Via env, never interpolated into the script body — a value pasted
+          # into `run:` as ${{ }} is substituted before bash parses it.
+          GIVEN: ${{ inputs.listing_id }}
+          DISPATCHED: ${{ github.event.client_payload.listing_id }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          ID="${GIVEN:-$DISPATCHED}"
+          if [ -z "$ID" ]; then
+            echo "::error::No listing id given."
+            exit 1
+          fi
+          # Shape check before the id reaches a URL or a file path. Ids are
+          # crypto.randomUUID().slice(0,8) — hex and dashes, nothing else.
+          case "$ID" in
+            ''|*[!a-f0-9-]*) echo "::error::listing id '$ID' is not a plain hex id."; exit 1 ;;
+          esac
+          if [ ${#ID} -gt 36 ]; then echo "::error::listing id is too long."; exit 1; fi
+
+          if [ -z "$ADMIN_KEY" ] || [ -z "$BOT_TOKEN" ]; then
+            echo "::notice::ADMIN_KEY or BOT_TOKEN not set — skipping the Instagram mirror."
+            exit 0
+          fi
+
+          ROW=$(curl -s -X POST "$METRICS/api/listing/get" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg id "$ID" --arg k "$ADMIN_KEY" '{id:$id, key:$k}')" || echo '{}')
+          if [ "$(echo "$ROW" | jq -r '.ok // false')" != "true" ]; then
+            echo "::error::The metrics Worker did not return listing $ID: $(echo "$ROW" | jq -c '.reason // .')"
+            exit 1
+          fi
+          L=$(echo "$ROW" | jq -c '.listing')
+
+          # The two gates. Both are refusals, not errors: an owner re-running
+          # this by hand on a rejected listing should be told no, not handed a
+          # red run.
+          STATUS=$(echo "$L" | jq -r '.status // empty')
+          IG_OK=$(echo "$L" | jq -r '.ig_ok // 0')
+          if [ "$STATUS" != "live" ]; then
+            echo "::notice::Listing $ID is '$STATUS', not live — not mirroring."
+            exit 0
+          fi
+          if [ "$IG_OK" != "1" ]; then
+            echo "::notice::Listing $ID has no ig_ok — its seller was never told it would go to Instagram. Not mirroring."
+            exit 0
+          fi
+
+          FILE_ID=$(echo "$L" | jq -r '.photo_ids' | jq -r '.[0] // empty')
+          if [ -z "$FILE_ID" ]; then
+            echo "::error::Listing $ID has no photo."
+            exit 1
+          fi
+
+          # Two calls: getFile resolves a path, then the file is fetched from
+          # Telegram's file host. Both URLs embed the bot token, so neither is
+          # ever echoed — only the resolved path and the byte count are.
+          FP=$(curl -s "https://api.telegram.org/bot$BOT_TOKEN/getFile" \
+                 -d "file_id=$FILE_ID" | jq -r '.result.file_path // empty')
+          if [ -z "$FP" ]; then
+            echo "::error::Telegram would not resolve the listing's photo. The file_id may have expired."
+            exit 1
+          fi
+          curl -s -o /tmp/listing-photo.jpg "https://api.telegram.org/file/bot$BOT_TOKEN/$FP"
+          MAGIC=$(od -An -N3 -tx1 /tmp/listing-photo.jpg | tr -d ' \n')
+          if [ "$MAGIC" != "ffd8ff" ]; then
+            echo "::error::What Telegram returned for $FP is not a JPEG (first bytes: ${MAGIC:-none})."
+            exit 1
+          fi
+          echo "Photo: $FP ($(wc -c < /tmp/listing-photo.jpg) bytes, JPEG confirmed)"
+
+          # The row goes to the renderer as JSON, through the environment file
+          # rather than an output, so no part of a seller's title is ever
+          # substituted into a shell command line.
+          {
+            echo 'LISTING_JSON<<LISTING_JSON_EOF'
+            echo "$L"
+            echo 'LISTING_JSON_EOF'
+          } >> "$GITHUB_ENV"
+          echo "LISTING_ID=$ID" >> "$GITHUB_ENV"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install deps + Chromium
+        if: steps.fetch.outputs.ready == 'true'
+        working-directory: tools/social
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Render the card and its caption
+        id: render
+        if: steps.fetch.outputs.ready == 'true'
+        env:
+          LISTING_PHOTO: /tmp/listing-photo.jpg
+        run: |
+          IMG="marketing/instagram/market/${LISTING_ID}.jpg"
+          CAP="marketing/instagram/market/${LISTING_ID}.txt"
+          (cd tools/social && LISTING_OUT="$IMG" node listing-card.mjs)
+          if [ ! -f "$IMG" ] || [ ! -f "$CAP" ]; then
+            echo "::error::the renderer did not produce $IMG and $CAP."
+            exit 1
+          fi
+          echo "image=$IMG" >> "$GITHUB_OUTPUT"
+          {
+            echo 'caption<<LISTING_CAPTION_EOF'
+            cat "$CAP"
+            echo 'LISTING_CAPTION_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # Committed because Meta fetches the image over HTTP at publish time and
+      # GitHub Pages serves the repo root — committing IS how it gets a public
+      # URL. Same mechanism the ad, deals and feature pipelines rely on.
+      - name: Commit the card
+        if: steps.fetch.outputs.ready == 'true'
+        env:
+          IMG: ${{ steps.render.outputs.image }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$IMG" "${IMG%.jpg}.txt"
+          if git diff --cached --quiet; then
+            echo "Card is unchanged since the last run — nothing to commit."
+          else
+            git commit -m "Listing card for $LISTING_ID [skip ci]"
+            # One retry: listings can be approved in bursts, and another
+            # pipeline (deals, features) may have pushed since checkout.
+            git push || { git pull --rebase && git push; }
+          fi
+
+      - name: Wait for Pages to serve it
+        if: steps.fetch.outputs.ready == 'true'
+        env:
+          IMG: ${{ steps.render.outputs.image }}
+        run: |
+          URL="$SITE/$IMG"
+          for i in $(seq 1 30); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -L "$URL" || true)
+            [ "$CODE" = "200" ] && { echo "Live: $URL"; exit 0; }
+            sleep 10
+          done
+          echo "::error::$URL did not become reachable within 5 minutes."
+          exit 1
+
+  publish:
+    needs: render
+    if: needs.render.outputs.ready == 'true' && inputs.dry_run != true
+    uses: ./.github/workflows/instagram-post.yml
+    secrets: inherit
+    with:
+      image: ${{ needs.render.outputs.image }}
+      caption: ${{ needs.render.outputs.caption }}

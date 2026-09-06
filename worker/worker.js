@@ -184,7 +184,7 @@ async function ensureSchema(env) {
   // a Worker fetching another Worker on the same zone by its public URL gets
   // 404 / error 1042.
   await env.DB.prepare(
-    "CREATE TABLE IF NOT EXISTS listings (id TEXT PRIMARY KEY, seller_id TEXT NOT NULL, seller_username TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, price_uah INTEGER NOT NULL, size TEXT, condition TEXT, area TEXT, photo_ids TEXT NOT NULL, status TEXT NOT NULL, channel_msg_id INTEGER, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, nudged_at TEXT)"
+    "CREATE TABLE IF NOT EXISTS listings (id TEXT PRIMARY KEY, seller_id TEXT NOT NULL, seller_username TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, price_uah INTEGER NOT NULL, size TEXT, condition TEXT, area TEXT, photo_ids TEXT NOT NULL, status TEXT NOT NULL, channel_msg_id INTEGER, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, nudged_at TEXT, ig_ok INTEGER)"
   ).run();
   // The sweep runs every five minutes and asks exactly one question — which
   // live listings are due — so it gets the index that answers it. Without this
@@ -197,6 +197,12 @@ async function ensureSchema(env) {
   // must, and it throws harmlessly once the column is there. Same shape as the
   // promos.cust_id migration.
   try { await env.DB.prepare('ALTER TABLE events ADD COLUMN src TEXT').run(); } catch {}
+  // `ig_ok` records that the seller was told, at the moment they published,
+  // that the listing also goes to Instagram. It is deliberately a stored fact
+  // rather than a config flag: rows created before the wizard said so have no
+  // 1 in this column and can never be mirrored, however the code later
+  // changes. Same migration shape as events.src above.
+  try { await env.DB.prepare('ALTER TABLE listings ADD COLUMN ig_ok INTEGER').run(); } catch {}
   _schemaReady = true;
 }
 
@@ -2107,13 +2113,17 @@ export default {
       }
       await ensureSchema(env);
       const id = crypto.randomUUID().slice(0, 8);
+      // Only the caller that actually showed the seller the Instagram line can
+      // set this, and it is written once at creation — nothing downstream can
+      // turn a listing into an Instagram post after the fact.
+      const igOk = b.ig_ok === true || b.ig_ok === 1 ? 1 : 0;
       await env.DB.prepare(
-        'INSERT INTO listings (id, seller_id, seller_username, category, title, price_uah, size, condition, area, photo_ids, status, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO listings (id, seller_id, seller_username, category, title, price_uah, size, condition, area, photo_ids, status, created_at, expires_at, ig_ok) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(
         id, b.seller_id, cleanText(b.seller_username, 32), b.category,
         cleanText(b.title, 60), Math.round(price),
         cleanText(b.size, 12) || null, cleanText(b.condition, 12) || null, cleanText(b.area, 60) || null,
-        JSON.stringify(photos), 'pending', kyivDateStr(), isoDaysFromNow(LISTING_TTL_DAYS)
+        JSON.stringify(photos), 'pending', kyivDateStr(), isoDaysFromNow(LISTING_TTL_DAYS), igOk
       ).run();
       return json({ ok: true, id }, 200, origin);
     }
@@ -2143,6 +2153,20 @@ export default {
       await env.DB.prepare('UPDATE listings SET status = ?, channel_msg_id = ?, expires_at = ? WHERE id = ?')
         .bind(status, msgId, expires, id).run();
       return json({ ok: true, id, status, listing: { ...row, status, channel_msg_id: msgId, expires_at: expires } }, 200, origin);
+    }
+
+    // ── Барахолка: one listing, by id ─────────────────────────────────────
+    // For the Instagram mirror, which runs in GitHub Actions rather than in a
+    // Worker and so has no service binding — it authenticates with ADMIN_KEY
+    // like every other caller here. Read-only on purpose: the workflow renders
+    // and posts, it never changes a listing's state.
+    if (url.pathname === '/api/listing/get') {
+      if (!env.ADMIN_KEY || (body && body.key) !== env.ADMIN_KEY) return json({ ok: false }, 401, origin);
+      if (typeof (body && body.id) !== 'string') return json({ ok: false, reason: 'bad_request' }, 400, origin);
+      await ensureSchema(env);
+      const row = await env.DB.prepare('SELECT * FROM listings WHERE id = ?').bind(body.id).first();
+      if (!row) return json({ ok: false, reason: 'not_found' }, 404, origin);
+      return json({ ok: true, listing: row }, 200, origin);
     }
 
     // ── Барахолка: one seller's listings, for /my ──────────────────────────

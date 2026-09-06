@@ -3117,6 +3117,29 @@ function sellCard(d, username) {
   ].filter((x) => x !== null).join('\n');
 }
 
+// Asks GitHub to mirror one approved listing to Instagram
+// (.github/workflows/market-listing-ig.yml). Same repository_dispatch
+// mechanism as dispatchMapPatch, and deliberately the same shape: rendering a
+// 1080×1350 card needs a headless browser, which a Worker does not have, and
+// Instagram's API will only fetch a public URL, which GitHub Pages already
+// serves. The workflow re-reads the listing from the metrics Worker rather than
+// trusting anything in this payload — the id is all it needs, and all it gets.
+async function dispatchListingToInstagram(env, listingId) {
+  if (!env.GH_PAT) throw new Error('GH_PAT not configured');
+  const res = await fetch('https://api.github.com/repos/anonymouspartner/lviv-secondhand/dispatches', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.GH_PAT}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'lviv-secondhand-bot',
+    },
+    body: JSON.stringify({ event_type: 'listing_to_instagram', client_payload: { listing_id: listingId } }),
+  });
+  if (res.status !== 204) throw new Error(`dispatch failed: ${res.status}`);
+}
+
 // Every state change goes through the metrics Worker, which owns the table.
 async function sellApi(env, path, payload) {
   const res = await metricsFetch(env, path, {
@@ -3248,7 +3271,11 @@ async function handleSellFlow(env, c, msg, ctx) {
     await putSellSession(env, uid, session);
     const uname = (ctx.from && ctx.from.username) || '';
     await tg(env, 'sendPhoto', { chat_id: chatId, photo: d.photos[0], caption: sellCard(d, uname) });
-    await say(env, chatId, `Так виглядатиме оголошення. Публікуємо?\n\nПісля перевірки воно з’явиться в каналі.` + SELL_CANCEL_HINT, sellKb([[SELL_PUBLISH]]));
+    // Says both surfaces, here, where the seller is deciding — not in a rule
+    // post they will not read. Instagram is a public feed outside Telegram and
+    // outside our control once posted, so publishing there on the strength of
+    // "з’явиться в каналі" would be publishing something they did not agree to.
+    await say(env, chatId, `Так виглядатиме оголошення. Публікуємо?\n\nПісля перевірки воно з’явиться <b>в каналі та в Instagram</b> (@secondhandlvivbot) — з фото, ціною і вашим @${esc((ctx.from && ctx.from.username) || '')}.` + SELL_CANCEL_HINT, sellKb([[SELL_PUBLISH]]));
     return true;
   }
 
@@ -3259,6 +3286,10 @@ async function handleSellFlow(env, c, msg, ctx) {
       seller_id: String(uid), seller_username: uname, category: d.category,
       title: d.title, price_uah: d.price, size: d.size || null,
       condition: d.condition || null, area: d.area || null, photo_ids: d.photos,
+      // The seller saw the Instagram line one step ago. Stored on the row, so
+      // the mirror can tell a listing whose seller was told from one made
+      // before the wizard said anything.
+      ig_ok: 1,
     });
     if (!out || !out.ok) {
       // Never claim it was submitted when the call did not happen — the whole
@@ -3342,6 +3373,17 @@ async function handleSellCallback(env, c, cq) {
     const out = await sellApi(env, '/api/listing/status', { id, status: 'live', channel_msg_id: msgId });
     if (out && out.ok && out.listing) {
       await tg(env, 'sendMessage', { chat_id: out.listing.seller_id, text: `✅ Ваше оголошення опубліковано: ${out.listing.title}\n\nПродали — надішліть /sold.` });
+    }
+    // Instagram last, and only after the channel post is recorded: the channel
+    // is where the market actually lives, and a GitHub outage must not cost a
+    // listing its publication. Gated on ig_ok, which is set only by a wizard
+    // that showed the seller the Instagram line.
+    if (out && out.ok && out.listing && out.listing.ig_ok === 1) {
+      try {
+        await dispatchListingToInstagram(env, id);
+      } catch (e) {
+        await tg(env, 'sendMessage', { chat_id: c.ownerId, text: `📸 #${id} у каналі, але дзеркало в Instagram не запустилося (${String(e && e.message || e).slice(0, 80)}).\n\nЗапустіть вручну: Actions → Mirror a listing to Instagram.` });
+      }
     }
     await tg(env, 'editMessageReplyMarkup', { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
     return true;
