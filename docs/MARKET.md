@@ -343,6 +343,13 @@ Posted and pinned by `.github/workflows/channel-rules.yml`, which reads the
 block below rather than a copy — so the pinned post and this document cannot
 drift. Re-run it after editing the block.
 
+Pinning in a **channel** is granted by `can_edit_messages`, not
+`can_pin_messages`: the Bot API says the latter is "for groups and supergroups
+only", and describes the former as "can edit messages of other users **and can
+pin messages**; for channels only". A channel admin therefore never reports
+`can_pin_messages`, and a pre-flight that checks it refuses every channel while
+telling the owner to grant a right Telegram does not offer for channels.
+
 The last line names the seller rather than the comments, because the channel
 has **no linked discussion group**: there are no comments under a channel post
 until one is linked, and the seller's `@username` is the only contact by

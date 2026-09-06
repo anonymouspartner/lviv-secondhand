@@ -79,7 +79,8 @@ jobs:
             echo "::error::Cannot resolve $TG_CHANNEL: $(echo "$CHAT" | jq -c '.description // .')"
             exit 1
           fi
-          echo "Channel resolved: $(echo "$CHAT" | jq -r '.result.title') ($TG_CHANNEL)"
+          CHAT_TYPE=$(echo "$CHAT" | jq -r '.result.type // empty')
+          echo "Channel resolved: $(echo "$CHAT" | jq -r '.result.title') ($TG_CHANNEL, type $CHAT_TYPE)"
           # Reported, not enforced: without a linked discussion group there are
           # no comments under a post, which is why the rules name the seller.
           LINKED=$(echo "$CHAT" | jq -r '.result.linked_chat_id // empty')
@@ -89,16 +90,34 @@ jobs:
                  --data-urlencode "chat_id=$TG_CHANNEL" \
                  --data-urlencode "user_id=$(curl -s "$API/getMe" | jq -r '.result.id')")
           CAN_POST=$(echo "$ME" | jq -r '.result.can_post_messages // false')
-          CAN_PIN=$(echo "$ME" | jq -r '.result.can_pin_messages // false')
           if [ "$CAN_POST" != "true" ]; then
             echo "::error::@$NAME cannot post in $TG_CHANNEL. Make it an administrator with 'Post messages'."
             exit 1
           fi
+
+          # WHICH FIELD GRANTS PINNING DEPENDS ON THE CHAT TYPE, and getting this
+          # wrong reads as a missing permission that cannot be granted. The Bot
+          # API is explicit: can_pin_messages is "for groups and supergroups
+          # only", can_edit_messages is "True, if the administrator can edit
+          # messages of other users AND CAN PIN MESSAGES; for channels only",
+          # and pinChatMessage wants "the 'can_pin_messages' right or the
+          # 'can_edit_messages' right to pin messages in groups and channels
+          # respectively". So a channel admin never reports can_pin_messages at
+          # all — checking it sent the owner looking for a toggle Telegram does
+          # not show for channels, while the bot already had the right.
+          if [ "$CHAT_TYPE" = "channel" ]; then
+            PIN_FIELD="can_edit_messages"
+            PIN_LABEL="Edit Messages (which is what grants pinning in a channel)"
+          else
+            PIN_FIELD="can_pin_messages"
+            PIN_LABEL="Pin Messages"
+          fi
+          CAN_PIN=$(echo "$ME" | jq -r --arg f "$PIN_FIELD" '.result[$f] // false')
           if [ "$CAN_PIN" != "true" ]; then
-            echo "::error::@$NAME can post in $TG_CHANNEL but cannot pin. Grant 'Pin messages' in the channel's administrator settings and re-run — posting an unpinned copy would leave a stray message to delete."
+            echo "::error::@$NAME can post in $TG_CHANNEL but $PIN_FIELD is not set. Grant '$PIN_LABEL' in the administrator settings and re-run — posting an unpinned copy would leave a stray message to delete."
             exit 1
           fi
-          echo "Rights confirmed: post ✓ pin ✓"
+          echo "Rights confirmed: post ✓ pin ✓ (via $PIN_FIELD)"
 
           if [ "$DRY_RUN" = "true" ]; then
             {
