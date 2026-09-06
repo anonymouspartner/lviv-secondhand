@@ -88,7 +88,7 @@ scheduled post will work.
 | --- | --- | --- |
 | Mondays ~07:00 Kyiv | The week's "longest since a restock" ranking — **only when the ranking actually moved** | `deals-image.yml` → `telegram-channel-post.yml` |
 | Thursdays ~13:00 Kyiv | Store of the week — one shop, chosen by `pick-feature.mjs`, labelled *not an ad* | `instagram-feature.yml` → `telegram-channel-post.yml` |
-| Every evening ~19:00 Kyiv | **Who restocks tomorrow** — text only, and silent on days with nothing on record | `restock-tomorrow.yml` → `telegram-channel-post.yml` |
+| Every evening, ~17:00–21:30 Kyiv | **Who restocks tomorrow** — text only, and silent on days with nothing on record | `restock-tomorrow.yml` → `telegram-channel-post.yml` |
 
 The first two mirror what goes to Instagram, from the same image and the same
 caption. Each surface is its own job, so an expired Instagram token cannot stop
@@ -138,6 +138,13 @@ than Instagram's 2200. Rather than truncate — which would drop the URL at the
 end, the whole reason for posting here — the workflow posts the photo bare and
 puts the full text in a reply underneath. The current captions are ~400–600
 characters, so this is a guard, not a routine path.
+
+**A cron is the earliest possible time, not the delivery time.** GitHub runs
+scheduled workflows late — measured on this repo, between two and five and a
+half hours. That is why the daily line's cron is 14:00 UTC for an evening post
+rather than 17:00: the whole delay range has to land before Kyiv midnight,
+because a run after midnight announces the day after next and silently skips a
+day.
 
 **Nothing is retracted by deleting the file.** A post is live the moment the API
 returns; removing the committed image later leaves the post in place with a

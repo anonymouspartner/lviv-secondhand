@@ -3,6 +3,20 @@ name: Daily restock line
 # Posts "who restocks tomorrow" to the Telegram channel, every evening Kyiv
 # time — early enough to plan the next morning around it.
 #
+# WHY 14:00 UTC AND NOT 17:00, WHICH IS WHAT 20:00 KYIV WOULD SUGGEST
+# GitHub does not run scheduled workflows on time. Measured on this repo:
+# refresh-pages.yml (cron 03:17) has fired between 07:44 and 08:45 — 4h27m to
+# 5h28m late — and this workflow's first scheduled run was 1h51m late. So the
+# cron is not a delivery time, it is the earliest possible one, with a tail of
+# several hours behind it.
+#
+# 14:00 UTC puts the whole observed range between roughly 17:00 and 21:30 Kyiv.
+# The previous 16:00 landed at 20:50 on its first run, but at the slow end of
+# that range it would cross Kyiv midnight — and that does not merely make the
+# post late, it makes it WRONG: restock-tomorrow.mjs computes "tomorrow" from
+# the actual run time, so a run at 00:30 announces the day after next and the
+# intervening day is never announced at all.
+#
 # WHY THIS IS THE ONE POST THAT EARNS A DAILY SLOT
 # The bot already answers "today" on demand. What a broadcast can do that a
 # command cannot is arrive BEFORE you need it: a restock is worth knowing the
@@ -24,7 +38,7 @@ name: Daily restock line
 
 on:
   schedule:
-    - cron: "0 16 * * *" # Daily 16:00 UTC (~19:00 Europe/Kyiv)
+    - cron: "0 14 * * *" # Daily 14:00 UTC — see the delay note above
   workflow_dispatch:
     inputs:
       dry_run:
