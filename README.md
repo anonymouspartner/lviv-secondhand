@@ -279,6 +279,8 @@ The channel is [**@Lviv_Secondhand**](https://t.me/Lviv_Secondhand), and it is w
 | `tools/social/promo.mjs` | 4 evergreen posts about the app × 2 sizes, counts read live from `stores.json` |
 | `tools/social/avatar.mjs` | Profile photo, 3 variants, drawn from `favicon.svg`'s vector geometry |
 | `.github/workflows/instagram-post.yml` | Publishes one image. `workflow_dispatch` + `workflow_call`; no-ops without secrets |
+| `.github/workflows/instagram-carousel.yml` | Publishes 2–10 images as one swipeable post. Caption comes from a committed `.txt`; `dry_run` defaults on |
+| `tools/social/whats-new.mjs` | The five-card "what's new" carousel explaining the барахолка and the channel |
 | `.github/workflows/instagram-token-check.yml` | Weekly token check that **messages the owner on Telegram** when it breaks |
 | `.github/workflows/telegram-channel-post.yml` | Posts one image + caption to the Telegram channel. Same inputs as the Instagram poster; no-ops without `TG_CHANNEL` |
 | `.github/workflows/restock-tomorrow.yml` | Nightly "who restocks tomorrow" line, channel-only. Silent when tomorrow has nothing on record |
