@@ -452,6 +452,7 @@ const MENU_CHEAP = '🕒 Найдовше без завозу';
 const MENU_RARE = '🐢 Рідко оновлюють';
 const MENU_ADD = '➕ Додати магазин';
 const MENU_FEEDBACK = '💬 Залишити відгук';
+const MENU_SELL = '🏷 Продати річ';
 const MENU_HELP = '❓ Довідка';
 const MENU_BACK = '⬅️ Назад';
 // Extra row, appended only for the owner/agents (see mainMenuMarkupFor) — the
@@ -467,7 +468,8 @@ function kbMarkup(rows) {
 const MAIN_MENU_MARKUP = kbMarkup([
   [MENU_DAY, MENU_CHEAP],
   [MENU_RARE, MENU_ADD],
-  [MENU_FEEDBACK, MENU_HELP],
+  [MENU_SELL, MENU_FEEDBACK],
+  [MENU_HELP],
 ]);
 // isOwner/isAgent gate real access everywhere these menus are actually used
 // (handleVisit's command router) — this only controls whether the button is
@@ -481,7 +483,8 @@ function mainMenuMarkupFor(isOwner, isAgent) {
   return kbMarkup([
     [MENU_DAY, MENU_CHEAP],
     [MENU_RARE, MENU_ADD],
-    [MENU_FEEDBACK, MENU_HELP],
+    [MENU_SELL, MENU_FEEDBACK],
+    [MENU_HELP],
     extra,
   ]);
 }
@@ -3029,6 +3032,307 @@ async function handleQuestionsStart(env, uid, chatId, session) {
   return say(env, chatId, question.q, question.kb);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Барахолка — the /sell wizard (docs/MARKET.md)
+//
+// The seller side of the resale market. This Worker collects a listing and,
+// once the owner approves it, publishes it to the channel; the metrics Worker
+// owns the table and the clock (it has the D1 binding, this one does not).
+//
+// No money anywhere. The bot never asks for payment details and the card says
+// so, because buyer and seller settle it between themselves — that is the
+// decision the whole design hangs off.
+// ─────────────────────────────────────────────────────────────────────────────
+const SELL_SESSION_TTL = 60 * 60 * 2; // 2h — long enough to find photos, short enough to forget
+const sellKey = (uid) => `sell-session:${uid}`;
+const getSellSession = (env, uid) => env.VISITS.get(sellKey(uid), { type: 'json' });
+const putSellSession = (env, uid, s) => env.VISITS.put(sellKey(uid), JSON.stringify(s), { expirationTtl: SELL_SESSION_TTL });
+const clearSellSession = (env, uid) => env.VISITS.delete(sellKey(uid));
+
+const SELL_MAX_PHOTOS = 4;
+// Seven, the last a catch-all: docs/MARKET.md's reasoning is that every extra
+// category splits a small market into emptier shelves, so the long tail goes in
+// Інше rather than earning its own entry. `code` is what the metrics Worker
+// validates against; `tag` is what a reader searches in the channel.
+const SELL_CATEGORIES = [
+  { code: 'women',       label: '👗 Жіноче',        tag: '#жіноче' },
+  { code: 'men',         label: '👔 Чоловіче',      tag: '#чоловіче' },
+  { code: 'shoes',       label: '👟 Взуття',        tag: '#взуття' },
+  { code: 'kids',        label: '🧸 Дитяче',        tag: '#дитяче' },
+  { code: 'accessories', label: '🎒 Аксесуари',     tag: '#аксесуари' },
+  { code: 'sport',       label: '⚽ Спорт',          tag: '#спорт' },
+  { code: 'other',       label: '📦 Інше',          tag: '#інше' },
+];
+const SELL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+const SELL_CONDITIONS = ['10/10', '9/10', '8/10', '7/10', '6/10 і нижче'];
+const SELL_SKIP = '➡️ Пропустити';
+const SELL_DONE = '✅ Готово';
+const SELL_PUBLISH = '📮 Опублікувати';
+const SELL_CANCEL_HINT = '\n\n/cancel щоб вийти · to abort';
+
+const sellCatByLabel = (t) => SELL_CATEGORIES.find((c) => c.label === t) || null;
+const sellCatByCode = (c) => SELL_CATEGORIES.find((x) => x.code === c) || null;
+const sellKb = (rows) => rows;
+
+// The card as it appears in the channel. Everything on it came from the wizard,
+// so there is no free-form block a seller can fill with contacts or claims —
+// and optional fields vanish when skipped rather than printing «не вказано».
+function sellCard(d, username) {
+  const cat = sellCatByCode(d.category);
+  const spec = [d.size ? `Розмір ${d.size}` : null, d.condition ? `Стан ${d.condition}` : null]
+    .filter(Boolean).join(' · ');
+  // The emoji alone, not the whole label: "👗 Жіноче Джинсова куртка" reads as
+  // a mistake. The category is already stated by the hashtag at the bottom.
+  const icon = cat ? cat.label.split(' ')[0] : '';
+  return [
+    `${icon} ${d.title}`.trim(),
+    spec || null,
+    `${d.price} ₴`,
+    '',
+    d.area ? `📍 ${d.area}` : null,
+    `Продає @${username}`,
+    '',
+    cat ? cat.tag : null,
+    '',
+    // The same reasoning that puts «Не реклама» on an unpaid store feature:
+    // listings share a channel with the map's own posts, so a reader should
+    // never have to work out which kind of post they are looking at.
+    'Оголошення від користувача · ми не беремо участі в угоді',
+  ].filter((x) => x !== null).join('\n');
+}
+
+// Every state change goes through the metrics Worker, which owns the table.
+async function sellApi(env, path, payload) {
+  const res = await metricsFetch(env, path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, key: env.ADMIN_KEY || '' }),
+  });
+  if (!res || !res.ok) return null;
+  try { return await res.json(); } catch { return null; }
+}
+
+// The wizard. Returns true when it consumed the update.
+async function handleSellFlow(env, c, msg, ctx) {
+  if (!c.enabled) return false;
+  const uid = ctx.userId, chatId = ctx.chatId, text = ctx.text;
+  const session = await getSellSession(env, uid);
+
+  // Entry: /sell or the keyboard button.
+  if (!session && (text === '/sell' || text === MENU_SELL)) {
+    // A public @username is the only contact channel a buyer gets, so it is
+    // required rather than optional. Relaying messages through the bot would
+    // double the moderation surface for no benefit at this size.
+    const uname = (ctx.from && ctx.from.username) || '';
+    if (!uname) {
+      await say(env, chatId, '⚠️ Щоб продавати, потрібен публічний @username у Telegram.\n\nНалаштування → Профіль → Ім’я користувача. Потім надішліть /sell ще раз.');
+      return true;
+    }
+    await putSellSession(env, uid, { step: 'category', data: { photos: [] } });
+    await say(env, chatId, '🏷 <b>Що продаєте?</b> Оберіть категорію.' + SELL_CANCEL_HINT,
+      sellKb([[SELL_CATEGORIES[0].label, SELL_CATEGORIES[1].label],
+              [SELL_CATEGORIES[2].label, SELL_CATEGORIES[3].label],
+              [SELL_CATEGORIES[4].label, SELL_CATEGORIES[5].label],
+              [SELL_CATEGORIES[6].label]]));
+    return true;
+  }
+  if (!session) return false;
+
+  if (text === '/cancel') {
+    await clearSellSession(env, uid);
+    await sayMenu(env, c, uid, chatId, '✖️ Скасовано.');
+    return true;
+  }
+
+  const d = session.data;
+  const step = session.step;
+
+  if (step === 'category') {
+    const cat = sellCatByLabel(text);
+    if (!cat) { await say(env, chatId, 'Оберіть категорію кнопкою.' + SELL_CANCEL_HINT); return true; }
+    d.category = cat.code;
+    session.step = 'photos';
+    await putSellSession(env, uid, session);
+    await say(env, chatId, `📷 Надішліть <b>1–${SELL_MAX_PHOTOS} фото</b> речі.\n\nКоли достатньо — «${SELL_DONE}».` + SELL_CANCEL_HINT, sellKb([[SELL_DONE]]));
+    return true;
+  }
+
+  if (step === 'photos') {
+    // Telegram sends one update per photo, largest size last.
+    if (Array.isArray(msg.photo) && msg.photo.length) {
+      if (d.photos.length >= SELL_MAX_PHOTOS) {
+        await say(env, chatId, `Досить — вже ${SELL_MAX_PHOTOS}. Тисніть «${SELL_DONE}».`, sellKb([[SELL_DONE]]));
+        return true;
+      }
+      d.photos.push(msg.photo[msg.photo.length - 1].file_id);
+      await putSellSession(env, uid, session);
+      await say(env, chatId, `✅ Фото ${d.photos.length}/${SELL_MAX_PHOTOS}. Ще одне — або «${SELL_DONE}».`, sellKb([[SELL_DONE]]));
+      return true;
+    }
+    if (text === SELL_DONE) {
+      if (!d.photos.length) { await say(env, chatId, 'Потрібне хоча б одне фото.' + SELL_CANCEL_HINT, sellKb([[SELL_DONE]])); return true; }
+      session.step = 'title';
+      await putSellSession(env, uid, session);
+      await say(env, chatId, '✏️ <b>Що це?</b> Коротко — до 60 символів.\n\nНаприклад: Джинсова куртка Levi’s' + SELL_CANCEL_HINT);
+      return true;
+    }
+    await say(env, chatId, `Надішліть фото, або «${SELL_DONE}».` + SELL_CANCEL_HINT, sellKb([[SELL_DONE]]));
+    return true;
+  }
+
+  if (step === 'title') {
+    const t = (text || '').trim();
+    if (!t || t.length > 60) { await say(env, chatId, 'Від 1 до 60 символів.' + SELL_CANCEL_HINT); return true; }
+    d.title = t;
+    session.step = 'price';
+    await putSellSession(env, uid, session);
+    await say(env, chatId, '💰 <b>Ціна у гривнях</b> — лише число.' + SELL_CANCEL_HINT);
+    return true;
+  }
+
+  if (step === 'price') {
+    const n = Number((text || '').replace(/[^0-9]/g, ''));
+    if (!Number.isFinite(n) || n <= 0 || n > 1000000) { await say(env, chatId, 'Напишіть ціну числом, наприклад 450.' + SELL_CANCEL_HINT); return true; }
+    d.price = Math.round(n);
+    session.step = 'size';
+    await putSellSession(env, uid, session);
+    await say(env, chatId, '📏 <b>Розмір?</b>' + SELL_CANCEL_HINT, sellKb([SELL_SIZES.slice(0, 3), SELL_SIZES.slice(3), [SELL_SKIP]]));
+    return true;
+  }
+
+  if (step === 'size') {
+    if (text !== SELL_SKIP) {
+      if (!SELL_SIZES.includes(text)) { await say(env, chatId, `Оберіть кнопкою або «${SELL_SKIP}».`, sellKb([SELL_SIZES.slice(0, 3), SELL_SIZES.slice(3), [SELL_SKIP]])); return true; }
+      d.size = text;
+    }
+    session.step = 'condition';
+    await putSellSession(env, uid, session);
+    await say(env, chatId, '⭐ <b>Стан?</b>' + SELL_CANCEL_HINT, sellKb([SELL_CONDITIONS.slice(0, 3), SELL_CONDITIONS.slice(3), [SELL_SKIP]]));
+    return true;
+  }
+
+  if (step === 'condition') {
+    if (text !== SELL_SKIP) {
+      if (!SELL_CONDITIONS.includes(text)) { await say(env, chatId, `Оберіть кнопкою або «${SELL_SKIP}».`, sellKb([SELL_CONDITIONS.slice(0, 3), SELL_CONDITIONS.slice(3), [SELL_SKIP]])); return true; }
+      d.condition = text;
+    }
+    session.step = 'area';
+    await putSellSession(env, uid, session);
+    await say(env, chatId, '📍 <b>Район і як забрати?</b>\n\nНаприклад: Сихів, самовивіз' + SELL_CANCEL_HINT, sellKb([[SELL_SKIP]]));
+    return true;
+  }
+
+  if (step === 'area') {
+    if (text !== SELL_SKIP) {
+      const a = (text || '').trim();
+      if (!a || a.length > 60) { await say(env, chatId, `До 60 символів, або «${SELL_SKIP}».`, sellKb([[SELL_SKIP]])); return true; }
+      d.area = a;
+    }
+    session.step = 'confirm';
+    await putSellSession(env, uid, session);
+    const uname = (ctx.from && ctx.from.username) || '';
+    await tg(env, 'sendPhoto', { chat_id: chatId, photo: d.photos[0], caption: sellCard(d, uname) });
+    await say(env, chatId, `Так виглядатиме оголошення. Публікуємо?\n\nПісля перевірки воно з’явиться в каналі.` + SELL_CANCEL_HINT, sellKb([[SELL_PUBLISH]]));
+    return true;
+  }
+
+  if (step === 'confirm') {
+    if (text !== SELL_PUBLISH) { await say(env, chatId, `Тисніть «${SELL_PUBLISH}» або /cancel.`, sellKb([[SELL_PUBLISH]])); return true; }
+    const uname = (ctx.from && ctx.from.username) || '';
+    const out = await sellApi(env, '/api/listing/create', {
+      seller_id: String(uid), seller_username: uname, category: d.category,
+      title: d.title, price_uah: d.price, size: d.size || null,
+      condition: d.condition || null, area: d.area || null, photo_ids: d.photos,
+    });
+    if (!out || !out.ok) {
+      // Never claim it was submitted when the call did not happen — the whole
+      // reason metricsFetchStrict exists in this file.
+      await say(env, chatId, '⚠️ Не вдалося надіслати. Спробуйте ще раз за хвилину: /sell');
+      await clearSellSession(env, uid);
+      return true;
+    }
+    await clearSellSession(env, uid);
+    await sayMenu(env, c, uid, chatId, '✅ Надіслано на перевірку. Щойно схвалять — з’явиться в каналі.');
+    // The owner decides. A photo, not a text summary, because what is being
+    // approved is what will appear.
+    if (c.ownerId) {
+      await tg(env, 'sendPhoto', {
+        chat_id: c.ownerId,
+        photo: d.photos[0],
+        caption: `🆕 Нове оголошення #${out.id}\n\n${sellCard(d, uname)}`,
+        reply_markup: { inline_keyboard: [[
+          { text: '✅ Опублікувати', callback_data: `sell:ok:${out.id}` },
+          { text: '❌ Відхилити', callback_data: `sell:no:${out.id}` },
+        ]] },
+      });
+    }
+    return true;
+  }
+  return false;
+}
+
+// Owner taps ✅ / ❌ on a queued listing. Gated on the owner id: the callback
+// data carries a listing id, and anyone can craft one.
+async function handleSellCallback(env, c, cq) {
+  const data = (cq && cq.data) || '';
+  if (!data.startsWith('sell:')) return false;
+  const [, verb, id] = data.split(':');
+  const uid = cq.from && cq.from.id;
+  if (!c.ownerId || String(uid) !== c.ownerId) {
+    await tg(env, 'answerCallbackQuery', { callback_query_id: cq.id, text: 'Не для вас.' });
+    return true;
+  }
+  await tg(env, 'answerCallbackQuery', { callback_query_id: cq.id });
+
+  if (verb === 'no') {
+    const out = await sellApi(env, '/api/listing/status', { id, status: 'rejected' });
+    if (out && out.ok && out.listing) {
+      await tg(env, 'sendMessage', { chat_id: out.listing.seller_id, text: `❌ Оголошення не пройшло перевірку: ${out.listing.title}\n\nПравила — у закріпленому дописі каналу.` });
+    }
+    await tg(env, 'editMessageReplyMarkup', { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
+    return true;
+  }
+
+  if (verb === 'ok') {
+    if (!env.TG_CHANNEL) {
+      await tg(env, 'sendMessage', { chat_id: c.ownerId, text: '⚠️ TG_CHANNEL не налаштовано — публікувати нікуди.' });
+      return true;
+    }
+    // Publish first, then record: if the channel post fails there is nothing to
+    // record, and a row marked live with no message would leave the sweep
+    // trying to delete a post that never existed.
+    // The public caption is the queue caption minus the internal header. If
+    // that header is not where it should be, refuse rather than posting
+    // "🆕 Нове оголошення #ab12cd34" to the channel: a silent formatting slip
+    // here is visible to every subscriber and cannot be edited out of a
+    // forward.
+    const raw = cq.message.caption || '';
+    const sep = raw.indexOf('\n\n');
+    const card = raw.startsWith('🆕 Нове оголошення #') && sep > 0 ? raw.slice(sep + 2) : null;
+    if (!card) {
+      await tg(env, 'sendMessage', { chat_id: c.ownerId, text: `⚠️ Не впізнав підпис для #${id} — не публікую. Попросіть надіслати /sell ще раз.` });
+      return true;
+    }
+    const posted = await tg(env, 'sendPhoto', {
+      chat_id: env.TG_CHANNEL,
+      photo: ((cq.message.photo || []).slice(-1)[0] || {}).file_id,
+      caption: card,
+    });
+    const msgId = posted && posted.result && posted.result.message_id;
+    if (!msgId) {
+      await tg(env, 'sendMessage', { chat_id: c.ownerId, text: `⚠️ Не вдалося опублікувати #${id}. Спробуйте ще раз.` });
+      return true;
+    }
+    const out = await sellApi(env, '/api/listing/status', { id, status: 'live', channel_msg_id: msgId });
+    if (out && out.ok && out.listing) {
+      await tg(env, 'sendMessage', { chat_id: out.listing.seller_id, text: `✅ Ваше оголошення опубліковано: ${out.listing.title}\n\nПродали — надішліть /sold.` });
+    }
+    await tg(env, 'editMessageReplyMarkup', { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } });
+    return true;
+  }
+  return true;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -3083,7 +3387,11 @@ export default {
     // an edit-review approval, fixed in #135. ctx.waitUntil keeps the Worker
     // alive to finish the call after the response is already sent.
     if (update.callback_query) {
-      ctx.waitUntil(handleAgentCallback(env, c, update.callback_query, origin).catch(() => {}));
+      // sell:* is claimed here first; handleAgentCallback owns the bounty
+      // prefixes and would otherwise treat an unknown payload as malformed.
+      ctx.waitUntil(handleSellCallback(env, c, update.callback_query).then((done) => {
+        if (!done) return handleAgentCallback(env, c, update.callback_query, origin);
+      }).catch(() => {}));
       return ok();
     }
 
@@ -3119,6 +3427,13 @@ export default {
         return ok();
       }
     }
+
+    // Барахолка /sell. Placed after the field-agent block for the same reason
+    // feedback and /apply are: an in-progress /visit questionnaire's free-text
+    // answer must never be mistaken for a listing title.
+    try {
+      if (await handleSellFlow(env, c, msg, mctx)) return ok();
+    } catch (e) {}
 
     // General feedback (Feature 7). Only needs BOT_TOKEN + VISITS, not the
     // rest of the field-agent gate — checked after it so an in-progress
