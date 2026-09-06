@@ -127,8 +127,9 @@ shape as the existing per-visit rate.
 Ukrainian text + trending audio; "day 1 vs day 6 of the same rail"; the door at
 10:00 on restock day; three stores in 15 seconds.
 
-**Watch out:** filming people in shops needs the store's OK — get it during the
-survey, and never film customers' faces. A store that says no is still a store on
+**Watch out:** the soundtrack is a licensing question before it is a taste
+question — see [`MUSIC.md`](MUSIC.md); and filming people in shops needs the
+store's OK — get it during the survey, and never film customers' faces. A store that says no is still a store on
 the map; do not let filming leak into the free-listing relationship.
 
 ### C. Facebook — the Page is free, the Groups are the point
@@ -280,6 +281,10 @@ long; it should stay long.
   rule when the same content mirrors to new channels.
 - **Never automate group or DM posting.** Bans, and worse, reputation.
 - **Store photos need the store's permission**, gathered during the visit.
+- **No commercial music without written permission on file.** A business account
+  cannot use the platform music libraries' popular tracks, so a licensed-looking
+  Reel gets muted or pulled. The rule, the safe alternatives and the current
+  status are in [`MUSIC.md`](MUSIC.md).
 - **Token expiry is the standing failure mode.** Every new API channel needs the same
   treatment as `instagram-token-check.yml`: an automated check that turns a silent
   outage into a Telegram message.
