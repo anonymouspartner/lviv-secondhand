@@ -77,7 +77,12 @@ if (!dated.length && !weekly.length) {
 
 // The map filters to exactly these shops. One tappable link beats one link per
 // store: a channel post is read on a phone, and fifteen links is a wall.
-const routeUrl = `${SITE}/?route=${[...dated, ...weekly].map((s) => s.id).join(',')}`;
+//
+// src=tg because this post is channel-only, so every tap on this link genuinely
+// came from Telegram — no other surface carries it. Captions that go to both
+// Instagram and the channel cannot be tagged this cleanly, which is why they
+// are not tagged yet.
+const routeUrl = `${SITE}/?route=${[...dated, ...weekly].map((s) => s.id).join(',')}&src=tg`;
 
 // Long enough to be complete on a normal day (the busiest fixed day has 14),
 // capped so an unusual day cannot turn the post into a scroll.

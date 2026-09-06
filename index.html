@@ -3743,7 +3743,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-09-05.1';
+const APP_VERSION = '2026-09-06.1';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys
@@ -3785,10 +3785,36 @@ function initAnalytics(){
 // until METRICS_URL is set. Disclosed in privacy.html before it was enabled.
 // ─────────────────────────────────────────────
 const METRICS_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
+// ?src=tg — which channel the visitor arrived from, read once and attached to
+// every beacon. Without it the metrics can say how many people came but not
+// where from, which is the only question that tells you where to spend the next
+// hour. Read before track() is defined below, because the once-per-open beacon
+// fires immediately after it.
+//
+// Kept for the tab, not the visit: someone who arrives from a channel post and
+// then browses six stores should credit all six to that channel, which is the
+// behaviour that makes store_open-by-src meaningful.
+//
+// Stripped from the URL afterwards, like ?store= and ?route=, so that a link
+// someone copies out of their address bar and forwards does not carry another
+// channel's attribution with it.
+let visitSrc = '';
+try {
+  const p = new URLSearchParams(location.search);
+  const raw = (p.get('src') || '').slice(0, 16).replace(/[^A-Za-z0-9_-]/g, '');
+  if (raw) {
+    sessionStorage.setItem('lviv_sh_src', raw);
+    p.delete('src');
+    const qs = p.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+  }
+  visitSrc = sessionStorage.getItem('lviv_sh_src') || '';
+} catch(e) { /* private mode denies sessionStorage — attribution is optional, the app is not */ }
+
 function track(type, key){
   if (!METRICS_URL) return;
   try {
-    const body = JSON.stringify({ type, key: key == null ? '' : String(key), lang });
+    const body = JSON.stringify({ type, key: key == null ? '' : String(key), lang, src: visitSrc });
     if (navigator.sendBeacon) navigator.sendBeacon(METRICS_URL, body);
     else fetch(METRICS_URL, { method:'POST', body, keepalive:true }).catch(()=>{});
   } catch(e){ /* metrics must never break the app */ }
