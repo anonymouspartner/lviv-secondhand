@@ -449,9 +449,19 @@ function submitText() {
 // keyboard is now the only way most people find anything — replyFor()
 // re-attaches it on every single reply rather than relying on Telegram
 // leaving the previous one in place, so there's no path through which
-// someone ends up without it. 💬 Залишити відгук is the one exception to
-// "handled here": it re-dispatches to handleFeedbackFlow (Feature 7), which
-// does need BOT_TOKEN + VISITS, exactly as bare /feedback already does.
+// someone ends up without it.
+//
+// WHAT IS ON IT, AND WHY THAT IS LESS THAN WHAT EXISTS
+// Five buttons: the two ways to find stock, the two sides of selling, and
+// help. 🐢 Рідко оновлюють, ➕ Додати магазин and 💬 Залишити відгук were
+// taken off deliberately — a shopper opening the bot for the first time was
+// reading eight buttons to find the two they came for, and a menu that lists
+// everything ranks nothing. All three still work: /rare, /submit and
+// /feedback are typed commands, they are listed in /help, and their button
+// LABELS are still recognised below, because Telegram leaves whatever
+// keyboard it last drew in place until the next message replaces it — anyone
+// tapping a stale button gets what it always did rather than "I only
+// understand commands".
 // ─────────────────────────────────────────────────────────────────────────────
 const MENU_DAY = '📅 За днем тижня';
 const MENU_CHEAP = '🕒 Найдовше без завозу';
@@ -472,12 +482,14 @@ const MENU_ADMIN = '⚙️ Адмін-меню · Admin menu';
 function kbMarkup(rows) {
   return { keyboard: rows.map((row) => row.map((t) => ({ text: t }))), resize_keyboard: true };
 }
-const MAIN_MENU_MARKUP = kbMarkup([
+// One list, used by both markups below — when they were written out twice,
+// a row added to one silently missed the other.
+const PUBLIC_MENU_ROWS = [
   [MENU_DAY, MENU_CHEAP],
-  [MENU_RARE, MENU_ADD],
   [MENU_SELL, MENU_SOLD],
-  [MENU_FEEDBACK, MENU_HELP],
-]);
+  [MENU_HELP],
+];
+const MAIN_MENU_MARKUP = kbMarkup(PUBLIC_MENU_ROWS);
 // isOwner/isAgent gate real access everywhere these menus are actually used
 // (handleVisit's command router) — this only controls whether the button is
 // worth showing, so a shopper's keyboard never grows a row that would just
@@ -487,13 +499,7 @@ function mainMenuMarkupFor(isOwner, isAgent) {
   if (isAgent || isOwner) extra.push(MENU_AGENT);
   if (isOwner) extra.push(MENU_ADMIN);
   if (!extra.length) return MAIN_MENU_MARKUP;
-  return kbMarkup([
-    [MENU_DAY, MENU_CHEAP],
-    [MENU_RARE, MENU_ADD],
-    [MENU_SELL, MENU_SOLD],
-    [MENU_FEEDBACK, MENU_HELP],
-    extra,
-  ]);
+  return kbMarkup([...PUBLIC_MENU_ROWS, extra]);
 }
 // Same short Ukrainian day labels as the bounty flow's DAY_OPTIONS
 // (telegram-agent-keyboards.js), reused here rather than duplicated.
@@ -529,6 +535,9 @@ function replyFor(text, isOwner, isAgent) {
   if (trimmed === MENU_BACK) return { text: 'Головне меню · Main menu', markup: menuMarkup };
   if (trimmed in DAY_LABEL_TO_CODE) return { text: dayText(DAY_LABEL_TO_CODE[trimmed]), markup: DAY_MENU_MARKUP };
   if (trimmed === MENU_CHEAP) return { text: cheapText(), markup: menuMarkup };
+  // Off the keyboard since the menu was cut down, still recognised: a client
+  // that last drew the old keyboard keeps showing it until a reply replaces
+  // it, and the reply carrying the new one only arrives AFTER the tap.
   if (trimmed === MENU_RARE) return { text: rareText(), markup: menuMarkup };
   if (trimmed === MENU_ADD) return { text: submitText(), markup: menuMarkup };
   if (trimmed === MENU_HELP) return { text: helpText(), markup: menuMarkup };
