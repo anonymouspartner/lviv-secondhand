@@ -46,38 +46,45 @@ high-volume user content.
 The case for wins at this size: the channel has a handful of subscribers, and
 a second channel starts from zero and needs its own cold start. Splitting a
 small audience is a worse problem today than diluting a feed. Two costs come
-with the choice, and the rest of this document is written to contain them:
+with the choice:
 
-1. **The feed can drown itself.** Handled by the volume rules below.
+1. **The feed can drown itself.** Accepted, not mitigated — see
+   [No volume limits](#no-volume-limits--decided). The channel split is the
+   remedy if it happens, not a throttle.
 2. **A bad trade now happens under the map's name**, in front of the shops
    paying for placement. Handled by the moderation gate — which is no longer
    just a spam filter but the thing protecting the map's reputation — and by
    the disclaimer carried on every listing.
 
-**Revisit when** listings routinely hit the daily cap, or the first serious
-dispute lands. Splitting later is cheap: point the bot at a new channel id and
-leave the old posts where they are.
+**Revisit when** listings crowd out the scheduled posts — the restock line
+regularly buried is the signal to watch — or when the first serious dispute
+lands. Splitting later is cheap: point the bot at a new channel id and leave
+the old posts where they are.
 
 **Not a topics supergroup**, though it is the obvious alternative. Topics
 browse better; a channel forwards better, and forwarding is the whole growth
 argument for being on Telegram at all. Categories are hashtags instead, which
 Telegram searches within a channel.
 
-### Volume rules — what keeps the map posts readable
+### No volume limits — decided
 
-Sharing a channel means listings have to yield to the scheduled content rather
-than the other way round.
+An earlier draft capped listings at five a day, confined them to daytime, and
+made them wait after a scheduled post. **The owner's decision is no limits:**
+unlimited listings, published whenever they are approved, at any hour.
 
-- **At most 5 listings a day.** Approved listings beyond that queue to
-  tomorrow, oldest first. The owner sees the queue depth on approval.
-- **Listings publish 09:00–18:00 Kyiv only.** The evening belongs to the daily
-  restock line, which is the one post that is worthless if it is buried — it
-  exists to be read before tomorrow morning.
-- **Never on top of a scheduled post.** A listing waits 15 minutes after the
-  Monday ranking or Thursday feature so those are not immediately pushed up.
+So nothing throttles the feed by design. Two mechanical consequences follow,
+recorded here so that whoever reads this later knows they were chosen rather
+than overlooked:
 
-A cap that bites is a good sign, not a problem: it is the signal to split the
-channel.
+- **The approval gate is the only throughput limit.** Nothing publishes until
+  the owner taps ✅, so the real ceiling is how fast approvals happen, not a
+  number in a config. Removing the gate later removes the last limit with it.
+- **The daily restock line can be buried.** It is the one post that is
+  worthless once scrolled past — it exists to be read the evening before. A
+  busy listing day pushes it up the feed like anything else.
+
+If that becomes a problem, the fix is splitting the channel, not
+reintroducing a cap: see the revisit trigger above.
 
 ### The discussion group affects the map posts too
 
@@ -172,12 +179,17 @@ three weeks ago, gets no reply, and stops trusting the feed.
 
 ## Anti-abuse
 
-| Limit | Value | Why |
+Per the decision above, there is **no cap on how many listings a seller posts
+or how often**. What remains is not about volume:
+
+| Control | Value | Why |
 | --- | --- | --- |
-| Active listings per seller | 5 | Bulk resellers, not individuals, hit this |
-| New listings per hour | 1 | Flood control |
 | Public `@username` | required | Contact, and a thin identity check |
-| Owner approval | every listing (v1) | See above |
+| Owner approval | every listing | The only thing standing between a flood and the channel |
+
+With no rate limit, the gate carries the whole load. A seller can queue fifty
+items in an evening; they simply arrive as fifty approvals to tap. Batch
+approve/reject is the obvious thing to build first if that happens.
 
 ## Data
 
