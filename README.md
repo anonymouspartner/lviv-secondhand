@@ -47,6 +47,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 💬 **Telegram bot** — [@Secondhandlvivbot](https://t.me/Secondhandlvivbot): a tap-through menu plus `/today`, `/day` (any weekday), `/rare` and `/cheap`
 - 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): which stores have gone longest since a restock, posted automatically every Monday
 - 📢 **Telegram channel** — [@Lviv_Secondhand](https://t.me/Lviv_Secondhand): the same posts where the links are actually clickable, plus a nightly line naming the shops that restock tomorrow
+- 🏷️ **Барахолка (flea market)** — sell your own second-hand things through the bot: it collects the listing, the maintainer approves it, and it publishes to the channel *and* to Instagram. Buyer and seller settle it between themselves — no money passes through this project
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
 - ⚡ **Flash deals** — a store can run a short paid sale (3h / 24h) with a live countdown banner and toast; follow a store on Telegram to hear the moment one goes live
 - ✏️ **Suggest a correction** — send a fix via Telegram; a moderator reviews it, or a trusted contributor's own edit publishes instantly
@@ -267,6 +268,8 @@ The channel is [**@Lviv_Secondhand**](https://t.me/Lviv_Secondhand), and it is w
 
 **One post is channel-only: the nightly restock line.** [`restock-tomorrow.yml`](.github/workflows/restock-tomorrow.yml) names the shops with a restock on record for tomorrow and ends in a single `?route=` link that opens exactly those shops on the map. It has no Instagram counterpart because it stops being useful the next morning, and a tappable link is most of its value. It reads only the two forward-looking signals the bot's `/today` uses — a fixed `restockDay` and a published `restockDates` calendar — never `cycle`, because a cycle says a restock is *due*, not that it happens, and sending people to a closed rail is the one thing the map promises not to do. When tomorrow has nothing on record it posts nothing: no store has a Sunday restock day, so Saturdays are silent by design.
 
+**Every барахолка listing is mirrored here too.** Approving a listing posts it to the channel and then fires [`market-listing-ig.yml`](.github/workflows/market-listing-ig.yml), which renders a 1080×1350 card from the listing row and posts it. Two gates, both read from the data: the listing must be `live` (you approved it) and carry `ig_ok` (its seller was told, at the moment they published, that it goes to Instagram). It is a rendered card rather than the seller's photo because Instagram accepts only 4:5 to 1.91:1 and rejects everything else with a generic container error — a phone photo is routinely 9:16 — and because a caption here is not clickable, so the price, size and district have to be inside the image. The photo is contained over a blurred copy of itself, never cropped. Instagram's API allows 50 posts per rolling 24 hours; listings are uncapped, so a fifty-plus day would see the surplus fail here while the channel posts still go out.
+
 **Paid ads are deliberately not mirrored.** A store buys an Instagram advertisement, and the approval you tap approves that one post — putting a second, unapproved copy of buyer-written text in a public channel is not something anyone bought.
 
 ### For maintainers
@@ -281,6 +284,8 @@ The channel is [**@Lviv_Secondhand**](https://t.me/Lviv_Secondhand), and it is w
 | `.github/workflows/restock-tomorrow.yml` | Nightly "who restocks tomorrow" line, channel-only. Silent when tomorrow has nothing on record |
 | `tools/social/restock-tomorrow.mjs` | Composes that line from `restockDay` + `restockDates`; prints nothing when there is nothing to say |
 | `tools/social/pick-feature.mjs` | Chooses the week's store to feature — skips paid and thin-data stores, rotates through the rest |
+| `.github/workflows/market-listing-ig.yml` | Mirrors one approved барахолка listing. Refuses anything not `live` with `ig_ok`; no-ops without `ADMIN_KEY`/`BOT_TOKEN` |
+| `tools/social/listing-card.mjs` | Renders a listing's 1080×1350 card and caption from the row and its photo |
 
 Setup lives in **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Two things that will bite otherwise:
 
@@ -425,7 +430,9 @@ Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The 
 
 **[@Secondhandlvivbot](https://t.me/Secondhandlvivbot)** — the app's companion. Every result links back into the map, so a shopper can go from a Telegram message to directions in two taps. The interface is Ukrainian.
 
-**Tap-through menu.** `/start` attaches a persistent reply-keyboard, so the common paths need no typed commands at all: 📅 by weekday (opens a day submenu), 💰 cheapest now, 🐢 rarely restocked, ➕ add a store, 💬 leave feedback, ❓ help. Each button just sends its own label back as ordinary text, which keeps the whole menu in the stateless tier — no bot token required to answer it.
+**Tap-through menu.** `/start` attaches a persistent reply-keyboard, so the common paths need no typed commands at all: 📅 by weekday (opens a day submenu), 🕒 longest since a restock, 🏷 sell an item, ✅ mark it sold, ❓ help. Each button just sends its own label back as ordinary text, which keeps the whole menu in the stateless tier — no bot token required to answer it.
+
+Five buttons, not eight. 🐢 rarely restocked, ➕ add a store and 💬 leave feedback were taken off the keyboard: a first-time shopper was reading the whole menu to find the two things they came for. All three still work as typed commands and are listed in `/help`, and their old button labels are still recognised — Telegram leaves the last keyboard it drew in place until a reply replaces it, so a stale tap gets what it always did.
 
 > Telegram never pushes a changed keyboard into an existing chat on its own; it only updates when the bot sends a message carrying one. After a menu change, send `/start` to see it.
 
@@ -439,6 +446,9 @@ Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The 
 | `/day` | Pick any weekday and see what restocks then |
 | `/rare` | Stores that restock rarely — worth a special trip |
 | `/cheap` | Which stores have gone longest since a restock |
+| `/sell` | List one of your own things on the барахолка |
+| `/my` | Your own listings — pending, live, just sold |
+| `/sold` | Close a listing you sold |
 | `/submit` | Submit your own store (for shop owners) |
 | `/materials` | Printable flyers, posters and QR stickers |
 | `/apply` | Apply to become a field agent |
@@ -467,6 +477,33 @@ Every ad carries **`РЕКЛАМА · SPONSORED`** at the top of the image. The 
 The command menu is **self-managing**: the bot pushes its own command list to Telegram on startup, so there is no BotFather `/setcommands` step. Bump `CMD_VER` in `telegram-bot/worker.js` after editing the lists to force a re-sync. The version is recorded **only when Telegram accepts the menu**, so a rejected push retries instead of marking itself done and going stale forever.
 
 > The bot also carries the money side: a Telegram message arrives the moment any promotion or à la carte order is paid.
+
+## 🏷️ Барахолка — the flea market
+
+A classifieds board living inside the channel: people sell their own second-hand clothes, shoes and small items, and the map's audience is already the right audience for it. Everything is in **[`docs/MARKET.md`](docs/MARKET.md)** — this is the shape of it.
+
+**No money passes through this project, and that is the decision everything else hangs off.** Buyer and seller settle between themselves; the bot never asks for payment details, takes no cut, and every card says so outright. That also means no escrow and no guarantees, which the pinned rules state plainly.
+
+**Collected by the bot, displayed on the channel.** `/sell` walks a seller through four required steps and three skippable ones — category, photos, what it is, price, then size, condition and district. A public `@username` is required, because it is the only contact a buyer gets. The wizard is the only way to write a listing: every word on the card is a wizard field, so there is no free-text block anyone can fill with claims or contacts.
+
+**You approve every listing.** The card arrives in your Telegram as a photo with ✅ / ❌ — what you see is exactly what publishes. Approving posts it to [@Lviv_Secondhand](https://t.me/Lviv_Secondhand) and mirrors it to Instagram; rejecting tells the seller and points them at the rules. There is no cap on how many listings a seller posts or how often, so that gate carries the whole load.
+
+**Listings expire on their own.** Thirty days, with a one-tap "ще актуально?" on day 25. `/sold` (or the ✅ Продано button) closes one early: the channel caption is prefixed 🔴 ПРОДАНО and the post is removed a day later, so a buyer mid-conversation sees what happened instead of finding a hole. Stale listings are what kill a барахолка, so this is the part that gets the attention.
+
+**Every listing is mirrored to Instagram** — see the section above. The seller is told that before they publish, and their answer is stored on the listing rather than assumed.
+
+### For maintainers
+
+| Piece | What it is |
+| --- | --- |
+| `listings` table (metrics Worker) | The data and the clock. In the metrics Worker because the bot has no D1 binding at all |
+| `/api/listing/create` · `/status` · `/mine` · `/get` | Admin-keyed, in the body — Worker-to-Worker calls, not public ones. Every field is re-validated here, not trusted from the wizard |
+| `sweepListings()` | Rides the existing five-minute cron: expire and delete, then nudge at day 25. Marks before sending, so a Telegram hiccup costs one missed nudge, not one every five minutes |
+| `handleSellFlow()` · `handleSellCallback()` (bot) | The wizard, in its own KV session namespace so it cannot collide with a half-finished `/visit`, and the owner's approve/reject |
+| `.github/workflows/market-listing-ig.yml` | The Instagram mirror. Re-reads the listing from the Worker; refuses anything not `live` with `ig_ok` |
+| `tools/social/listing-card.mjs` | Renders the 1080×1350 card and its caption. No network, no secrets — it takes a row and a photo |
+
+**The channel currently auto-deletes messages after 1 month.** That setting is Telegram's, not this repo's, and it applies to every post including the pinned rules. Listings are unaffected (their own clock is shorter), but the rules post and the map posts disappear on it. Turn it off in the channel's settings unless you want that.
 
 ## 🎒 Field agent handbook
 
@@ -565,6 +602,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 - 🔔 **Сповіщення про завезення** — стежте за магазином і дізнавайтеся про завіз того ж ранку. Через push там, де браузер це вміє; де не вміє (iOS без встановленого застосунку) та сама кнопка пропонує Telegram, тож сповіщення доступні на будь-якому пристрої
 - 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): хто найдовше без завозу, автоматично щопонеділка
 - 📢 **Telegram-канал** — [@Lviv_Secondhand](https://t.me/Lviv_Secondhand): ті самі дописи там, де посилання клікабельні, плюс щовечірній рядок: хто завозить завтра
+- 🏷️ **Барахолка** — продайте свою річ через бота: він збирає оголошення, власник карти його перевіряє, і воно виходить у канал **та** в Instagram. Оплату покупець і продавець улаштовують між собою — гроші через проєкт не проходять
 - ➕ **Додавання**, ✏️ **редагування** та 🗑️ **видалення/приховування** магазинів
 - 🤝 **Поділитися картою** та **внести** доповнення/зміни для всіх
 - 🔗 **Посилання на магазин** — скопіюйте пряме посилання `?store=<id>`, що одразу відкриває цей магазин
@@ -736,6 +774,8 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **Один допис — лише для каналу: щовечірній рядок про завози.** [`restock-tomorrow.yml`](.github/workflows/restock-tomorrow.yml) називає магазини, у яких завтра завіз за наявними даними, і закінчується одним посиланням `?route=`, що відкриває саме ці магазини на карті. В Instagram його немає, бо вранці він уже неактуальний, а клікабельне посилання — і є більша частина його користі. Береться лише те, що дивиться `/today` бота: фіксований `restockDay` і опублікований календар `restockDates`; ніколи `cycle`, бо цикл каже, що завіз *очікується*, а не що він буде. Якщо на завтра даних немає — допису немає: жоден магазин не має недільного дня завозу, тож субота тиха за задумом.
 
+**Кожне оголошення барахолки дублюється й сюди.** Підтвердження оголошення публікує його в каналі й запускає [`market-listing-ig.yml`](.github/workflows/market-listing-ig.yml), який малює картку 1080×1350 з даних оголошення і публікує її. Дві умови, обидві читаються з даних: оголошення має бути `live` (ви його підтвердили) і мати `ig_ok` (продавцю сказали про Instagram у момент публікації). Це намальована картка, а не фото продавця, бо Instagram приймає лише співвідношення від 4:5 до 1.91:1 і відхиляє решту загальною помилкою, а фото з телефона зазвичай 9:16 — і бо підпис тут не клікабельний, тож ціна, розмір і район мають бути на самому зображенні. Фото вписується поверх розмитої копії себе, ніколи не обрізається.
+
 **Платну рекламу свідомо не дублюємо.** Магазин купує рекламу в Instagram, і ваше підтвердження стосується саме того допису.
 
 Налаштування — у **[`docs/INSTAGRAM.md`](docs/INSTAGRAM.md)**. Два підводні камені: використовується шлях **Instagram Login** (`graph.instagram.com`), а не Facebook Login — вони несумісні, і більшість інструкцій в інтернеті описують саме інший; і **токен діє 60 днів**, а дізнатися залишок цим шляхом неможливо, тому щотижневий `instagram-token-check.yml` пише власнику в Telegram, щойно токен перестає працювати.
@@ -748,7 +788,9 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 **[@Secondhandlvivbot](https://t.me/Secondhandlvivbot)** — супутник застосунку. Кожен результат посилається назад на карту, тож від повідомлення в Telegram до маршруту — два дотики. Інтерфейс українською.
 
-**Меню кнопками.** `/start` додає постійну клавіатуру, тож для найчастіших дій не треба вводити команди взагалі: 📅 за днем тижня (відкриває підменю днів), 💰 найдешевше зараз, 🐢 рідко оновлюють, ➕ додати магазин, 💬 залишити відгук, ❓ довідка. Кожна кнопка просто надсилає свій підпис як звичайний текст — тому все меню лишається в тому ж рівні без стану, для відповіді не потрібен токен бота.
+**Меню кнопками.** `/start` додає постійну клавіатуру, тож для найчастіших дій не треба вводити команди взагалі: 📅 за днем тижня (відкриває підменю днів), 🕒 найдовше без завозу, 🏷 продати річ, ✅ продано, ❓ довідка. Кожна кнопка просто надсилає свій підпис як звичайний текст — тому все меню лишається в тому ж рівні без стану, для відповіді не потрібен токен бота.
+
+П'ять кнопок, а не вісім. 🐢 рідко оновлюють, ➕ додати магазин і 💬 залишити відгук прибрані з клавіатури: покупець, який відкрив бота вперше, читав усе меню, щоб знайти те, за чим прийшов. Усі три працюють як команди й перелічені в `/help`, а їхні старі підписи бот досі впізнає — Telegram лишає останню намальовану клавіатуру, доки її не замінить нова відповідь.
 
 > Telegram ніколи не оновлює клавіатуру в наявному чаті сам — вона змінюється лише тоді, коли бот надішле повідомлення з новою. Після зміни меню надішліть `/start`, щоб побачити його.
 
@@ -760,6 +802,9 @@ PWA (прогресивний веб-додаток) для пошуку та в
 | `/day` | Обрати будь-який день тижня і побачити, що завозять тоді |
 | `/rare` | Магазини, які оновлюються рідко — варті окремої поїздки |
 | `/cheap` | Хто найдовше без завозу |
+| `/sell` | Виставити свою річ на барахолці |
+| `/my` | Ваші оголошення — на перевірці, у каналі, продані |
+| `/sold` | Закрити продане оголошення |
 | `/submit` | Додати свій магазин (для власників) |
 | `/materials` | Матеріали для друку: флаєри, постери, QR-наліпки |
 | `/apply` | Податися в польові агенти |
@@ -788,6 +833,22 @@ PWA (прогресивний веб-додаток) для пошуку та в
 Список команд **керує собою сам**: бот надсилає його у Telegram під час запуску, тож крок `/setcommands` у BotFather не потрібен. Після редагування списків змініть `CMD_VER` у `telegram-bot/worker.js`, щоб примусити пересинхронізацію. Версія записується **лише тоді, коли Telegram прийняв меню**, тож відхилена спроба повторюється, а не позначає себе виконаною й не застрягає назавжди.
 
 > Бот також відповідає за гроші: повідомлення приходить щойно оплачено будь-яке просування чи додаткову послугу.
+
+## 🏷️ Барахолка
+
+Дошка оголошень усередині каналу: люди продають свої вживані речі — одяг, взуття та дрібні речі, які можна принести в руках. Аудиторія карти вже саме та, кому це потрібно. Повний опис — у **[`docs/MARKET.md`](docs/MARKET.md)**.
+
+**Гроші через проєкт не проходять — і з цього випливає все інше.** Покупець і продавець домовляються між собою; бот ніколи не питає платіжних даних і не бере відсотка, і кожна картка каже про це прямо. Це також означає, що немає ані застави, ані гарантій, — про що прямо сказано в закріплених правилах.
+
+**Збирає бот, показує канал.** `/sell` веде продавця через чотири обов'язкові кроки і три необов'язкові: категорія, фото, що це, ціна, далі розмір, стан і район. Потрібен публічний `@username` — це єдиний контакт, який отримує покупець. Оголошення можна скласти лише майстром: кожне слово на картці — це поле майстра, тож немає вільного блоку, куди можна вписати обіцянки чи інші контакти.
+
+**Кожне оголошення перевіряєте ви.** Картка приходить у ваш Telegram фотографією з ✅ / ❌ — те, що ви бачите, і буде опубліковано. Підтвердження публікує її в [@Lviv_Secondhand](https://t.me/Lviv_Secondhand) і дублює в Instagram; відмова повідомляє продавця й відсилає до правил. Обмежень на кількість оголошень немає, тож саме ця перевірка тримає все.
+
+**Оголошення зникають самі.** Тридцять днів, із запитанням «ще актуально?» на 25-й день в один дотик. `/sold` (або кнопка ✅ Продано) закриває раніше: підпис у каналі отримує 🔴 ПРОДАНО, а сам допис зникає наступного дня — щоб покупець, який саме пише продавцеві, побачив, що сталося, а не порожнє місце.
+
+**Кожне оголошення дублюється в Instagram** — див. розділ вище. Продавцю про це кажуть до публікації, і його згода зберігається в самому оголошенні.
+
+> **Зараз у каналі ввімкнене автовидалення повідомлень через 1 місяць.** Це налаштування Telegram, не репозиторію, і воно стосується всіх дописів, зокрема закріплених правил. На оголошення це не впливає (їхній власний строк коротший), але правила й дописи карти зникнуть. Вимкніть його в налаштуваннях каналу, якщо цього не потрібно.
 
 ## 🎒 Довідник польового агента
 
