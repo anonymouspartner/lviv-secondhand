@@ -94,12 +94,27 @@ That is mostly good (a store feature gaining a comment thread is fine) but it
 is a change to the map channel's character, and it brings its own moderation
 surface. It can be switched off again, but not selectively per post.
 
+## Scope — what may be listed
+
+**Clothing, footwear, and small items a person can carry to a meetup by hand.**
+Sports equipment is explicitly in; furniture, appliances, vehicles and anything
+needing a van are out.
+
+The rule is deliberately about **size and handover**, not about a category
+list. A category list has to be extended every time someone lists something
+nobody thought of, and each extension is a moderation argument. "Could you
+carry it to the meeting point?" answers every one of those without a
+discussion, and it follows from the fact that we run no shipping and take no
+part in the handover.
+
 ## Categories
 
-Six. Every extra category splits a small market into emptier rooms.
+Seven, and the last one is a catch-all rather than a room of its own. Every
+extra category splits a small market into emptier shelves, so the long tail
+goes in `Інше` instead of earning its own entry.
 
 `👗 Жіноче` · `👔 Чоловіче` · `👟 Взуття` · `🧸 Дитяче` · `🎒 Аксесуари` ·
-`🏠 Дім і текстиль`
+`⚽ Спорт` · `📦 Інше`
 
 ## The `/sell` flow
 
@@ -191,10 +206,22 @@ With no rate limit, the gate carries the whole load. A seller can queue fifty
 items in an evening; they simply arrive as fifty approvals to tap. Batch
 approve/reject is the obvious thing to build first if that happens.
 
-## Data
+## Data — and whose database it is
 
-One table. The repo's `check-wiring.mjs` fails CI on a D1 table written to but
-never created, so it goes in `ensureSchema()` with the rest.
+**The bot Worker has no D1 binding.** It has KV (`VISITS`) for sessions and a
+**service binding** to the metrics Worker (`METRICS`), which owns the database.
+So the table lives in `worker/` and the bot reaches it through
+`metricsFetch()`, exactly as the flash-deal subscriptions, edit claim/resolve
+and the leaderboard already do.
+
+This is not a stylistic preference. A Worker cannot fetch another Worker on the
+same zone by its public URL — Cloudflare answers 404 with `error code: 1042` —
+and this repo has already been bitten by it once, which is why `check-wiring.mjs`
+fails CI on exactly that pattern. An earlier draft of this document said "one
+new D1 table" without saying whose, which would have led straight into it.
+
+One table, in the metrics Worker's `ensureSchema()`, since `check-wiring.mjs`
+also fails CI on a D1 table written to but never created.
 
 ```sql
 CREATE TABLE IF NOT EXISTS listings (
@@ -229,7 +256,10 @@ a plausible quarter:
 - **Reply keyboards and a universal `/cancel`.**
 - **Owner-gated inline callbacks** (`handleAgentCallback`).
 - **The scheduled sweep** in the metrics Worker, which already runs every five
-  minutes — expiry and the day-25 nudge are another query on it.
+  minutes — expiry and the day-25 nudge are another query on it, and it lives
+  in the same Worker as the table.
+- **`metricsFetch()`**, the bot's service-binding helper, with the strict
+  variant that refuses to let an unreachable Worker look like an empty result.
 
 ## Rules — the pinned post
 
@@ -239,10 +269,12 @@ a plausible quarter:
 1. Оголошення публікує лише бот: @Secondhandlvivbot → /sell
 2. Ми НЕ беремо участі в оплаті й НЕ гарантуємо угоди.
    Зустрічайтеся в людних місцях. Перевіряйте річ до оплати.
-3. Одна річ — одне оголошення. До 5 активних.
+3. Одна річ — одне оголошення. Скільки завгодно оголошень.
 4. Тільки вживане, для себе. Не для магазинів і не оптом.
-5. Заборонено: репліки як оригінал, нові речі, не одяг/взуття/дім.
-6. Продали — /sold. Через 30 днів оголошення зникає саме.
+5. Одяг, взуття та дрібні речі, які можна принести в руках
+   (спортінвентар — так; меблі, техніка, авто — ні).
+6. Заборонено: репліки як оригінал, нові речі.
+7. Продали — /sold. Через 30 днів оголошення зникає саме.
 
 Питання по речі — у коментарях під нею.
 ```
