@@ -178,6 +178,11 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, type TEXT NOT NULL, key TEXT, lang TEXT)"
   ).run();
+  // `src` (where the visitor arrived from) was added after this table already
+  // existed in production, so CREATE TABLE above will not add it — an ALTER
+  // must, and it throws harmlessly once the column is there. Same shape as the
+  // promos.cust_id migration.
+  try { await env.DB.prepare('ALTER TABLE events ADD COLUMN src TEXT').run(); } catch {}
   _schemaReady = true;
 }
 
@@ -1595,11 +1600,19 @@ export default {
           const ev = await env.DB.prepare(
             'SELECT COUNT(*) AS n FROM events WHERE day >= ?'
           ).bind(ago(29)).first();
+          // The whole point of collecting src: which channel actually sends
+          // people to a shop. Only store_open counts here — a filter tap is not
+          // a visit to a store, and counting it would flatter whichever channel
+          // sends the most idle browsers.
+          const bySrc = await env.DB.prepare(
+            "SELECT src, COUNT(*) AS n FROM events WHERE day >= ? AND type = 'store_open' AND src IS NOT NULL GROUP BY src ORDER BY n DESC"
+          ).bind(ago(29)).all();
           return json({
             ok: true,
             today: d1, last7: d7, last30: d30, allTime: dAll,
             since: (first && first.d) || null,
             events30: (ev && ev.n) || 0,
+            storeOpensBySrc30: (bySrc && bySrc.results) || [],
             daily: (daily && daily.results) || [],
           }, 200, origin);
         } catch (e) {
@@ -2078,17 +2091,27 @@ export default {
     }
 
     // ── Usage metrics (root POST) ──
+    // Moved ahead of the insert below, which now names `src` — a column only
+    // ensureSchema's ALTER adds. It is guarded by _schemaReady so this costs one
+    // round trip per isolate, not one per beacon, and the later call in the
+    // visitor block is now a no-op rather than a second cost.
+    try { await ensureSchema(env); } catch {}
     const items = Array.isArray(body && body.events) ? body.events : [body];
     const day = new Date().toISOString().slice(0, 10);
     const rows = [];
     for (const e of items.slice(0, MAX_BATCH)) {
       if (!e || !TYPES.has(e.type)) continue;
-      rows.push({ type: e.type, key: clean(e.key, 40), lang: LANGS.has(e.lang) ? e.lang : null });
+      // src is attacker-controllable like every other field here, so it is
+      // length-capped and stripped to an id-safe alphabet rather than trusted —
+      // it ends up in a GROUP BY, and an unbounded label space is its own denial
+      // of service.
+      const src = clean(e.src, 16).replace(/[^A-Za-z0-9_-]/g, '');
+      rows.push({ type: e.type, key: clean(e.key, 40), lang: LANGS.has(e.lang) ? e.lang : null, src: src || null });
     }
     if (!rows.length) return new Response(null, { status: 204, headers: cors(origin) });
     try {
-      const stmt = env.DB.prepare('INSERT INTO events (day, type, key, lang) VALUES (?, ?, ?, ?)');
-      await env.DB.batch(rows.map((r) => stmt.bind(day, r.type, r.key, r.lang)));
+      const stmt = env.DB.prepare('INSERT INTO events (day, type, key, lang, src) VALUES (?, ?, ?, ?, ?)');
+      await env.DB.batch(rows.map((r) => stmt.bind(day, r.type, r.key, r.lang, r.src)));
     } catch {
       return new Response('db error', { status: 500, headers: cors(origin) });
     }

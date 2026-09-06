@@ -235,7 +235,7 @@ in `tools/social/`, a workflow that runs it, output committed and served by Page
 | --- | --- | --- |
 | ✅ **`telegram-channel-post.yml`** | Mirrors any image we publish to the Telegram channel via `sendPhoto`. Reuses `BOT_TOKEN`. | Done |
 | ✅ **Schedule `instagram-feature.yml`** | Store-of-the-week goes out weekly, picking a store that is not paid-for, not thin, and not recently featured | Done |
-| **`?src=` on every posted link + pass-through in the Worker** | Per-channel attribution against the existing `store_open` metric. Without this the whole exercise is unmeasurable | Hours |
+| ✅ **`?src=` on posted links + pass-through in the Worker** | Per-channel attribution against the existing `store_open` metric. Built: the app reads `?src=`, keeps it for the tab, and attaches it to every beacon; the Worker stores it and `/stats` reports `storeOpensBySrc30`. Only the nightly restock line is tagged so far — see below | Done |
 | **`restock-tomorrow` job** | Daily one-liner to the channel from `restockDay`/`restockDates` | Half a day |
 | **`captions.mjs`** | One place for caption templates + hashtag sets per channel, so captions stop being retyped per post | Half a day |
 | **`whats-new.mjs`** | Renders "added this month" from a `stores.json` diff | Half a day |
@@ -258,11 +258,20 @@ metric that makes a dead account look alive.
 | Instagram | Saves + shares (not likes), profile→link taps |
 | Video | Watch-through, then follows per 1k views |
 | Facebook groups | Comments and clicks per post, not reach |
-| All | `store_open` events tagged with `?src=` — the only cross-channel truth |
+| All | `store_open` events tagged with `?src=` — the only cross-channel truth. Read it from `GET /stats` as `storeOpensBySrc30` |
 
 The Worker already records `store_open`; adding a source tag makes the map's own
 analytics the scoreboard for social, which is better than any platform's dashboard
 because it counts the thing we actually want (someone looking at a shop).
+
+**What is tagged, and what cannot be.** The nightly restock line is
+channel-only, so its link carries `src=tg` and every tap on it genuinely came
+from Telegram. The Monday ranking and Thursday store feature share one caption
+between Instagram and the channel, so a single tag would be a lie on one of
+them. Tagging those needs the tag applied per surface at post time rather than
+baked into the caption — worth doing, not done. Mitigating that slightly:
+an Instagram caption's URL is not clickable at all, so almost any tap on a
+shared link came from Telegram anyway.
 
 **A blunt kill rule:** any channel that has not produced measurable link taps after
 8 weeks of honest effort gets dropped, not "improved". The list in §3E is already
@@ -300,7 +309,7 @@ long; it should stay long.
 **First 30 days — cheap and mostly automatic**
 1. ✅ Mirror the Monday post to a channel, ✅ add the daily restock line,
    ✅ open the channel and set `TG_CHANNEL`. All three slots are running.
-2. Add `?src=` and the Worker pass-through so everything after this is measurable.
+2. ✅ Add `?src=` and the Worker pass-through. **Left to do:** tag the shared captions — see the caveat below.
 3. ✅ Schedule store-of-the-week.
 4. Post once, by hand, in three Facebook groups and once in `r/lviv`. Watch what happens.
 
