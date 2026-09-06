@@ -339,6 +339,15 @@ a plausible quarter:
 
 ## Rules — the pinned post
 
+Posted and pinned by `.github/workflows/channel-rules.yml`, which reads the
+block below rather than a copy — so the pinned post and this document cannot
+drift. Re-run it after editing the block.
+
+The last line names the seller rather than the comments, because the channel
+has **no linked discussion group**: there are no comments under a channel post
+until one is linked, and the seller's `@username` is the only contact by
+design. Link a discussion group and the line is worth changing back.
+
 ```
 📌 Барахолка Львів — правила
 
@@ -354,7 +363,7 @@ a plausible quarter:
 7. Продали — кнопка «✅ Продано» або /sold.
    Свої оголошення — /my. Через 30 днів зникає саме.
 
-Питання по речі — у коментарях під нею.
+Питання по речі — напряму продавцю: його @username на картці.
 ```
 
 ## Open questions
