@@ -3,8 +3,10 @@
 A design, not a commitment. Nothing here is built.
 
 Shoppers list their own second-hand items; the bot collects them, an owner
-approves them, and they publish to a listings channel. **No payments, no
-escrow, no shipping** — see [What this is not](#what-this-is-not).
+approves them, and they publish to the existing
+[@Lviv_Secondhand](https://t.me/Lviv_Secondhand) channel, alongside the map's
+own posts. **No payments, no escrow, no shipping** — see
+[What this is not](#what-this-is-not).
 
 ---
 
@@ -30,21 +32,60 @@ moderation gate, and getting stale listings off the feed.
 | Surface | Role |
 | --- | --- |
 | **The bot** (`@Secondhandlvivbot`) | The only way to post. `/sell` walks a seller through a listing. |
-| **A new listings channel** | The feed. Bot-posted, forwardable, one item per post. |
+| **[@Lviv_Secondhand](https://t.me/Lviv_Secondhand)** | The feed — the same channel the map posts to. Bot-posted, forwardable, one item per post. |
 | **Its linked discussion group** | Telegram auto-creates a thread per channel post; that is where buyers ask "ще актуально?" without DMs. |
 
-**A separate channel from [@Lviv_Secondhand](https://t.me/Lviv_Secondhand),
-not a section of it.** The map channel's value is that it is low-volume and
-factual — at most one post a day, every claim checked
-([`TELEGRAM_CHANNEL.md`](TELEGRAM_CHANNEL.md)). Listings are high-volume
-user-generated content. Merging them would destroy the cadence discipline and
-attach every bad trade to the map's name. Both can sit in the existing
-**Resale second hand** community, which is exactly what communities group.
+### One channel, decided deliberately
+
+Listings go into the **existing** map channel rather than a new one. The case
+against was that the map channel's value is being low-volume and factual — at
+most one post a day, every claim checked
+([`TELEGRAM_CHANNEL.md`](TELEGRAM_CHANNEL.md)) — while listings are
+high-volume user content.
+
+The case for wins at this size: the channel has a handful of subscribers, and
+a second channel starts from zero and needs its own cold start. Splitting a
+small audience is a worse problem today than diluting a feed. Two costs come
+with the choice, and the rest of this document is written to contain them:
+
+1. **The feed can drown itself.** Handled by the volume rules below.
+2. **A bad trade now happens under the map's name**, in front of the shops
+   paying for placement. Handled by the moderation gate — which is no longer
+   just a spam filter but the thing protecting the map's reputation — and by
+   the disclaimer carried on every listing.
+
+**Revisit when** listings routinely hit the daily cap, or the first serious
+dispute lands. Splitting later is cheap: point the bot at a new channel id and
+leave the old posts where they are.
 
 **Not a topics supergroup**, though it is the obvious alternative. Topics
 browse better; a channel forwards better, and forwarding is the whole growth
 argument for being on Telegram at all. Categories are hashtags instead, which
 Telegram searches within a channel.
+
+### Volume rules — what keeps the map posts readable
+
+Sharing a channel means listings have to yield to the scheduled content rather
+than the other way round.
+
+- **At most 5 listings a day.** Approved listings beyond that queue to
+  tomorrow, oldest first. The owner sees the queue depth on approval.
+- **Listings publish 09:00–18:00 Kyiv only.** The evening belongs to the daily
+  restock line, which is the one post that is worthless if it is buried — it
+  exists to be read before tomorrow morning.
+- **Never on top of a scheduled post.** A listing waits 15 minutes after the
+  Monday ranking or Thursday feature so those are not immediately pushed up.
+
+A cap that bites is a good sign, not a problem: it is the signal to split the
+channel.
+
+### The discussion group affects the map posts too
+
+Linking a discussion group turns on comments for **every** post in the
+channel, the weekly ranking and store features included — not only listings.
+That is mostly good (a store feature gaining a comment thread is fine) but it
+is a change to the map channel's character, and it brings its own moderation
+surface. It can be switched off again, but not selectively per post.
 
 ## Categories
 
@@ -92,6 +133,15 @@ through the bot would double the moderation surface for v1.
 Everything comes from the wizard; there is no free-form block a seller can
 fill with contacts, links or claims. Optional fields simply vanish when
 skipped rather than printing «не вказано».
+
+Because listings share a channel with the map's own posts, each one carries a
+one-line mark so a reader never has to work out which kind of post they are
+looking at — the same reasoning that puts «Не реклама» on an unpaid store
+feature and «Реклама» on a paid one:
+
+```
+Оголошення від користувача · ми не беремо участі в угоді
+```
 
 ## Moderation gate
 
@@ -191,9 +241,11 @@ a plausible quarter:
    point, but grows the command surface of what is currently a clean utility
    bot — and its persistent keyboard is deliberately the only navigation
    surface, so `/sell` means a new button there.
-2. **Does it share the brand?** A scam under the Lviv Second Hand name lands
-   on the map and on the shops paying for placement. A separate name is safer
-   and starts from zero audience.
+2. ~~**Does it share the brand?**~~ **Decided: yes** — listings go in the
+   existing channel (see [One channel](#one-channel-decided-deliberately)).
+   What stays open is the consequence: the first serious dispute happens under
+   the map's name, so the moderation gate is now load-bearing rather than
+   merely tidy.
 3. **Who moderates on a bad week?** The gate is only as good as the person
    behind it, and this is a daily obligation, not a launch task.
 4. **Seed supply.** An empty market is worse than none. Twenty listings before
