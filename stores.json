@@ -208,6 +208,7 @@
     "id": "h7",
     "name": "HUMANA Vintage",
     "brand": "HUMANA",
+    "chainPrices": false,
     "address": "вул. Валова, 13",
     "addressEn": "Valova St, 13",
     "phone": "(032) 235-50-21",

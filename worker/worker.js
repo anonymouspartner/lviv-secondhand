@@ -10,6 +10,8 @@
 // Web Push (VAPID + RFC 8291 aes128gcm) is implemented with Web Crypto — no deps.
 // Deployed by .github/workflows/deploy-worker.yml. Secrets: VAPID_PRIVATE.
 
+import { CHANNEL_URL, postUrl, readChannelPrices } from './chain-feed.mjs';
+
 const PRIMARY_ORIGIN = 'https://www.lvivsecondhand.com';
 const ALLOWED_ORIGINS = new Set([
   'https://www.lvivsecondhand.com',
@@ -203,6 +205,15 @@ async function ensureSchema(env) {
   // 1 in this column and can never be mirrored, however the code later
   // changes. Same migration shape as events.src above.
   try { await env.DB.prepare('ALTER TABLE listings ADD COLUMN ig_ok INTEGER').run(); } catch {}
+  // Today's prices as a chain published them on its own Telegram channel (see
+  // worker/chain-feed.mjs and refreshChainFeed below). One row per chain, always
+  // overwritten, never accumulated — this is a cache of one day's fact, not a
+  // history. `checked` spaces out the polling and `alerted` keeps the drift
+  // alarm to once a day; both are written even when a poll finds nothing, which
+  // is why they live here rather than being derived from `updated`.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS chain_feed (chain TEXT PRIMARY KEY, post_id INTEGER, day TEXT, prices TEXT, raw TEXT, checked TEXT, alerted TEXT, updated TEXT NOT NULL DEFAULT (datetime('now')))"
+  ).run();
   _schemaReady = true;
 }
 
@@ -1301,6 +1312,82 @@ async function sendPush(sub, payloadStr, env) {
   }
 }
 
+// ── Chain price feed ─────────────────────────────────────────────────────────
+// HUMANA posts today's prices to its own public channel every morning. Reading
+// them gives the app real prices for seven stores it otherwise has none for —
+// see worker/chain-feed.mjs for the parsing and for why this is worth doing.
+//
+// Polling rides on the existing */5 cron rather than a trigger of its own, so
+// deployment is unchanged: the gate below turns ~288 wake-ups a day into about
+// a dozen fetches, inside the hours the channel actually posts.
+const CHAIN = 'humana';
+const POLL_MS = 45 * 60 * 1000;  // ~12 fetches a day inside the window below
+const POLL_FROM = 5;             // Kyiv hour. The morning post lands ~08:40;
+const POLL_TO = 16;              // an afternoon correction is the latest seen.
+// Telegram serves the preview page only to something browser-shaped: no
+// User-Agent at all is redirected away, and a bare token gets the connection
+// reset. This is the honest version of a browser string — it names the project
+// and links somewhere a Telegram admin can find out who is asking.
+const FEED_UA = 'Mozilla/5.0 (compatible; LvivSecondHandBot/1.0; +https://www.lvivsecondhand.com/)';
+
+function kyivHour() {
+  return Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Kyiv', hour: '2-digit', hourCycle: 'h23' })
+      .format(new Date())
+  );
+}
+
+async function refreshChainFeed(env, ctx) {
+  await ensureSchema(env);
+  const hour = kyivHour();
+  if (hour < POLL_FROM || hour > POLL_TO) return;
+  const row = await env.DB.prepare('SELECT day, checked, alerted FROM chain_feed WHERE chain = ?')
+    .bind(CHAIN).first();
+  if (row && row.checked && Date.now() - Date.parse(row.checked) < POLL_MS) return;
+
+  // Record the attempt *before* making it. A fetch that hangs or throws must
+  // still push the next try 45 minutes out, or a failing channel turns into a
+  // request every five minutes for as long as it stays broken.
+  const nowIso = new Date().toISOString();
+  await env.DB.prepare(
+    'INSERT INTO chain_feed (chain, checked) VALUES (?, ?) ' +
+    'ON CONFLICT(chain) DO UPDATE SET checked = excluded.checked'
+  ).bind(CHAIN, nowIso).run();
+
+  let html;
+  try {
+    const res = await fetch(CHANNEL_URL, {
+      headers: { 'User-Agent': FEED_UA, 'Accept-Language': 'uk,en' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return;
+    html = await res.text();
+  } catch {
+    return; // network, timeout, redirect — all the same here: try again later
+  }
+
+  const today = kyivDateStr();
+  const out = readChannelPrices(html, today);
+  if (out.ok) {
+    await env.DB.prepare(
+      'UPDATE chain_feed SET post_id = ?, day = ?, prices = ?, raw = ?, updated = datetime(\'now\') WHERE chain = ?'
+    ).bind(out.postId, out.day, JSON.stringify(out.lines), (out.raw || '').slice(0, 2000), CHAIN).run();
+    return;
+  }
+  // Nothing to store. A quiet morning is normal and silent; a post that states a
+  // price we could not read means the wording moved, and that is the one failure
+  // this feature cannot detect on its own — so it goes to the owner, once a day.
+  if (out.drift && (!row || row.alerted !== today)) {
+    await env.DB.prepare('UPDATE chain_feed SET alerted = ? WHERE chain = ?').bind(today, CHAIN).run();
+    tgNotify(
+      env, ctx,
+      `⚠️ HUMANA price feed: today's post states a price the parser did not recognise, ` +
+      `so the app is showing no prices. The wording has probably changed — ` +
+      `worker/chain-feed.mjs needs a new anchor.\n\n${(out.raw || '').slice(0, 500)}`
+    );
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -1326,6 +1413,27 @@ export default {
             out[r.store_id] = p;
           }
           return json(out, 200, origin);
+        } catch { return json({}, 200, origin); }
+      }
+      // Today's prices as the chain itself published them this morning:
+      // { humana: { day, postId, url, lines:[{key, uah|pct}] } }. The app renders
+      // its own EN/UA labels from the keys and links back to the source post.
+      //
+      // Read-time staleness check, not just write-time: if the poll above stops
+      // working the box vanishes rather than freezing on an old number, which is
+      // the failure that would actually mislead a shopper standing in the shop.
+      if (url.pathname === '/chain-prices') {
+        try {
+          await ensureSchema(env);
+          const row = await env.DB
+            .prepare('SELECT chain, post_id, day, prices FROM chain_feed WHERE chain = ? AND day = ?')
+            .bind(CHAIN, kyivDateStr()).first();
+          if (!row || !row.prices) return json({}, 200, origin);
+          const lines = JSON.parse(row.prices);
+          if (!Array.isArray(lines) || !lines.length) return json({}, 200, origin);
+          return json({
+            [row.chain]: { day: row.day, postId: row.post_id, url: postUrl(row.post_id), lines },
+          }, 200, origin);
         } catch { return json({}, 200, origin); }
       }
       // Top contributors by points — the bot's /leaderboard command reads this.
@@ -2320,6 +2428,9 @@ export default {
       // Separate try: a listings failure must not stop flash-deal broadcasts,
       // which are time-critical in a way that expiry is not.
       try { await sweepListings(env); } catch {}
+      // Same reasoning again, and more so: this one calls out to a third party
+      // we do not control, on a schedule where nothing is time-critical.
+      try { await refreshChainFeed(env, ctx); } catch {}
       return;
     }
     const today = kyivDateStr(); // 'YYYY-MM-DD' (Europe/Kyiv)
