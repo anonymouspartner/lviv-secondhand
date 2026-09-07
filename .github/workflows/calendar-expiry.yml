@@ -1,0 +1,75 @@
+name: Check the published collection calendars
+
+# `restockDates` in stores.json is each chain's own list of new-collection days,
+# copied off the pinned calendar post in its Telegram channel. It is the best
+# signal the tracker has and the only one with an expiry date: the lists run to
+# the end of the year they were copied from, and when they run out the app does
+# not complain — it silently falls back to extrapolating a fixed cycle, which
+# drifts a week across a single irregular gap. Months later the countdown is
+# simply wrong and nothing ever said so.
+#
+# This is the watchdog for that, on the same model as the Instagram token check
+# next door: it asks the one answerable question monthly, and when the answer is
+# bad it messages the owner on Telegram — the channel you actually read, rather
+# than a run log nobody opens.
+#
+# It cannot fix it itself. The dates live inside the pinned *image*, not in any
+# post's text, so a human has to read them off it. (The daily price posts *are*
+# text, and those are parsed automatically — see worker/chain-feed.mjs.)
+#
+# SECRETS (both optional — absent means this quietly does nothing):
+#   BOT_TOKEN / OWNER_ID — the same names the Workers use, so there is one set
+#                          of Telegram credentials in this repo, not two.
+
+on:
+  schedule:
+    - cron: "0 8 1 * *" # 1st of each month, 08:00 UTC (~11:00 Europe/Kyiv)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Warn if any calendar is running out
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          OWNER_ID: ${{ secrets.OWNER_ID }}
+        run: |
+          set -euo pipefail
+          # The checker prints nothing while every calendar is healthy, so any
+          # output at all is the alert.
+          REPORT=$(node scripts/check-calendar-expiry.mjs)
+          if [ -z "$REPORT" ]; then
+            echo "::notice::All published calendars still have future dates."
+            exit 0
+          fi
+          echo "$REPORT"
+          echo "::warning::A published collection calendar is running out."
+
+          # OWNER_ID is a chat id, not a credential, and already sits in
+          # worker/wrangler.toml as a plain var — fall back to it so this works
+          # without a second copy as a secret. Same trick as the token check.
+          if [ -z "${OWNER_ID:-}" ]; then
+            OWNER_ID=$(sed -n 's/^OWNER_ID *= *"\([0-9-]*\)".*/\1/p' worker/wrangler.toml | head -1)
+          fi
+          [ -n "${BOT_TOKEN:-}" ] && [ -n "${OWNER_ID:-}" ] || {
+            echo "::notice::No Telegram credentials — the warning above is the whole alert."
+            exit 0
+          }
+          R=$(curl -s -X POST \
+            "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg c "$OWNER_ID" --arg t "$REPORT" \
+                  '{chat_id:$c, text:$t, disable_web_page_preview:true}')" || echo '{}')
+          # Best-effort — a watchdog must not fail because its own alerting is
+          # misconfigured — but logged, so a silent watchdog is visible.
+          [ "$(echo "$R" | jq -r '.ok // false')" = "true" ] \
+            || echo "::warning::Telegram did not accept the alert: $(echo "$R" | jq -c '.description // .' 2>/dev/null)"

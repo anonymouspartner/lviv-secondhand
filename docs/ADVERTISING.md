@@ -114,6 +114,14 @@ Small stores buy foot traffic, not "impressions." Give them tangible proof:
   (this is not legal advice).
 - **Ad labelling:** every paid placement is marked `Реклама / Sponsored`; keep
   featured density low (≈1 sponsored per screen/area) so the map stays trusted.
+- **Editorial content is not a free tier.** The app also shows HUMANA's daily
+  prices, read off the chain's own public channel (see
+  [CHAIN_PRICES.md](CHAIN_PRICES.md)). Nobody paid for that and nobody can: it is
+  a neutral card with a source link, deliberately styled *unlike* every paid
+  surface — no gold pin, no ⭐ badge, no change to map position or list order. If
+  a store asks to buy the same thing, what they are buying is a tier above, not
+  that card. Letting the two look alike would tell shoppers the gold styling
+  means nothing and tell stores the rate card is optional.
 
 ## 7. Stripe: payments & product scheme
 

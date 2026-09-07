@@ -48,6 +48,7 @@ No app store, no install required to use it in a browser — but adding it to yo
 - 📸 **Instagram** — [@secondhandlvivbot](https://www.instagram.com/secondhandlvivbot/): which stores have gone longest since a restock, posted automatically every Monday
 - 📢 **Telegram channel** — [@Lviv_Secondhand](https://t.me/Lviv_Secondhand): the same posts where the links are actually clickable, plus a nightly line naming the shops that restock tomorrow
 - 🏷️ **Барахолка (flea market)** — sell your own second-hand things through the bot: it collects the listing, the maintainer approves it, and it publishes to the channel *and* to Instagram. Buyer and seller settle it between themselves — no money passes through this project
+- 🏷️ **Today's HUMANA prices** — the chain publishes its daily prices on its own Telegram channel; the app reads them and shows what each branch actually charges today, linked to the source post. Free and unpaid, so it is styled as information, never as a promotion — see [docs/CHAIN_PRICES.md](docs/CHAIN_PRICES.md)
 - 📣 **Store promotions** — a shop owner can promote their own store from inside the app; every paid placement is labelled
 - ⚡ **Flash deals** — a store can run a short paid sale (3h / 24h) with a live countdown banner and toast; follow a store on Telegram to hear the moment one goes live
 - ✏️ **Suggest a correction** — send a fix via Telegram; a moderator reviews it, or a trusted contributor's own edit publishes instantly
