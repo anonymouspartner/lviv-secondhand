@@ -100,6 +100,56 @@ function looksPriced(line) {
   return RE_PRICED.test(line);
 }
 
+// ── Single-item showcase posts ──────────────────────────────────────────────
+// Between the price lists the channel posts individual finds: one garment, at
+// one named branch, for its own price —
+//
+//     📍Любінська, 100, сукня Guess, розмір S, 900 грн.
+//
+// That is not a chain price, and it is not a price list we failed to read.
+//
+// Both halves matter. The feed keys off the store `type` (chainPricesFor in
+// index.html), so a number taken from a post like this is published as today's
+// price at all seven branches — one dress's tag standing in for the chain. A
+// showcase post that happens to name a category is the live version of that
+// bug: "📍Любінська, 100, взуття Nike, розмір 42, 900 грн" matches the
+// shoesTextile anchor and ships, with nothing else in the pipeline placed to
+// notice.
+//
+// And it must not raise the drift alarm, because that alarm's entire message is
+// "the wording moved, add an anchor" — and an anchor cut to fit one of these
+// posts is exactly how the dress price would reach the app. Alarming here does
+// not just cry wolf; it asks for the change that breaks things.
+//
+// So these posts are skipped whole: no price, no alarm.
+//
+// Recognised by markers a chain-wide price cannot carry — one branch's street
+// address, one garment's size. Two are required, at least one of them on the
+// line stating the price, because the cost of a false match is a genuine
+// wording change going unreported. A post carrying only one still alarms.
+const ITEM_MARKERS = [
+  // A street address: "📍Любінська, 100", "вул. Городоцька 200". The house
+  // number is part of the pattern — a bare pin also heads "📍 наші адреси".
+  '(?:📍|(?<!\\p{L})вул(?:иц\\p{L}*|\\.|(?=\\s)))[^\\n]{0,40}?,?\\s*\\d{1,3}(?![\\p{L}\\d])',
+  // A size: "розмір S", "розм. 38". Latin and Cyrillic size letters both appear.
+  '(?<!\\p{L})розм(?:iр\\p{L}*|\\.)?\\s*[:-]?\\s*(?:xxs|xs|s|m|l|xl|xxl|xxxl|[смл]|\\d{2,3})(?!\\p{L})',
+].map((src) => new RegExp(foldI(src), 'u'));
+
+/**
+ * True when a post is one branch showing off one item, rather than the chain
+ * stating today's prices. See the note above for why these are dropped whole
+ * rather than merely left unparsed.
+ */
+export function isItemShowcase(text) {
+  const priced = normalize(text).split(/\n+/).filter(looksPriced);
+  if (!priced.length) return false; // states no price: nothing to suppress
+  // One marker has to sit on the priced line itself, so that an address in the
+  // footer of a genuine price list can never suppress it on its own.
+  if (!priced.some((line) => ITEM_MARKERS.some((re) => re.test(line)))) return false;
+  const whole = normalize(text);
+  return ITEM_MARKERS.filter((re) => re.test(whole)).length >= 2;
+}
+
 /**
  * Pull the price facts out of one post's text.
  * Returns [] for a post that states no price — the overwhelmingly common case,
@@ -195,14 +245,20 @@ export function kyivDay(iso) {
  * Fails closed, deliberately and in every direction. Only a post made *today*
  * counts — never "the latest post", or one quiet weekend would leave Friday's
  * prices on the map reading as current. A post that yields no recognised line is
- * not a partial result, it is nothing.
+ * not a partial result, it is nothing. A post showing off one item at one branch
+ * is not a chain price at all, and is skipped before either test (see
+ * isItemShowcase).
  *
  * → { ok:true, postId, day, lines, raw }
  * → { ok:false, drift:boolean, raw:string }   drift = today's post stated a price
  *                                             we failed to read (alarm-worthy)
  */
 export function readChannelPrices(html, today) {
-  const todays = parseChannelHtml(html).filter((p) => p.text && kyivDay(p.postedAt) === today);
+  // Showcase posts are dropped before either question is asked of them — they
+  // are neither a price to publish nor a price we failed to read.
+  const todays = parseChannelHtml(html).filter(
+    (p) => p.text && kyivDay(p.postedAt) === today && !isItemShowcase(p.text)
+  );
   // Newest first: they post two or three times a day, and the last word on
   // today's prices is the one that counts. Falling through to an earlier post
   // covers the common evening sign-off that states no price at all.

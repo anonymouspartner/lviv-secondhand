@@ -1377,13 +1377,23 @@ async function refreshChainFeed(env, ctx) {
   // Nothing to store. A quiet morning is normal and silent; a post that states a
   // price we could not read means the wording moved, and that is the one failure
   // this feature cannot detect on its own — so it goes to the owner, once a day.
+  //
+  // The message reports what was seen and stops there. It used to name the cure
+  // ("needs a new anchor"), which reads as a diagnosis the parser is in no
+  // position to make: the alarm cannot tell a rewritten price list from a post
+  // that was never a price list. An anchor added to fit the wrong one of those
+  // publishes a single item's price at every branch, so the one judgement the
+  // owner has to make is the one the text must not make for them.
   if (out.drift && (!row || row.alerted !== today)) {
     await env.DB.prepare('UPDATE chain_feed SET alerted = ? WHERE chain = ?').bind(today, CHAIN).run();
     tgNotify(
       env, ctx,
       `⚠️ HUMANA price feed: today's post states a price the parser did not recognise, ` +
-      `so the app is showing no prices. The wording has probably changed — ` +
-      `worker/chain-feed.mjs needs a new anchor.\n\n${(out.raw || '').slice(0, 500)}`
+      `so the app is showing no prices.\n\n` +
+      `If this is the chain's daily price list in new wording, worker/chain-feed.mjs ` +
+      `needs a new anchor. If it is one item at one branch, nothing is wrong and no ` +
+      `change is needed — the feed covers all seven stores, so one item's price must ` +
+      `never become the chain's.\n\n${(out.raw || '').slice(0, 500)}`
     );
   }
 }

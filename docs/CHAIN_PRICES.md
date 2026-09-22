@@ -107,6 +107,7 @@ guesses.
 | Amounts outside ₴10–5000, discounts outside 5–90% are dropped | `chain-feed.mjs` bounds |
 | The row is re-checked against today's date **at read time**, not just at write | `GET /chain-prices` |
 | The app checks the day **again** in the browser, in Kyiv time | `chainPricesFor()` |
+| A post showing **one item at one branch** is skipped whole — no price, no alarm | `isItemShowcase` |
 
 Consequence: if the poll silently stops working, the price box disappears within
 a day. It cannot freeze on an old number.
@@ -124,6 +125,23 @@ Telegram message with the raw text, **once per day** (`chain_feed.alerted`).
 To fix: add the new wording to `CATEGORIES` in `worker/chain-feed.mjs`, add the
 post as a case in `scripts/check-chain-feed.mjs`, and deploy. If the change is
 big, save the page as a new fixture in `scripts/fixtures/`.
+
+**First check it is a price list at all.** The alarm fires on any post stating a
+price the parser did not read, and the channel also posts individual finds:
+
+```
+📍Любінська, 100, сукня Guess, розмір S, 900 грн.
+```
+
+That is one dress at one branch. The feed keys off `type`, so an anchor cut to
+match it would show 900 ₴ as today's price at **all seven** HUMANA stores. Posts
+like this are meant to yield nothing, and `isItemShowcase` now drops them before
+the alarm — but the alarm can only recognise the shapes it has seen, so the
+question is worth asking of every one it raises. The answer is almost always
+visible in the post: a street address, a brand, a size, one garment.
+
+If a showcase post in a new shape does alarm, the fix is a marker in
+`ITEM_MARKERS`, not an anchor in `CATEGORIES`.
 
 ## 6. Opting a store out
 

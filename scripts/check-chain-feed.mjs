@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   extractPrices,
+  isItemShowcase,
   kyivDay,
   parseChannelHtml,
   readChannelPrices,
@@ -115,6 +116,66 @@ const block = (id, at, text) =>
   const r = readChannelPrices(moved, '2026-09-07');
   check('an unrecognised price line raises drift', [r.ok, r.drift], [false, true]);
 }
+
+// ── Single-item showcase posts ──────────────────────────────────────────────
+// 22 Sep 2026: the post that exposed this. One dress, one branch, its own
+// price. It raised the drift alarm, whose text asks for a new anchor — and an
+// anchor matching this post would have published 900 грн as today's price at
+// all seven HUMANA branches. Reproduced from the text as received rather than
+// saved as a fixture: the alarm carries the post text, not the page.
+const DRESS = [
+  '❤️ Осінній образ, який неможливо не помітити!',
+  'Червона сукня з ефектним принтом — жіночна, стильна та з характером 🔥',
+  '',
+  '📍Любінська, 100, сукня Guess, розмір S, 900 грн.',
+  '✨ Нова осіння колекція вже в HUMANA!',
+  'Заходьте — можливо, саме ця сукня чекає на вас ❤️',
+  'HUMANA — шукайте свою особливу річ! 🛍️',
+].join('\n');
+{
+  const r = readChannelPrices(block(4001, '2026-09-22T06:30:00+00:00', DRESS), '2026-09-22');
+  check('a single-item post publishes no price', [r.ok, r.lines], [false, undefined]);
+  check('and does not raise drift', r.drift, false);
+  check('recognised as a showcase', isItemShowcase(DRESS), true);
+}
+
+// The live bug the same guard closes: a showcase item that happens to name a
+// category matched the anchors and shipped as a chain-wide price.
+{
+  const shoes = '📍Любінська, 100, взуття Nike, розмір 42, 900 грн.';
+  check('a showcase naming a category still parses in isolation',
+    extractPrices(shoes), [{ key: 'shoesTextile', uah: 900 }]);
+  const r = readChannelPrices(block(4002, '2026-09-22T06:30:00+00:00', shoes), '2026-09-22');
+  check('but is not published as the chain price', [r.ok, r.drift], [false, false]);
+}
+
+// The suppression has to stay narrow: a real wording change must still alarm.
+{
+  const one = block(4003, '2026-09-22T08:00:00+00:00', 'Сьогодні у нас на Любінській, 100 кожна річ по 180 грн!');
+  check('one marker alone does not suppress the alarm', readChannelPrices(one, '2026-09-22').drift, true);
+
+  // An address in a price list's footer must not suppress it either — the
+  // priced line carries no marker of its own.
+  const footer = block(4004, '2026-09-22T08:00:00+00:00',
+    'Сьогодні кожна річ по 180 грн!\n📍вул. Любінська, 100 — розмір будь-який');
+  check('a footer address does not suppress the alarm', readChannelPrices(footer, '2026-09-22').drift, true);
+}
+
+// A showcase post must not blank out the morning's real prices either way.
+{
+  const html =
+    block(4005, '2026-09-22T05:39:00+00:00', 'Білий цінник — 250 грн') +
+    block(4006, '2026-09-22T12:00:00+00:00', DRESS);
+  const r = readChannelPrices(html, '2026-09-22');
+  check('a later showcase falls through to the price post', r.lines, [{ key: 'white', uah: 250 }]);
+  check('and keeps the price post’s id', r.postId, 4005);
+}
+
+// Marker shapes seen in the channel, and prose that must not read as one.
+check('size in Cyrillic ("розмір М")', isItemShowcase('📍Любінська, 100, светр, розмір М, 400 грн'), true);
+check('"вул." address form', isItemShowcase('вул. Городоцька 200, пальто, розм. 38, 850 грн'), true);
+check('a price list is never a showcase', isItemShowcase('Білий цінник — 250 грн'), false);
+check('prose about sizes is not a showcase', isItemShowcase('Усі розміри — білий цінник 250 грн'), false);
 
 // ── Value parsing ───────────────────────────────────────────────────────────
 check('hryvnia amount', extractPrices('Білий цінник — 250 грн'), [{ key: 'white', uah: 250 }]);
