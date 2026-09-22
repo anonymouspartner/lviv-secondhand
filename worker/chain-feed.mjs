@@ -100,23 +100,116 @@ function looksPriced(line) {
   return RE_PRICED.test(line);
 }
 
+// ── Single-item showcase posts ──────────────────────────────────────────────
+// Between the price lists the channel posts individual finds: one garment, at
+// one named branch, for its own price. Two real examples, a day apart —
+//
+//     📍Любінська, 100, сукня Guess, розмір S, 900 грн.
+//
+//     ✨ Розмір — oversize
+//     💰 Ціна — 3500 грн
+//     📍 HUMANA, вул. Шевченка, 31
+//
+// Neither is a chain price, and neither is a price list we failed to read.
+//
+// Both halves matter. The feed keys off the store `type` (chainPricesFor in
+// index.html), so a number taken from a post like this is published as today's
+// price at all seven branches — one dress's tag standing in for the chain. A
+// showcase post that happens to name a category is the live version of that
+// bug: "📍Любінська, 100, взуття Nike, розмір 42, 900 грн" matches the
+// shoesTextile anchor and ships, with nothing else in the pipeline placed to
+// notice. So does a 3500 ₴ t-shirt, which is inside the bounds.
+//
+// And it must not raise the drift alarm, because that alarm's entire message is
+// "the wording moved, add an anchor" — and an anchor cut to fit one of these
+// posts is exactly how the dress price would reach the app. Alarming here does
+// not just cry wolf; it asks for the change that breaks things.
+//
+// So these posts are skipped whole: no price, no alarm.
+//
+// Two tests, and the second is the one doing the work. A post needs two markers
+// a chain-wide price has no use for — a branch address, a size, a singular
+// "Ціна —" introducing one thing's price. And it must carry no quantifier, as
+// every genuine price list here does: "все по 35 грн", "кожна річ", "усі інші
+// магазини". The markers alone are not enough, because a real price list can
+// name a branch and a size in the same breath as its prices — the 20 Sep post
+// listing which two shops were open that day does exactly that, and must keep
+// alarming rather than vanish.
+const ITEM_MARKERS = [
+  // A street address: "📍Любінська, 100", "вул. Шевченка, 31".
+  '(?:📍|(?<!\\p{L})вул(?:иц\\p{L}*|\\.|(?=\\s)))[^\\n]{0,40}?,?\\s*\\d{1,3}(?![\\p{L}\\d])',
+  // A size, whatever its value: "розмір S", "розм. 38", "Розмір — oversize".
+  '(?<!\\p{L})розм(?:iр\\p{L}*|\\.)',
+  // "Ціна — 3500 грн": the price *of a thing*, singular. A list says "ціни".
+  '(?<!\\p{L})цiна(?!\\p{L})',
+].map((src) => new RegExp(foldI(src), 'u'));
+
+// "все по 35 грн", "кожна річ", "усі інші магазини" — the chain talking about
+// its whole stock or its whole estate. One of these anywhere in a post means it
+// is not about a single item, whatever else it carries.
+const RE_CHAIN_WIDE = /(?<!\p{L})(?:вс[еія]\p{L}*|ус[еі]\p{L}*|кожн\p{L}*)(?!\p{L})/u;
+
+/**
+ * True when a post is one branch showing off one item, rather than the chain
+ * stating today's prices. See the note above for why these are dropped whole
+ * rather than merely left unparsed.
+ */
+export function isItemShowcase(text) {
+  const whole = normalize(text);
+  if (!whole.split(/\n+/).some(looksPriced)) return false; // no price: not our call
+  if (RE_CHAIN_WIDE.test(whole)) return false;
+  return ITEM_MARKERS.filter((re) => re.test(whole)).length >= 2;
+}
+
 /**
  * Pull the price facts out of one post's text.
  * Returns [] for a post that states no price — the overwhelmingly common case,
  * since most posts are prose.
+ *
+ * A price does not have to sit on the same line as its category. The channel
+ * states it in a header about as often as inline:
+ *
+ *     Бо за 56 грн зараз можна забрати:      ← the price
+ *     ▫️ одяг із білим цінником               ← what it applies to
+ *     ▫️ взуття
+ *     ▫️ текстиль
+ *
+ * Matching line by line read that post as "Ексклюзив −50%" and nothing else —
+ * the 56 ₴ headline, the whole point of the post, silently dropped. Silently is
+ * the problem: a partial result looks like success, so the drift alarm stays
+ * quiet and the app shows a thinner day than the chain actually offered.
+ *
+ * So a priced line that names no category becomes the price in force, and the
+ * category lines under it take it. Paragraph breaks end it, which is the scope
+ * the posts themselves use: a header and its bullets are one block, and the
+ * next block starts over. A line stating a price of its own never inherits,
+ * even when that price was rejected as out of bounds — it had its say.
  */
 export function extractPrices(text) {
-  const lines = normalize(text).split(/\n+/);
   const found = new Map();
-  for (const line of lines) {
-    const value = valueOf(line);
-    if (!value) continue;
+  const claim = (line, value) => {
     // One line can carry several categories: "-50% на товар з білим цінником,
     // взуття та текстиль" sets two at once.
     for (const cat of CATEGORIES) {
       // First statement wins. The headline is at the top of a post; anything
       // further down is a restatement or a footnote.
       if (cat.re.test(line) && !found.has(cat.key)) found.set(cat.key, { key: cat.key, ...value });
+    }
+  };
+  // Split on single newlines, not runs of them: a blank line is the signal that
+  // ends a header's reach, so it has to survive the split.
+  let inForce = null;
+  for (const raw of normalize(text).split('\n')) {
+    const line = raw.trim();
+    if (!line) { inForce = null; continue; }
+    const value = valueOf(line);
+    if (value) {
+      claim(line, value);
+      inForce = value; // whether or not it named a category — it may head a list
+    } else if (looksPriced(line)) {
+      inForce = null;  // states its own price, which we could not read: no inheriting
+    } else if (inForce) {
+      claim(line, inForce);
     }
   }
   // Canonical order, not the order the post happened to use, so the app's
@@ -195,14 +288,20 @@ export function kyivDay(iso) {
  * Fails closed, deliberately and in every direction. Only a post made *today*
  * counts — never "the latest post", or one quiet weekend would leave Friday's
  * prices on the map reading as current. A post that yields no recognised line is
- * not a partial result, it is nothing.
+ * not a partial result, it is nothing. A post showing off one item at one branch
+ * is not a chain price at all, and is skipped before either test (see
+ * isItemShowcase).
  *
  * → { ok:true, postId, day, lines, raw }
  * → { ok:false, drift:boolean, raw:string }   drift = today's post stated a price
  *                                             we failed to read (alarm-worthy)
  */
 export function readChannelPrices(html, today) {
-  const todays = parseChannelHtml(html).filter((p) => p.text && kyivDay(p.postedAt) === today);
+  // Showcase posts are dropped before either question is asked of them — they
+  // are neither a price to publish nor a price we failed to read.
+  const todays = parseChannelHtml(html).filter(
+    (p) => p.text && kyivDay(p.postedAt) === today && !isItemShowcase(p.text)
+  );
   // Newest first: they post two or three times a day, and the last word on
   // today's prices is the one that counts. Falling through to an earlier post
   // covers the common evening sign-off that states no price at all.

@@ -68,6 +68,12 @@ posts (05:00–16:00 Kyiv) and to one fetch per 45 minutes — about a dozen req
 a day. Riding the existing trigger also means `wrangler.toml` is unchanged and
 nothing about deployment moves.
 
+**Prices above their categories.** The channel states a price in a header about
+as often as inline — "Бо за 56 грн зараз можна забрати:" over a bullet list of
+categories. `extractPrices` carries a priced line's value down to the category
+lines under it, until a blank line ends the block. A line stating a price of its
+own never inherits, even one rejected by the bounds.
+
 **Parsing.** `worker/chain-feed.mjs`, a pure module with no Worker APIs, so
 `scripts/check-chain-feed.mjs` can drive it under plain Node against saved
 fixtures. It anchors on the category noun (`цінник`, `взуття`/`текстиль`,
@@ -107,6 +113,7 @@ guesses.
 | Amounts outside ₴10–5000, discounts outside 5–90% are dropped | `chain-feed.mjs` bounds |
 | The row is re-checked against today's date **at read time**, not just at write | `GET /chain-prices` |
 | The app checks the day **again** in the browser, in Kyiv time | `chainPricesFor()` |
+| A post showing **one item at one branch** is skipped whole — no price, no alarm | `isItemShowcase` |
 
 Consequence: if the poll silently stops working, the price box disappears within
 a day. It cannot freeze on an old number.
@@ -124,6 +131,23 @@ Telegram message with the raw text, **once per day** (`chain_feed.alerted`).
 To fix: add the new wording to `CATEGORIES` in `worker/chain-feed.mjs`, add the
 post as a case in `scripts/check-chain-feed.mjs`, and deploy. If the change is
 big, save the page as a new fixture in `scripts/fixtures/`.
+
+**First check it is a price list at all.** The alarm fires on any post stating a
+price the parser did not read, and the channel also posts individual finds:
+
+```
+📍Любінська, 100, сукня Guess, розмір S, 900 грн.
+```
+
+That is one dress at one branch. The feed keys off `type`, so an anchor cut to
+match it would show 900 ₴ as today's price at **all seven** HUMANA stores. Posts
+like this are meant to yield nothing, and `isItemShowcase` now drops them before
+the alarm — but the alarm can only recognise the shapes it has seen, so the
+question is worth asking of every one it raises. The answer is almost always
+visible in the post: a street address, a brand, a size, one garment.
+
+If a showcase post in a new shape does alarm, the fix is a marker in
+`ITEM_MARKERS`, not an anchor in `CATEGORIES`.
 
 ## 6. Opting a store out
 
