@@ -240,6 +240,70 @@ check(
 check('shoes alone', extractPrices('Взуття — 150 грн'), [{ key: 'shoesTextile', uah: 150 }]);
 check('textile alone', extractPrices('Текстиль — 100 грн'), [{ key: 'shoesTextile', uah: 100 }]);
 
+// ── A price stated above its categories ─────────────────────────────────────
+// 18 Sep 2026, real. Line-by-line matching read this as "Ексклюзив −50%" and
+// dropped the 56 ₴ headline the post was written to announce — silently, since
+// a partial result looks like success and never raises the alarm.
+{
+  const header = [
+    '👀 Є причина сьогодні зазирнути до HUMANA.',
+    '',
+    'Бо за 56 грн зараз можна забрати:',
+    '▫️ одяг із білим цінником',
+    '▫️ взуття',
+    '▫️ текстиль',
+    '',
+    'А якщо шукаєте щось маленьке й недороге — дрібний одяг по 30 грн 🛍️',
+    '',
+    '✨ І ще одна приємність: на «Ексклюзив» діє –50%.',
+  ].join('\n');
+  check('a header price reaches the categories under it', extractPrices(header), [
+    { key: 'white', uah: 56 },
+    { key: 'shoesTextile', uah: 56 },
+    { key: 'exclusive', pct: 50 },
+  ]);
+}
+
+// The reach has to end somewhere, or a price from the top of a post would
+// colour categories mentioned in passing at the bottom. A blank line ends it —
+// the scope the posts use themselves.
+check(
+  'a blank line ends a header price',
+  extractPrices('Все по 250 грн:\n▫️ взуття\n\nЗавітайте по білий цінник!'),
+  [{ key: 'shoesTextile', uah: 250 }]
+);
+
+// A line that states its own price never inherits, even when that price was
+// rejected — it had its say, and the reject is what the bounds are for.
+check(
+  'an out-of-bounds line does not inherit',
+  extractPrices('Все по 250 грн:\n▫️ білий цінник — 250000 грн'),
+  []
+);
+// The store footer with a live header price above it. The digits in the phone
+// number still contribute nothing — 250 comes from the header, and under a
+// header saying everything is 250 that is the right answer for the line. The
+// same footer with no header above it stays empty; that case is below.
+check(
+  'a phone number contributes no price of its own',
+  extractPrices('Все по 250 грн:\n▫️ Білий цінник, тел. (032) 245-50-09'),
+  [{ key: 'white', uah: 250 }]
+);
+
+// Neither of these names one of the three categories, so there is nothing for
+// the header price to attach to — and inventing one would be worse than the
+// gap. Both are real posts (19 and 20 Sep 2026).
+check(
+  '"вибрані товари" is not a category',
+  extractPrices('▫️ вибрані товари — за фіксованою ціною 35 грн\n▫️ «Ексклюзив» — –50%'),
+  [{ key: 'exclusive', pct: 50 }]
+);
+check(
+  '"Все по 35 грн" is not a category',
+  extractPrices('• Все по 35 грн\n• Ексклюзив — зі знижкою -50%'),
+  [{ key: 'exclusive', pct: 50 }]
+);
+
 // ── Bounds: a misread must not reach the app as a price ─────────────────────
 check('an implausible amount is rejected', extractPrices('Білий цінник — 250000 грн'), []);
 check('a too-small amount is rejected', extractPrices('Білий цінник — 2 грн'), []);

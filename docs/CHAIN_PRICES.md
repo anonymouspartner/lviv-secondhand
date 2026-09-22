@@ -68,6 +68,12 @@ posts (05:00–16:00 Kyiv) and to one fetch per 45 minutes — about a dozen req
 a day. Riding the existing trigger also means `wrangler.toml` is unchanged and
 nothing about deployment moves.
 
+**Prices above their categories.** The channel states a price in a header about
+as often as inline — "Бо за 56 грн зараз можна забрати:" over a bullet list of
+categories. `extractPrices` carries a priced line's value down to the category
+lines under it, until a blank line ends the block. A line stating a price of its
+own never inherits, even one rejected by the bounds.
+
 **Parsing.** `worker/chain-feed.mjs`, a pure module with no Worker APIs, so
 `scripts/check-chain-feed.mjs` can drive it under plain Node against saved
 fixtures. It anchors on the category noun (`цінник`, `взуття`/`текстиль`,

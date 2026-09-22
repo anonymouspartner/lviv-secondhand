@@ -165,19 +165,51 @@ export function isItemShowcase(text) {
  * Pull the price facts out of one post's text.
  * Returns [] for a post that states no price — the overwhelmingly common case,
  * since most posts are prose.
+ *
+ * A price does not have to sit on the same line as its category. The channel
+ * states it in a header about as often as inline:
+ *
+ *     Бо за 56 грн зараз можна забрати:      ← the price
+ *     ▫️ одяг із білим цінником               ← what it applies to
+ *     ▫️ взуття
+ *     ▫️ текстиль
+ *
+ * Matching line by line read that post as "Ексклюзив −50%" and nothing else —
+ * the 56 ₴ headline, the whole point of the post, silently dropped. Silently is
+ * the problem: a partial result looks like success, so the drift alarm stays
+ * quiet and the app shows a thinner day than the chain actually offered.
+ *
+ * So a priced line that names no category becomes the price in force, and the
+ * category lines under it take it. Paragraph breaks end it, which is the scope
+ * the posts themselves use: a header and its bullets are one block, and the
+ * next block starts over. A line stating a price of its own never inherits,
+ * even when that price was rejected as out of bounds — it had its say.
  */
 export function extractPrices(text) {
-  const lines = normalize(text).split(/\n+/);
   const found = new Map();
-  for (const line of lines) {
-    const value = valueOf(line);
-    if (!value) continue;
+  const claim = (line, value) => {
     // One line can carry several categories: "-50% на товар з білим цінником,
     // взуття та текстиль" sets two at once.
     for (const cat of CATEGORIES) {
       // First statement wins. The headline is at the top of a post; anything
       // further down is a restatement or a footnote.
       if (cat.re.test(line) && !found.has(cat.key)) found.set(cat.key, { key: cat.key, ...value });
+    }
+  };
+  // Split on single newlines, not runs of them: a blank line is the signal that
+  // ends a header's reach, so it has to survive the split.
+  let inForce = null;
+  for (const raw of normalize(text).split('\n')) {
+    const line = raw.trim();
+    if (!line) { inForce = null; continue; }
+    const value = valueOf(line);
+    if (value) {
+      claim(line, value);
+      inForce = value; // whether or not it named a category — it may head a list
+    } else if (looksPriced(line)) {
+      inForce = null;  // states its own price, which we could not read: no inheriting
+    } else if (inForce) {
+      claim(line, inForce);
     }
   }
   // Canonical order, not the order the post happened to use, so the app's
