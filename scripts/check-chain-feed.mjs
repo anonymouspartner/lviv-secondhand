@@ -139,6 +139,46 @@ const DRESS = [
   check('recognised as a showcase', isItemShowcase(DRESS), true);
 }
 
+// 20 Sep 2026: the same class in a different layout — markers spread over
+// several lines, and the priced line ("Ціна — 3500 грн") carrying none of its
+// own. An earlier version of this guard required a marker on the priced line
+// and missed it, so it kept false-alarming; the post is here to keep that
+// shape covered. 3500 ₴ is inside the bounds, so it would have shipped.
+{
+  const tee = [
+    '🔥 Palm Angels у HUMANA! 🔥',
+    'Стильна футболка Palm Angels — справжня знахідка для тих, хто цінує бренд 🖤',
+    '✨ Розмір — oversize',
+    '💰 Ціна — 3500 грн',
+    '',
+    '📍 HUMANA, вул. Шевченка, 31',
+  ].join('\n');
+  const r = readChannelPrices(block(4007, '2026-09-20T09:00:00+00:00', tee), '2026-09-20');
+  check('a showcase with the price on its own line', isItemShowcase(tee), true);
+  check('and it neither publishes nor alarms', [r.ok, r.drift], [false, false]);
+}
+
+// 20 Sep 2026: the counter-example that keeps the guard honest. A real price
+// list that names two branches — markers a showcase would have — but talks
+// about the whole stock ("Все по 35 грн") and the whole estate ("Усі інші
+// магазини не працюють"). It must stay a price post, not vanish as a showcase.
+{
+  const openToday = [
+    'Сьогодні у нас працюють магазини за адресою:',
+    'вул. Шевченка, 31',
+    'вул. Кн. Ольги, 5а',
+    '',
+    '• Все по 35 грн',
+    '• Дрібнички — лише по 19 грн',
+    '• Ексклюзив — зі знижкою -50%',
+    '',
+    'Усі інші магазини не працюють.',
+  ].join('\n');
+  check('a branch-listing price post is not a showcase', isItemShowcase(openToday), false);
+  check('and still parses', readChannelPrices(block(4008, '2026-09-20T06:00:00+00:00', openToday), '2026-09-20').lines,
+    [{ key: 'exclusive', pct: 50 }]);
+}
+
 // The live bug the same guard closes: a showcase item that happens to name a
 // category matched the anchors and shipped as a chain-wide price.
 {

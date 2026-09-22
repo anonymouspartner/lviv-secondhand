@@ -102,11 +102,15 @@ function looksPriced(line) {
 
 // ── Single-item showcase posts ──────────────────────────────────────────────
 // Between the price lists the channel posts individual finds: one garment, at
-// one named branch, for its own price —
+// one named branch, for its own price. Two real examples, a day apart —
 //
 //     📍Любінська, 100, сукня Guess, розмір S, 900 грн.
 //
-// That is not a chain price, and it is not a price list we failed to read.
+//     ✨ Розмір — oversize
+//     💰 Ціна — 3500 грн
+//     📍 HUMANA, вул. Шевченка, 31
+//
+// Neither is a chain price, and neither is a price list we failed to read.
 //
 // Both halves matter. The feed keys off the store `type` (chainPricesFor in
 // index.html), so a number taken from a post like this is published as today's
@@ -114,7 +118,7 @@ function looksPriced(line) {
 // showcase post that happens to name a category is the live version of that
 // bug: "📍Любінська, 100, взуття Nike, розмір 42, 900 грн" matches the
 // shoesTextile anchor and ships, with nothing else in the pipeline placed to
-// notice.
+// notice. So does a 3500 ₴ t-shirt, which is inside the bounds.
 //
 // And it must not raise the drift alarm, because that alarm's entire message is
 // "the wording moved, add an anchor" — and an anchor cut to fit one of these
@@ -123,17 +127,27 @@ function looksPriced(line) {
 //
 // So these posts are skipped whole: no price, no alarm.
 //
-// Recognised by markers a chain-wide price cannot carry — one branch's street
-// address, one garment's size. Two are required, at least one of them on the
-// line stating the price, because the cost of a false match is a genuine
-// wording change going unreported. A post carrying only one still alarms.
+// Two tests, and the second is the one doing the work. A post needs two markers
+// a chain-wide price has no use for — a branch address, a size, a singular
+// "Ціна —" introducing one thing's price. And it must carry no quantifier, as
+// every genuine price list here does: "все по 35 грн", "кожна річ", "усі інші
+// магазини". The markers alone are not enough, because a real price list can
+// name a branch and a size in the same breath as its prices — the 20 Sep post
+// listing which two shops were open that day does exactly that, and must keep
+// alarming rather than vanish.
 const ITEM_MARKERS = [
-  // A street address: "📍Любінська, 100", "вул. Городоцька 200". The house
-  // number is part of the pattern — a bare pin also heads "📍 наші адреси".
+  // A street address: "📍Любінська, 100", "вул. Шевченка, 31".
   '(?:📍|(?<!\\p{L})вул(?:иц\\p{L}*|\\.|(?=\\s)))[^\\n]{0,40}?,?\\s*\\d{1,3}(?![\\p{L}\\d])',
-  // A size: "розмір S", "розм. 38". Latin and Cyrillic size letters both appear.
-  '(?<!\\p{L})розм(?:iр\\p{L}*|\\.)?\\s*[:-]?\\s*(?:xxs|xs|s|m|l|xl|xxl|xxxl|[смл]|\\d{2,3})(?!\\p{L})',
+  // A size, whatever its value: "розмір S", "розм. 38", "Розмір — oversize".
+  '(?<!\\p{L})розм(?:iр\\p{L}*|\\.)',
+  // "Ціна — 3500 грн": the price *of a thing*, singular. A list says "ціни".
+  '(?<!\\p{L})цiна(?!\\p{L})',
 ].map((src) => new RegExp(foldI(src), 'u'));
+
+// "все по 35 грн", "кожна річ", "усі інші магазини" — the chain talking about
+// its whole stock or its whole estate. One of these anywhere in a post means it
+// is not about a single item, whatever else it carries.
+const RE_CHAIN_WIDE = /(?<!\p{L})(?:вс[еія]\p{L}*|ус[еі]\p{L}*|кожн\p{L}*)(?!\p{L})/u;
 
 /**
  * True when a post is one branch showing off one item, rather than the chain
@@ -141,12 +155,9 @@ const ITEM_MARKERS = [
  * rather than merely left unparsed.
  */
 export function isItemShowcase(text) {
-  const priced = normalize(text).split(/\n+/).filter(looksPriced);
-  if (!priced.length) return false; // states no price: nothing to suppress
-  // One marker has to sit on the priced line itself, so that an address in the
-  // footer of a genuine price list can never suppress it on its own.
-  if (!priced.some((line) => ITEM_MARKERS.some((re) => re.test(line)))) return false;
   const whole = normalize(text);
+  if (!whole.split(/\n+/).some(looksPriced)) return false; // no price: not our call
+  if (RE_CHAIN_WIDE.test(whole)) return false;
   return ITEM_MARKERS.filter((re) => re.test(whole)).length >= 2;
 }
 
