@@ -909,7 +909,8 @@
     "restockDay": "thu",
     "lat": 49.804155,
     "lng": 23.990601,
-    "note": "By weight. Restocked Thursdays. Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279)."
+    "note": "By weight. Restocked Thursdays. Години — з фірмової таблички мережі, сфотографованої на дверях філії на просп. Чорновола, 101 (2026-08-22); попередній запис «неділя — зачинено» був хибний. Ще не звірено з дверима саме цієї філії — на Котлярській 6 години відрізняються. · Hours taken from the chain door chart photographed at the Чорновола 101 branch (2026-08-22), replacing an incorrect \"Sunday closed\". Not yet checked against this branch’s own door — the Котлярська 6 branch differs (issue #279).",
+    "restock_date": "2026-10-01"
   },
   {
     "id": "c27",
