@@ -109,9 +109,9 @@ Small stores buy foot traffic, not "impressions." Give them tangible proof:
   before it lapses. Stripe handles recurring billing and renewal reminders for you.
 - **Collection:** **Stripe** is the primary processor (see §7); cash or bank transfer
   (₴0 fee) stays available as a fallback for stores that prefer it.
-- **Tax/FOP:** ad revenue in Ukraine may need FOP registration / tax handling, and
-  Stripe onboarding depends on an eligible business entity/country — the owner's call
-  (this is not legal advice).
+- **Tax/FOP:** the owner is now registered as a ФОП. The plan for using it —
+  local acquiring in ₴, invoices, fiscal receipts, agent payouts — is in
+  [FOP.md](FOP.md) (this is not legal advice).
 - **Ad labelling:** every paid placement is marked `Реклама / Sponsored`; keep
   featured density low (≈1 sponsored per screen/area) so the map stays trusted.
 - **Editorial content is not a free tier.** The app also shows HUMANA's daily
