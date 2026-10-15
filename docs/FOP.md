@@ -246,24 +246,32 @@ online. Plan for it to need **no code**:
 
 ## 5. Phase 4 — invoices for stores (рахунок + акт)
 
-For stores that would rather pay as a business, and at ₴0 acquiring fee.
+For stores that would rather pay as a business, at no acquiring fee. **Built.**
 
-- [ ] Bot owner command `/invoice <storeId> <tier> <cadence>` (or a button in the
-      owner's store menu): creates a `payments` row with `provider = 'invoice'`,
-      status `created`, and returns a printable **рахунок на оплату** page —
-      `GET /invoice/<id>?t=<token>` on the Worker, HTML with the ФОП details, IBAN,
-      amount, and the payment purpose string (`Оплата за рекламні послуги згідно
-      рахунку №…, без ПДВ`). Token-gated like `/flash-deal/approve`.
-- [ ] Owner marks it paid from Telegram (`/paid <id>`) once the transfer shows in
-      the bank → the same `fulfil()` as an online payment.
-- [ ] Then automate it: the 5-minute cron reads the PrivatBank **Автоклієнт API**
-      statement for the ФОП account, matches the invoice number in the payment
-      purpose and the amount, and calls `fulfil()` — owner told on Telegram either
-      way. Token stored as a Worker secret, read-only scope. A transfer whose
-      purpose or amount doesn't match is reported, never guessed.
-- [ ] **Акт виконаних робіт** page from the same row once the period ends — the
-      store's accountant will ask for it.
-- [ ] Invoice numbering: sequential per year, stored in KV/D1.
+- **`/invoice <store> <plan> [buyer]`** in the bot (owner only), e.g.
+  `/invoice c21 featured monthly` or `/invoice c21 poster ФОП Іваненко І. І.`.
+  It issues a рахунок and replies with its link, the amount, and the payment
+  purpose line (`Оплата за рекламні послуги згідно з рахунком № 2026-001 від …,
+  без ПДВ`). Numbers run in sequence per year: `2026-001`, `2026-002`, …
+- **The invoice page** (`GET /invoice`, opened by a per-invoice token) shows the
+  seller with IBAN, the buyer, the service, the total with the amount in words, the
+  purpose line, and a print / save-as-PDF button. It refers to the public offer.
+- **`/paid <number>`** once the transfer is in the bank. It goes through the same
+  `claimPayment()` → `fulfil()` as a card payment: the placement goes live and you
+  get the usual "paid" ping. A second `/paid` does nothing.
+- **The act** (акт надання послуг) is the same link with `&doc=act`, available once
+  paid.
+- **Seller details** come from `SELLER_*` in `worker/wrangler.toml` `[vars]` — the
+  same details as the offer page. Until they're filled in, `/invoice` says so instead
+  of issuing a blank invoice.
+
+Not built yet:
+
+- [ ] Automatic matching against the PrivatBank statement (Автоклієнт API), so
+      `/paid` isn't needed. Needs the API token and a look at the real statement
+      format first.
+- [ ] Renewal invoices: an invoiced monthly plan doesn't auto-renew. A reminder
+      from the daily cron 5 days before `until` would fit here.
 
 ---
 
@@ -315,7 +323,7 @@ with the accountant.
 | 6 | `PAY_PROVIDER=liqpay` live for **runs, flash deals, orders** | medium | flip the var back |
 | 7 | LiqPay subscriptions (§3.4, built) go live with step 6 | medium | flip the var back |
 | 8 | ПРРО (§4) | ⚖️ must be live **before** step 6 | — |
-| 9 | Invoices (§5) | low | yes |
+| 9 | ✅ Invoices (§5) — needs the `SELLER_*` details | low | yes |
 | 10 | Play organisation account (§7) | none | — |
 
 Step 3 ships alone and is verified against real Stripe purchases (one ₴50

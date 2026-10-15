@@ -369,7 +369,83 @@ async function lpCallback(fields, { key } = {}) {
   check(res.status === 503, `/liqpay-callback answered HTTP ${res.status} with LiqPay off, expected 503`);
 }
 
-// ── 10 · the Worker charges what the app shows ───────────────────────────────
+// ── 10 · bank-transfer invoices: create → page → mark paid → act ────────────
+{
+  const ADMIN_KEY = 'check-payments-admin';
+  const SELLER = {
+    SELLER_NAME: 'ФОП Перевірка Тест Тестович', SELLER_TAX_ID: '1234567890', SELLER_ADDRESS: 'м. Львів, вул. Тестова, 1',
+    SELLER_IBAN: 'UA213223130000026007233566001', SELLER_TAX_STATUS: 'Єдиний податок, 3 група, без ПДВ',
+  };
+  const invEnv = { ...env, ADMIN_KEY, ...SELLER };
+  const api = async (e, path, body, key = ADMIN_KEY) => {
+    const pending = [];
+    const res = await mod.default.fetch(new Request('https://x' + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key }, body: JSON.stringify(body),
+    }), e, { waitUntil(p) { pending.push(p); } });
+    await Promise.allSettled(pending);
+    let j = null; try { j = await res.json(); } catch {}
+    return { status: res.status, j };
+  };
+  const page = async (u) => {
+    const r = await mod.default.fetch(new Request(u.replace('https://lviv-metrics.lshanalytic.workers.dev', 'https://x')), invEnv, { waitUntil() {} });
+    return { status: r.status, html: await r.text() };
+  };
+
+  const noKey = await api(invEnv, '/api/invoice/create', { storeId: 's30', tier: 'featured', cadence: 'monthly' }, 'wrong');
+  check(noKey.status === 401, `invoice creation without the admin key answered HTTP ${noKey.status}`);
+  const noSeller = await api({ ...env, ADMIN_KEY }, '/api/invoice/create', { storeId: 's30', tier: 'featured', cadence: 'monthly' });
+  check(noSeller.status === 503 && noSeller.j && noSeller.j.reason === 'seller_not_configured' && noSeller.j.missing.length === 5,
+    `an invoice was issued without the seller's details: ${JSON.stringify(noSeller.j)}`);
+  const badPlan = await api(invEnv, '/api/invoice/create', { storeId: 's30', tier: 'gold', cadence: 'monthly' });
+  check(badPlan.status === 400, `an unknown plan answered HTTP ${badPlan.status}`);
+
+  const year = kyivToday.slice(0, 4);
+  const a = await api(invEnv, '/api/invoice/create', { storeId: 's30', tier: 'featured', cadence: 'monthly', buyer: 'ФОП Покупець, магазин «Тест»' });
+  check(a.status === 200 && a.j.ok && a.j.number === `${year}-001` && a.j.amount === 60000, `first invoice wrong: ${JSON.stringify(a.j)}`);
+  const b = await api(invEnv, '/api/invoice/create', { storeId: 's31', item: 'poster' });
+  check(b.j && b.j.number === `${year}-002` && b.j.amount === 15000, `second invoice not numbered in sequence: ${JSON.stringify(b.j)}`);
+  check(a.j && /без ПДВ$/.test(a.j.purpose) && a.j.purpose.includes(`№ ${year}-001`), `payment purpose wrong: ${a.j && a.j.purpose}`);
+  check(!row('SELECT * FROM promos WHERE store_id = ?', 's30'), 'issuing an invoice published the placement before payment');
+
+  const inv = await page(a.j.url);
+  check(inv.status === 200 && inv.html.includes(`Рахунок на оплату № ${year}-001`) && inv.html.includes(SELLER.SELLER_IBAN)
+    && inv.html.includes('ФОП Покупець, магазин «Тест»') && inv.html.includes('600,00') && inv.html.includes('Шістсот гривень 00 копійок'),
+    'the invoice page is missing its number, IBAN, buyer, amount or amount in words');
+  const forged = await page(a.j.url.replace(/t=[0-9a-f]+/, 't=' + '0'.repeat(40)));
+  check(forged.status === 404, `an invoice opened with a wrong token (HTTP ${forged.status})`);
+  const earlyAct = await page(a.j.actUrl);
+  check(earlyAct.status === 409, `the act was available before payment (HTTP ${earlyAct.status})`);
+
+  calls = [];
+  const paid = await api(invEnv, '/api/invoice/paid', { id: `${year}-001` });
+  check(paid.j && paid.j.state === 'fulfilled', `marking the invoice paid: ${JSON.stringify(paid.j)}`);
+  const p = row('SELECT * FROM promos WHERE store_id = ?', 's30');
+  check(p && p.tier === 'featured' && p.until === plusDays(34) && p.status === 'active', `a paid invoice did not publish the placement: ${JSON.stringify(p)}`);
+  check(tgPings().length === 1 && /PROMOTION PAID/.test(tgPings()[0].body.text), 'owner was not told the invoiced placement is live');
+  const again = await api(invEnv, '/api/invoice/paid', { id: `inv-${year}-001` });
+  check(again.j && again.j.state === 'already_paid' && tgPings().length === 1, 'marking an invoice paid twice fulfilled it twice');
+  const unknown = await api(invEnv, '/api/invoice/paid', { id: `${year}-999` });
+  check(unknown.j && unknown.j.reason === 'unknown_invoice', 'an unknown invoice number was accepted');
+
+  const act = await page(a.j.actUrl);
+  check(act.status === 200 && act.html.includes(`Акт надання послуг № ${year}-001`) && act.html.includes('претензій'), 'the act did not render after payment');
+
+  await api(invEnv, '/api/invoice/paid', { id: `${year}-002` });
+  const o = row('SELECT * FROM orders WHERE id = ?', `inv-${year}-002`);
+  check(o && o.item === 'poster' && o.amount === 15000, `an invoiced extra was not recorded as an order: ${JSON.stringify(o)}`);
+
+  // Amounts in words, across the rate card's shapes.
+  const words = { 'spotlight/annual': 'Дванадцять тисяч гривень 00 копійок', 'verified/annual': 'Дві тисячі пʼятсот гривень 00 копійок',
+    'spotlight/monthly': 'Одна тисяча двісті гривень 00 копійок', 'verified/run1': 'Пʼятдесят гривень 00 копійок', 'verified/monthly': 'Двісті пʼятдесят гривень 00 копійок' };
+  for (const [plan, want] of Object.entries(words)) {
+    const [tier, cadence] = plan.split('/');
+    const r = await api(invEnv, '/api/invoice/create', { storeId: 's32', tier, cadence });
+    const h = (await page(r.j.url)).html;
+    check(h.includes(want), `${plan}: amount in words is not "${want}"`);
+  }
+}
+
+// ── 11 · the Worker charges what the app shows ───────────────────────────────
 // The app's rate card is display-only; what is charged lives in the Worker.
 // Under Stripe the charged amount comes from Stripe's own Price objects, but
 // under LiqPay it comes from these constants, so a mismatch would charge a
@@ -404,4 +480,4 @@ if (errors.length) {
   for (const e of errors) console.error('  ✗ ' + e);
   process.exit(1);
 }
-console.log('Payments OK — Stripe and LiqPay: every kind of sale fulfils once; forged, failed and sandbox-on-live events do nothing; charged amounts match the app.');
+console.log('Payments OK — Stripe, LiqPay and invoices: every kind of sale fulfils once; forged, failed and sandbox-on-live events do nothing; charged amounts match the app.');

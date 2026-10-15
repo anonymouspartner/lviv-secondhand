@@ -695,6 +695,11 @@ async function claimPayment(env, pay) {
     const fresh = Object.fromEntries(Object.entries(pay).filter(([, v]) => v != null && v !== ''));
     return { ...stored, ...fresh };
   }
+  // Already recorded and not waiting for payment: paid (a redelivery, or a
+  // second /paid) or failed. Either way there is nothing to fulfil, and only a
+  // payment never seen before may be written below.
+  const seen = await env.DB.prepare('SELECT status FROM payments WHERE id = ?').bind(pay.id).first();
+  if (seen) return null;
   const intent = {};
   for (const k of INTENT_KEYS) if (pay[k] != null) intent[k] = pay[k];
   const inserted = await env.DB.prepare(
@@ -1045,6 +1050,154 @@ async function applyLiqpayCallback(env, ctx, d) {
   } else if (row.status === 'paid' && isSub) {
     await renewPromo(env, id);
   }
+}
+
+// ── Invoices: payment by bank transfer (рахунок + акт) ───────────────────────
+// For a store that would rather pay as a business than by card — most are a
+// ФОП themselves and expense the placement. See docs/FOP.md §5.
+//
+// The owner creates an invoice from the bot (/invoice), sends the store the
+// link, and marks it paid (/paid) once the transfer shows in the bank. Marking
+// it paid goes through the same claimPayment() → fulfil() as a card payment,
+// so the placement, the owner's ping and the Instagram queue behave the same.
+// The invoice is a 'created' payments row with provider 'invoice'; the page is
+// rendered from that row and the seller details in [vars], and opened by a
+// per-invoice token, like the flash-deal approval link.
+const SELLER_FIELDS = ['SELLER_NAME', 'SELLER_TAX_ID', 'SELLER_ADDRESS', 'SELLER_IBAN', 'SELLER_TAX_STATUS'];
+const missingSeller = (env) => SELLER_FIELDS.filter((k) => !String(env[k] || '').trim());
+
+// What an invoice is for, priced from the same constants the checkouts use.
+function invoiceLine(tier, cadence, item) {
+  if (item) {
+    const it = ORDER_ITEMS[item];
+    return it ? { kind: 'order', item, amount: it.amount, title: INVOICE_ITEM_TITLES[item] } : null;
+  }
+  if (!PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) return null;
+  const run = PROMO_RUNS[`${tier}_${cadence}`];
+  const amount = run ? run.amount : PROMO_AMOUNTS[`${tier}_${cadence}`];
+  if (!amount) return null;
+  return { kind: 'promo', tier, cadence, amount, title: `Рекламне розміщення «${TIER_LABEL[tier]}» у застосунку Lviv Second Hand, ${CADENCE_LABEL[cadence]}` };
+}
+const INVOICE_ITEM_TITLES = {
+  deal: 'Рекламна послуга «Пропозиція тижня» у застосунку Lviv Second Hand',
+  poster: 'Виготовлення та розміщення QR-плаката в магазині',
+  push: 'Спонсороване сповіщення в застосунку Lviv Second Hand',
+};
+
+// Hryvnias in words, as a Ukrainian invoice states the total. Covers up to
+// 999 999 ₴, far above any price on the rate card.
+function uahWords(kop) {
+  const n = Math.floor(kop / 100), k = kop % 100;
+  const ones = ['', 'один', 'два', 'три', 'чотири', 'пʼять', 'шість', 'сім', 'вісім', 'девʼять'];
+  const onesF = ['', 'одна', 'дві', 'три', 'чотири', 'пʼять', 'шість', 'сім', 'вісім', 'девʼять'];
+  const teens = ['десять', 'одинадцять', 'дванадцять', 'тринадцять', 'чотирнадцять', 'пʼятнадцять', 'шістнадцять', 'сімнадцять', 'вісімнадцять', 'девʼятнадцять'];
+  const tens = ['', '', 'двадцять', 'тридцять', 'сорок', 'пʼятдесят', 'шістдесят', 'сімдесят', 'вісімдесят', 'девʼяносто'];
+  const hundreds = ['', 'сто', 'двісті', 'триста', 'чотириста', 'пʼятсот', 'шістсот', 'сімсот', 'вісімсот', 'девʼятсот'];
+  const form = (x, f1, f2, f5) => { const t = x % 100, o = x % 10; if (t >= 11 && t <= 14) return f5; if (o === 1) return f1; if (o >= 2 && o <= 4) return f2; return f5; };
+  const triad = (x, fem) => {
+    const w = [hundreds[Math.floor(x / 100)]];
+    const t = x % 100;
+    if (t >= 10 && t < 20) w.push(teens[t - 10]);
+    else { w.push(tens[Math.floor(t / 10)]); w.push((fem ? onesF : ones)[t % 10]); }
+    return w.filter(Boolean).join(' ');
+  };
+  const parts = [];
+  const th = Math.floor(n / 1000), rest = n % 1000;
+  if (th) parts.push(triad(th, true), form(th, 'тисяча', 'тисячі', 'тисяч'));
+  if (rest || !th) parts.push(rest ? triad(rest, true) : 'нуль');
+  parts.push(form(n, 'гривня', 'гривні', 'гривень'));
+  const words = parts.filter(Boolean).join(' ');
+  return words.charAt(0).toUpperCase() + words.slice(1) + ` ${String(k).padStart(2, '0')} ${form(k, 'копійка', 'копійки', 'копійок')}`;
+}
+
+const htmlEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uaDate = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}.${m}.${y}`; };
+const uahPlain = (kop) => (kop / 100).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function createInvoice(env, { storeId, tier, cadence, item, buyer }) {
+  const line = invoiceLine(tier, cadence, item);
+  if (!line) return { ok: false, reason: 'unknown_plan' };
+  const missing = missingSeller(env);
+  if (missing.length) return { ok: false, reason: 'seller_not_configured', missing };
+  await ensureSchema(env);
+  const year = kyivDateStr().slice(0, 4);
+  const token = newToken();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM payments WHERE provider = 'invoice' AND id LIKE ?").bind(`inv-${year}-%`).first();
+    const number = `${year}-${String(((c && c.n) || 0) + 1 + attempt).padStart(3, '0')}`;
+    const id = `inv-${number}`;
+    const intent = { tier: line.tier, cadence: line.cadence, item: line.item, number, token, title: line.title, buyer: cleanText(buyer, 160) || `Магазин ${storeId}`, issued: kyivDateStr() };
+    const res = await env.DB.prepare(
+      "INSERT INTO payments (id, provider, kind, store_id, intent, amount, status) VALUES (?, 'invoice', ?, ?, ?, ?, 'created') ON CONFLICT(id) DO NOTHING"
+    ).bind(id, line.kind, storeId, JSON.stringify(intent), line.amount).run();
+    if (changed(res)) {
+      const url = `${WORKER_URL}/invoice?id=${encodeURIComponent(id)}&t=${token}`;
+      return { ok: true, id, number, amount: line.amount, title: line.title, url, actUrl: url + '&doc=act', purpose: invoicePurpose(number, intent.issued) };
+    }
+  }
+  return { ok: false, reason: 'number_clash' };
+}
+const invoicePurpose = (number, issued) => `Оплата за рекламні послуги згідно з рахунком № ${number} від ${uaDate(issued)}, без ПДВ`;
+
+// The bot's /paid. Accepts the number as printed ("2026-001") or the id.
+async function markInvoicePaid(env, ctx, ref) {
+  const id = String(ref || '').startsWith('inv-') ? String(ref) : `inv-${ref}`;
+  await ensureSchema(env);
+  const row = await env.DB.prepare("SELECT status FROM payments WHERE id = ? AND provider = 'invoice'").bind(id).first();
+  if (!row) return { ok: false, reason: 'unknown_invoice' };
+  const claimed = await claimPayment(env, { id, provider: 'invoice' });
+  if (!claimed) return { ok: true, state: 'already_paid', id };
+  await fulfil(env, ctx, claimed);
+  return { ok: true, state: 'fulfilled', id };
+}
+
+function renderInvoice(env, row, doc) {
+  let it = {};
+  try { it = JSON.parse(row.intent || '{}'); } catch {}
+  const act = doc === 'act';
+  const date = act ? (row.paid || kyivDateStr()).slice(0, 10) : it.issued;
+  const title = act ? `Акт надання послуг № ${it.number}` : `Рахунок на оплату № ${it.number}`;
+  const amount = row.amount;
+  const seller = [
+    `<b>${htmlEsc(env.SELLER_NAME)}</b>`,
+    `РНОКПП ${htmlEsc(env.SELLER_TAX_ID)}`,
+    htmlEsc(env.SELLER_ADDRESS),
+    `IBAN ${htmlEsc(env.SELLER_IBAN)}, ${htmlEsc(env.SELLER_BANK || 'АТ КБ «ПриватБанк»')}`,
+    htmlEsc(env.SELLER_TAX_STATUS),
+  ].join('<br>');
+  const body = act
+    ? `<p>Ми, що нижче підписалися, Виконавець і Замовник, склали цей акт про те, що Виконавець надав, а Замовник прийняв такі послуги:</p>`
+    : '';
+  const tail = act
+    ? `<p>Послуги надано в повному обсязі та в строк. Сторони претензій одна до одної не мають.</p>
+       <div class="sign"><div>Виконавець<br><br>_______________ ${htmlEsc(env.SELLER_NAME)}</div><div>Замовник<br><br>_______________</div></div>`
+    : `<p><b>Призначення платежу:</b> ${htmlEsc(invoicePurpose(it.number, it.issued))}</p>
+       <p class="muted">Рахунок дійсний протягом 5 банківських днів. Оплата цього рахунку означає згоду з умовами <a href="${APP_URL}offer.html">публічної оферти</a>. Послуга починає надаватися після зарахування коштів.</p>
+       <div class="sign"><div>Виконавець<br><br>_______________ ${htmlEsc(env.SELLER_NAME)}</div></div>`;
+  return `<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>${htmlEsc(title)} — Lviv Second Hand</title>
+<style>
+ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a2e;background:#fff;margin:0;padding:24px 16px;font-size:15px;line-height:1.5}
+ main{max-width:760px;margin:0 auto} h1{font-size:20px;margin:0 0 4px} .muted{color:#6b7280;font-size:13px}
+ .parties{display:grid;grid-template-columns:max-content 1fr;gap:10px 16px;margin:18px 0}
+ .parties dt{font-weight:700} .parties dd{margin:0;overflow-wrap:anywhere}
+ table{border-collapse:collapse;width:100%;margin:12px 0} th,td{border:1px solid #d1d5db;padding:6px 8px;text-align:left;vertical-align:top}
+ td.n{text-align:right;white-space:nowrap} th{background:#f3f4f6}
+ .total{text-align:right;margin:6px 0 14px} .sign{display:flex;gap:40px;flex-wrap:wrap;margin-top:28px}
+ .print{margin:18px 0;background:#1b5e38;color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:700}
+ @media (max-width:520px){.parties{grid-template-columns:1fr;gap:2px}.parties dd{margin-bottom:8px}}
+ @media print{.print{display:none} body{padding:0}}
+</style></head><body><main>
+<h1>${htmlEsc(title)}</h1><div class="muted">від ${uaDate(date)}</div>
+${body}
+<dl class="parties"><dt>${act ? 'Виконавець' : 'Постачальник'}</dt><dd>${seller}</dd><dt>${act ? 'Замовник' : 'Покупець'}</dt><dd>${htmlEsc(it.buyer)}</dd></dl>
+<table><thead><tr><th>№</th><th>Найменування послуги</th><th>К-сть</th><th>Ціна, ₴</th><th>Сума, ₴</th></tr></thead>
+<tbody><tr><td>1</td><td>${htmlEsc(it.title)}</td><td class="n">1</td><td class="n">${uahPlain(amount)}</td><td class="n">${uahPlain(amount)}</td></tr></tbody></table>
+<div class="total"><b>Разом: ${uahPlain(amount)} ₴</b>, без ПДВ</div>
+<p>Всього на суму: <b>${htmlEsc(uahWords(amount))}</b>, без ПДВ.</p>
+${tail}
+<button class="print" onclick="print()">Друкувати / зберегти PDF</button>
+</main></body></html>`;
 }
 
 // Pings every Telegram chat following this store (store_subs — see /api/sub)
@@ -1678,6 +1831,21 @@ export default {
       return Response.redirect(`${APP_URL}?${m[1]}=${failed ? 'cancel' : m[2]}`, 302);
     }
     if (request.method === 'GET') {
+      // A bank-transfer invoice, or its act once paid (?doc=act). Opened by the
+      // invoice's own token; a wrong token and an unknown id are the same 404.
+      if (url.pathname === '/invoice') {
+        const id = url.searchParams.get('id') || '';
+        const t = url.searchParams.get('t') || '';
+        const doc = url.searchParams.get('doc') === 'act' ? 'act' : 'invoice';
+        if (!id || !t) return new Response('not found', { status: 404 });
+        await ensureSchema(env);
+        const row = await env.DB.prepare("SELECT * FROM payments WHERE id = ? AND provider = 'invoice'").bind(id).first();
+        let tok = '';
+        try { tok = JSON.parse((row && row.intent) || '{}').token || ''; } catch {}
+        if (!row || !tok || !safeEqual(t, tok)) return new Response('not found', { status: 404 });
+        if (doc === 'act' && row.status !== 'paid') return new Response('Акт буде доступний після оплати рахунку. · The act is available once the invoice is paid.', { status: 409, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+        return new Response(renderInvoice(env, row, doc), { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+      }
       if (url.pathname === '/status') {
         let subs = null;
         try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
@@ -2305,6 +2473,22 @@ export default {
         storeId, text: text.slice(0, 120), tier: (body && body.tier) || '',
       });
       return json({ ok: true, ...made }, 200, origin);
+    }
+    // Bank-transfer invoices — the bot's /invoice and /paid. Owner-only through
+    // the bot, so gated on ADMIN_KEY like the other bot-only routes.
+    if (url.pathname === '/api/invoice/create' || url.pathname === '/api/invoice/paid') {
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
+      if (url.pathname === '/api/invoice/paid') {
+        const ref = body && body.id;
+        if (typeof ref !== 'string' || !/^(inv-)?\d{4}-\d{3,}$/.test(ref)) return json({ ok: false, reason: 'bad_request' }, 400, origin);
+        return json(await markInvoicePaid(env, ctx, ref), 200, origin);
+      }
+      const storeId = body && body.storeId;
+      if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)) return json({ ok: false, reason: 'bad_request' }, 400, origin);
+      const r = await createInvoice(env, { storeId, tier: body.tier, cadence: body.cadence, item: body.item, buyer: body.buyer });
+      return json(r, r.ok ? 200 : (r.reason === 'seller_not_configured' ? 503 : 400), origin);
     }
     if (url.pathname === '/api/sub') {
       // Bot-only: the Telegram Worker is the sole caller, over a service

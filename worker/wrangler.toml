@@ -34,6 +34,16 @@ VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYM
 # Not a secret (it is just a chat id, same value as telegram-bot/wrangler.toml).
 # The notification stays off until the BOT_TOKEN secret is also set — see below.
 OWNER_ID = "1212541015"
+# The ФОП's details, printed on bank-transfer invoices and acts (GET /invoice,
+# the bot's /invoice). Public by design — the same details the offer page
+# (offer.html §12) shows — so they live here rather than as secrets. Until all
+# five are filled in, /invoice answers that they are missing instead of
+# issuing an invoice with blanks. SELLER_BANK defaults to PrivatBank.
+SELLER_NAME = ""
+SELLER_TAX_ID = ""
+SELLER_ADDRESS = ""
+SELLER_IBAN = ""
+SELLER_TAX_STATUS = ""
 # The Барахолка channel, so the listings sweep can delete an expired post.
 # Not a secret — a public channel handle is public by definition, same
 # reasoning as OWNER_ID above and as the TG_CHANNEL repository *variable* the
