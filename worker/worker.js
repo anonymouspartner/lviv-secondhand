@@ -248,6 +248,14 @@ const PROMO_PRICES = {
   spotlight_monthly: 'price_1U1dvv7ZlQqI3gQVR5qnNNHk',
   spotlight_annual:  'price_1U1dw17ZlQqI3gQVuizcyhYi',
 };
+// The same rate card in kopiyky, for a provider with no pre-created Price
+// objects to point at (LiqPay). Must agree with PROMO_PLANS in index.html and
+// with the live Stripe Prices — scripts/check-payments.mjs checks the first.
+const PROMO_AMOUNTS = {
+  verified_monthly:   25000, verified_annual:   250000,
+  featured_monthly:   60000, featured_annual:   600000,
+  spotlight_monthly: 120000, spotlight_annual: 1200000,
+};
 const PROMO_TIERS = new Set(['verified', 'featured', 'spotlight']);
 const PROMO_CADENCES = new Set(['monthly', 'annual', 'run1', 'run7', 'run30']);
 
@@ -278,9 +286,9 @@ const isRun = (c) => c === 'run1' || c === 'run7' || c === 'run30';
 // built), so the purchase is recorded for the owner to fulfil by hand. Prices are the
 // ones already live in Stripe — see docs/ADVERTISING.md §7.
 const ORDER_ITEMS = {
-  deal:   { price: 'price_1U1dwY7ZlQqI3gQVMZEzRBQT', label: 'Deal of the week' },
-  poster: { price: 'price_1U1dwb7ZlQqI3gQVGSqqTa3x', label: 'Poster placement' },
-  push:   { price: 'price_1U1dwe7ZlQqI3gQV1yCPZoEc', label: 'Sponsored push' },
+  deal:   { price: 'price_1U1dwY7ZlQqI3gQVMZEzRBQT', amount: 30000, label: 'Deal of the week' },
+  poster: { price: 'price_1U1dwb7ZlQqI3gQVGSqqTa3x', amount: 15000, label: 'Poster placement' },
+  push:   { price: 'price_1U1dwe7ZlQqI3gQV1yCPZoEc', amount: 40000, label: 'Sponsored push' },
 };
 
 // The shopper-facing offer line ("-10% з застосунком"). It is collected as a Stripe
@@ -324,6 +332,12 @@ function cleanText(raw, max) {
   return s.slice(0, max || OFFER_MAX);
 }
 function cleanOffer(raw) { return cleanText(raw, OFFER_MAX); }
+// A contact address, shape-checked only. Anything else is dropped rather than
+// stored, since it is shown to the owner as the way to reach the buyer.
+function cleanEmail(raw) {
+  const s = String(raw || '').trim().slice(0, 120);
+  return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(s) ? s : '';
+}
 
 // ── Flash deals (Feature 4) ──────────────────────────────────────────────────
 // A short-lived sale, not a placement tier: pay once for a 3h/24h window, the
@@ -883,6 +897,153 @@ async function applyStripeEvent(env, ev, ctx) {
   } else if (type === 'customer.subscription.deleted' ||
              (type === 'customer.subscription.updated' && ['canceled', 'unpaid', 'incomplete_expired'].includes(o.status))) {
     await cancelPromo(env, o.id);
+  }
+}
+
+// ── LiqPay adapter (PrivatBank) ──────────────────────────────────────────────
+// The second provider behind fulfil(). Off until PAY_PROVIDER = "liqpay" and
+// both keys are set; until then every checkout goes to Stripe exactly as before.
+// See docs/FOP.md §3.
+//
+// LiqPay differs from Stripe in three ways that shape this code:
+//   · Its checkout cannot collect free text, so the offer line, flash-deal text
+//     and contact email are collected in the app and held in a 'created'
+//     payments row. Only the paid callback flips that row, so — as with Stripe
+//     — nothing the buyer wrote is published until money has moved.
+//   · Its checkout is a signed form POST, not a URL, so the routes answer with
+//     a tiny page that submits that form for the buyer.
+//   · Amounts are hryvnias, not kopiyky. Kopiyky stay the unit everywhere
+//     else; conversion happens only at the boundary, in this block.
+const LIQPAY_CHECKOUT_URL = 'https://www.liqpay.ua/api/3/checkout';
+const payProvider = (env) =>
+  (env.PAY_PROVIDER === 'liqpay' && env.LIQPAY_PUBLIC_KEY && env.LIQPAY_PRIVATE_KEY ? 'liqpay' : 'stripe');
+const checkoutReady = (env) => (payProvider(env) === 'liqpay' || !!env.STRIPE_API_KEY);
+// Sandbox keys pay with test cards and report status "sandbox" instead of
+// "success". Accepted only while the keys themselves are sandbox keys, so a
+// live shop can never be fulfilled by a test payment.
+const liqpaySandbox = (env) => String(env.LIQPAY_PUBLIC_KEY || '').startsWith('sandbox_');
+
+function b64Utf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+function utf8FromB64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+// LiqPay's signature: base64(sha1(private_key + data + private_key)).
+async function liqpaySign(privateKey, data) {
+  const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(privateKey + data + privateKey));
+  let bin = '';
+  for (const b of new Uint8Array(digest)) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+const liqpayLang = (v) => (v === 'en' ? 'en' : 'uk');
+// "YYYY-MM-DD HH:MM:SS" in UTC, the format subscribe_date_start takes.
+const liqpayNow = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+const TIER_LABEL = { verified: 'Verified+', featured: 'Featured', spotlight: 'Spotlight' };
+const CADENCE_LABEL = { monthly: 'місяць', annual: 'рік', run1: '1 день', run7: '7 днів', run30: '30 днів' };
+
+// Prepare the payment and answer with the page that hands the buyer to LiqPay.
+// `intent` is a normalised payment minus what only the provider can know.
+async function liqpayCheckout(env, intent, { lang, returnTo, description, subscribe }) {
+  await ensureSchema(env);
+  const id = 'lp_' + crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+  const meta = {};
+  for (const k of INTENT_KEYS) if (intent[k] != null) meta[k] = intent[k];
+  await env.DB.prepare(
+    "INSERT INTO payments (id, provider, kind, store_id, intent, text, amount, email, status) VALUES (?, 'liqpay', ?, ?, ?, ?, ?, ?, 'created')"
+  ).bind(id, intent.kind, intent.storeId, JSON.stringify(meta), intent.text || null, intent.amount, intent.email || null).run();
+
+  const params = {
+    version: 3,
+    public_key: env.LIQPAY_PUBLIC_KEY,
+    action: subscribe ? 'subscribe' : 'pay',
+    amount: intent.amount / 100,
+    currency: 'UAH',
+    description,
+    order_id: id,
+    language: liqpayLang(lang),
+    result_url: `${WORKER_URL}/liqpay-return?id=${encodeURIComponent(id)}&to=${encodeURIComponent(returnTo)}`,
+    server_url: `${WORKER_URL}/liqpay-callback`,
+  };
+  if (subscribe) {
+    params.subscribe_date_start = liqpayNow();
+    params.subscribe_periodicity = subscribe; // 'month' | 'year'
+  }
+  const data = b64Utf8(JSON.stringify(params));
+  const signature = await liqpaySign(env.LIQPAY_PRIVATE_KEY, data);
+  // data and signature are base64, so they are safe inside an attribute as-is.
+  const ua = liqpayLang(lang) === 'uk';
+  const html = `<!doctype html><html lang="${ua ? 'uk' : 'en'}"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">` +
+    `<title>${ua ? 'Перехід до оплати' : 'Going to payment'}</title>` +
+    `<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f2f4f6;color:#1a1a2e;` +
+    `display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;text-align:center}` +
+    `button{background:#1b5e38;color:#fff;border:0;border-radius:12px;padding:14px 22px;font-size:16px;font-weight:700}</style></head><body>` +
+    `<form id="f" method="POST" action="${LIQPAY_CHECKOUT_URL}" accept-charset="utf-8">` +
+    `<input type="hidden" name="data" value="${data}"><input type="hidden" name="signature" value="${signature}">` +
+    `<p>${ua ? 'Переходимо до захищеної сторінки оплати LiqPay…' : 'Taking you to the secure LiqPay payment page…'}</p>` +
+    `<button type="submit">${ua ? 'Перейти до оплати' : 'Continue to payment'}</button></form>` +
+    `<script>document.getElementById('f').submit()</script></body></html>`;
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+}
+
+// A verified LiqPay callback. Every successful charge — the first one and each
+// later subscription charge — carries its own payment_id, and each is recorded
+// in the ledger under it, so a redelivered callback does nothing twice. The
+// first charge fulfils the prepared payment; any later charge on a paid
+// subscription renews it.
+async function applyLiqpayCallback(env, ctx, d) {
+  const id = String(d.order_id || '');
+  if (!id) return;
+  const row = await env.DB.prepare("SELECT * FROM payments WHERE id = ? AND provider = 'liqpay'").bind(id).first();
+  if (!row) return; // not a checkout we prepared
+  let intent = {};
+  try { intent = JSON.parse(row.intent || '{}'); } catch {}
+  const status = String(d.status || '');
+  const isSub = row.kind === 'promo' && (intent.cadence === 'monthly' || intent.cadence === 'annual');
+
+  if (status === 'failure' || status === 'error') {
+    await env.DB.prepare("UPDATE payments SET status = 'failed' WHERE id = ? AND status = 'created'").bind(id).run();
+    return;
+  }
+  if (status === 'unsubscribed') {
+    if (isSub) await cancelPromo(env, id);
+    return;
+  }
+  if (status === 'reversed') {
+    // A refund or chargeback. A subscription is ended outright; anything else
+    // is left for the owner to look at, because a later purchase for the same
+    // store may already have replaced what this payment bought.
+    if (isSub) await cancelPromo(env, id);
+    tgNotify(env, ctx,
+      `↩️ PAYMENT REVERSED (refund or chargeback)\n\n` +
+      `Store: ${row.store_id}\nWhat:  ${row.kind}${intent.tier ? ' · ' + intent.tier : ''}${intent.cadence ? ' · ' + intent.cadence : ''}\n` +
+      `Order: ${id}\n\n` +
+      (isSub ? 'The subscription has been ended.' : 'Check whether the placement or deal should be taken down.') +
+      `\n\n${storeLink(row.store_id)}`);
+    return;
+  }
+  const paid = status === 'success' || status === 'subscribed' || (status === 'sandbox' && liqpaySandbox(env));
+  if (!paid) return; // processing, 3-D Secure and the like: a final status follows
+
+  const amount = d.amount == null ? null : Math.round(Number(d.amount) * 100);
+  const charge = await claimPayment(env, {
+    id: `lp_pay_${d.payment_id || id}`, provider: 'liqpay', kind: 'charge', storeId: row.store_id, amount,
+  });
+  if (!charge) return; // this charge was already handled
+
+  if (row.status === 'created') {
+    const claimed = await claimPayment(env, { id, provider: 'liqpay', amount, subRef: isSub ? id : null });
+    if (claimed) await fulfil(env, ctx, claimed);
+  } else if (row.status === 'paid' && isSub) {
+    await renewPromo(env, id);
   }
 }
 
@@ -1497,11 +1658,30 @@ export default {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin') || '';
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
+    // ── LiqPay: where the buyer lands after paying ──
+    // Before the method split because LiqPay may send the buyer back with either
+    // a GET or a form POST. It only chooses which "thanks" screen the app shows:
+    // the callback below is what fulfils, and it often arrives a moment after
+    // the buyer does, so an unfinished payment still gets the thanks screen
+    // (which already says it may take a moment) — only a known failure doesn't.
+    if (url.pathname === '/liqpay-return') {
+      const id = url.searchParams.get('id') || '';
+      const to = url.searchParams.get('to') || '';
+      const m = /^(promoted|flashdeal|ordered)=([a-z0-9_]{1,16})$/.exec(to);
+      if (!m) return Response.redirect(APP_URL, 302);
+      let failed = false;
+      try {
+        await ensureSchema(env);
+        const row = await env.DB.prepare("SELECT status FROM payments WHERE id = ? AND provider = 'liqpay'").bind(id).first();
+        failed = !row || row.status === 'failed';
+      } catch {}
+      return Response.redirect(`${APP_URL}?${m[1]}=${failed ? 'cancel' : m[2]}`, 302);
+    }
     if (request.method === 'GET') {
       if (url.pathname === '/status') {
         let subs = null;
         try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
-        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: !!env.STRIPE_API_KEY, portal: portalReadyCached(env, ctx) }, 200, origin);
+        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: checkoutReady(env), provider: payProvider(env), portal: portalReadyCached(env, ctx) }, 200, origin);
       }
       // Live paid promotions: { storeId: {tier, offer?, until} }. The app merges
       // these onto STORES so the gold pin/badge/offer render automatically.
@@ -1563,6 +1743,17 @@ export default {
         const run = isRun(cadence) ? PROMO_RUNS[`${tier}_${cadence}`] : null;
         const price = run ? null : PROMO_PRICES[`${tier}_${cadence}`];
         if (!run && !price) return new Response('unknown tier', { status: 400, headers: cors(origin) });
+        if (payProvider(env) === 'liqpay') {
+          return liqpayCheckout(env, {
+            kind: 'promo', storeId: store, tier, cadence,
+            amount: run ? run.amount : PROMO_AMOUNTS[`${tier}_${cadence}`],
+            text: cleanOffer(url.searchParams.get('text')), email: cleanEmail(url.searchParams.get('email')),
+          }, {
+            lang: url.searchParams.get('lang'), returnTo: 'promoted=' + tier,
+            description: `Lviv Second Hand — ${TIER_LABEL[tier]}, ${CADENCE_LABEL[cadence]} — магазин ${store}`,
+            subscribe: run ? null : (cadence === 'annual' ? 'year' : 'month'),
+          });
+        }
         if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
         const form = new URLSearchParams();
         form.set('mode', run ? 'payment' : 'subscription');
@@ -1617,6 +1808,14 @@ export default {
         const tier = FLASH_DEAL_TIERS[tierKey];
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !tier) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
+        }
+        if (payProvider(env) === 'liqpay') {
+          const text = cleanText(url.searchParams.get('text'), DEAL_MAX);
+          if (!text) return new Response('deal text required', { status: 400, headers: cors(origin) });
+          return liqpayCheckout(env, {
+            kind: 'flashDeal', storeId: store, tier: tierKey, pin: pin || null, amount: tier.amount, text,
+            email: cleanEmail(url.searchParams.get('email')),
+          }, { lang: url.searchParams.get('lang'), returnTo: 'flashdeal=' + tierKey, description: `Lviv Second Hand — ${tier.label} — магазин ${store}` });
         }
         if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
         const form = new URLSearchParams();
@@ -1848,6 +2047,16 @@ export default {
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !ORDER_ITEMS[item]) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
+        if (payProvider(env) === 'liqpay') {
+          // An extra is arranged by hand, so we must be able to reach the buyer;
+          // Stripe asks for the email itself, LiqPay does not.
+          const email = cleanEmail(url.searchParams.get('email'));
+          if (!email) return new Response('email required', { status: 400, headers: cors(origin) });
+          return liqpayCheckout(env, {
+            kind: 'order', storeId: store, item, amount: ORDER_ITEMS[item].amount, currency: 'uah',
+            text: cleanOffer(url.searchParams.get('text')), email,
+          }, { lang: url.searchParams.get('lang'), returnTo: 'ordered=' + item, description: `Lviv Second Hand — ${ORDER_ITEMS[item].label} — магазин ${store}` });
+        }
         if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
         const form = new URLSearchParams();
         form.set('mode', 'payment');
@@ -1988,6 +2197,25 @@ export default {
       return new Response('ok', { status: 200, headers: cors(origin) });
     }
     if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: cors(origin) });
+
+    // ── LiqPay callback: the paid (or failed, refunded, cancelled) event ──
+    // Form-encoded data + signature, verified with the private key before
+    // anything is read. Before rate limiting, like the Stripe webhook below.
+    // Inert (503) until LiqPay is the active provider.
+    if (url.pathname === '/liqpay-callback') {
+      if (payProvider(env) !== 'liqpay') return new Response('not configured', { status: 503 });
+      let form;
+      try { form = await request.formData(); } catch { return new Response('bad request', { status: 400 }); }
+      const data = String(form.get('data') || '');
+      const sig = String(form.get('signature') || '');
+      if (!data || !safeEqual(sig, await liqpaySign(env.LIQPAY_PRIVATE_KEY, data))) return new Response('bad signature', { status: 400 });
+      let d; try { d = JSON.parse(utf8FromB64(data)); } catch { return new Response('bad data', { status: 400 }); }
+      try {
+        await ensureSchema(env);
+        await applyLiqpayCallback(env, ctx, d);
+      } catch {}
+      return new Response('ok', { status: 200 });
+    }
 
     // ── Stripe webhook: self-fulfil paid promotions ──
     // Handled before rate-limiting/JSON-parse because the raw body is needed for

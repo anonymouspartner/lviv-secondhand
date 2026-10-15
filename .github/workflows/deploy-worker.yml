@@ -75,6 +75,25 @@ jobs:
         run: |
           if [ -z "$STRIPE_WEBHOOK_SECRET" ]; then echo "STRIPE_WEBHOOK_SECRET not set — skipping (promo self-fulfil stays off until you add it)"; exit 0; fi
           printf '%s' "$STRIPE_WEBHOOK_SECRET" | npx --yes wrangler@3 secret put STRIPE_WEBHOOK_SECRET
+      # LiqPay (PrivatBank) — the second payment provider; see docs/FOP.md §3.
+      # All three optional, and LiqPay stays off until PAY_PROVIDER is "liqpay"
+      # AND both keys are set. To go back to Stripe, set PAY_PROVIDER to
+      # "stripe" (a Worker secret outlives the repository secret it came from,
+      # so deleting the repository secret alone would not switch it off).
+      - name: Set LiqPay secrets
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          LIQPAY_PUBLIC_KEY: ${{ secrets.LIQPAY_PUBLIC_KEY }}
+          LIQPAY_PRIVATE_KEY: ${{ secrets.LIQPAY_PRIVATE_KEY }}
+          PAY_PROVIDER: ${{ secrets.PAY_PROVIDER }}
+        run: |
+          for name in LIQPAY_PUBLIC_KEY LIQPAY_PRIVATE_KEY PAY_PROVIDER; do
+            value="${!name}"
+            if [ -z "$value" ]; then echo "$name not set — skipping"; continue; fi
+            printf '%s' "$value" | npx --yes wrangler@3 secret put "$name"
+          done
       # Field-scout deep link (?agent_mode=true → Telegram). MUST be the same
       # value as the bot Worker's BOUNTY_SECRET — see telegram-bot/wrangler.toml.
       - name: Set bounty token secret

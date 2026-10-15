@@ -209,9 +209,199 @@ const plusDays = (n) => { const d = new Date(kyivToday + 'T00:00:00Z'); d.setUTC
   check(!row('SELECT * FROM flash_deals WHERE id = ?', 'cs_flash_empty') && tgPings().length === 0, 'an empty flash deal was recorded or announced');
 }
 
+// ── 9 · LiqPay: checkout → signed callback → the same fulfilment ─────────────
+// The Worker is configured for LiqPay with sandbox keys. The callbacks below
+// are signed the way LiqPay signs them, so they pass the real verification.
+const LP_PUB = 'sandbox_i000000', LP_PRIV = 'sandbox_check_payments_private';
+const lpEnv = { ...env, PAY_PROVIDER: 'liqpay', LIQPAY_PUBLIC_KEY: LP_PUB, LIQPAY_PRIVATE_KEY: LP_PRIV };
+const lpSign = (data, key = LP_PRIV) => crypto.createHash('sha1').update(key + data + key).digest('base64');
+const b64json = (o) => Buffer.from(JSON.stringify(o), 'utf8').toString('base64');
+
+async function lpGet(path) {
+  const pending = [];
+  const res = await mod.default.fetch(new Request('https://x' + path), lpEnv, { waitUntil(p) { pending.push(p); } });
+  await Promise.allSettled(pending);
+  return res;
+}
+// Open a checkout and read back the signed params it hands to LiqPay.
+async function lpCheckout(path) {
+  const res = await lpGet(path);
+  const html = await res.text();
+  const data = (/name="data" value="([^"]+)"/.exec(html) || [])[1];
+  const sig = (/name="signature" value="([^"]+)"/.exec(html) || [])[1];
+  const params = data ? JSON.parse(Buffer.from(data, 'base64').toString('utf8')) : null;
+  return { res, html, data, sig, params };
+}
+async function lpCallback(fields, { key } = {}) {
+  const data = b64json(fields);
+  const pending = [];
+  const res = await mod.default.fetch(new Request('https://x/liqpay-callback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ data, signature: lpSign(data, key) }).toString(),
+  }), lpEnv, { waitUntil(p) { pending.push(p); } });
+  await Promise.allSettled(pending);
+  return res;
+}
+
+{
+  // The status endpoint tells the app which provider is live, so it knows to
+  // collect the offer text itself.
+  const st = await (await lpGet('/status')).json();
+  check(st.provider === 'liqpay' && st.promoConfigured === true, `/status under LiqPay reported ${JSON.stringify({ provider: st.provider, promoConfigured: st.promoConfigured })}`);
+
+  // Subscription checkout.
+  calls = [];
+  const c = await lpCheckout('/promote?store=s20&tier=featured&cadence=monthly&lang=ua&text=' + encodeURIComponent('-15% <з> застосунком') + '&email=shop%40example.com');
+  check(c.res.status === 200 && c.params, `LiqPay checkout answered HTTP ${c.res.status} without a signed form`);
+  check(c.sig === lpSign(c.data), 'LiqPay checkout form is not signed with the private key');
+  check(c.html.includes('action="https://www.liqpay.ua/api/3/checkout"'), 'LiqPay checkout form does not post to LiqPay');
+  check(!c.html.includes(LP_PRIV), 'the checkout page leaks the LiqPay private key');
+  const p = c.params || {};
+  check(p.action === 'subscribe' && p.subscribe_periodicity === 'month' && /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(p.subscribe_date_start || ''),
+    `monthly plan is not a LiqPay subscription: ${JSON.stringify(p)}`);
+  check(p.amount === 600 && p.currency === 'UAH', `Featured monthly charged ${p.amount} ${p.currency}, expected 600 UAH`);
+  check(p.public_key === LP_PUB && p.language === 'uk' && /\/liqpay-callback$/.test(p.server_url || ''), `LiqPay params wrong: ${JSON.stringify(p)}`);
+  const orderId = p.order_id;
+  const pre = row('SELECT * FROM payments WHERE id = ?', orderId);
+  check(pre && pre.status === 'created' && pre.text === '-15% з застосунком' && pre.email === 'shop@example.com', `prepared payment row wrong: ${JSON.stringify(pre)}`);
+  check(!row('SELECT * FROM promos WHERE store_id = ?', 's20'), 'opening a LiqPay checkout published the placement before payment');
+
+  // Forged callback.
+  const forged = await lpCallback({ order_id: orderId, status: 'success', payment_id: 1, amount: 600 }, { key: 'wrong' });
+  check(forged.status === 400 && !row('SELECT * FROM promos WHERE store_id = ?', 's20'), 'a forged LiqPay callback was accepted');
+
+  // Still processing: nothing yet.
+  await lpCallback({ order_id: orderId, status: 'processing', payment_id: 1, amount: 600 });
+  check(!row('SELECT * FROM promos WHERE store_id = ?', 's20'), 'a still-processing payment published the placement');
+
+  // Paid.
+  calls = [];
+  await lpCallback({ action: 'subscribe', order_id: orderId, status: 'subscribed', payment_id: 1, amount: 600, currency: 'UAH' });
+  const promo = row('SELECT * FROM promos WHERE store_id = ?', 's20');
+  check(promo && promo.tier === 'featured' && promo.status === 'active' && promo.until === plusDays(34) && promo.sub_id === orderId,
+    `LiqPay subscription did not go live: ${JSON.stringify(promo)}`);
+  check(promo && promo.offer === '-15% з застосунком', 'the offer text collected in the app did not reach the placement');
+  check(promo && promo.cust_id === null, 'a LiqPay placement offers the Stripe billing portal');
+  check(tgPings().length === 1 && /PROMOTION PAID/.test(tgPings()[0].body.text) && /₴600/.test(tgPings()[0].body.text), 'owner was not told about the LiqPay purchase');
+  check(count('SELECT COUNT(*) AS n FROM instagram_ads WHERE store_id = ?', 's20') === 1, 'LiqPay purchase with an offer did not queue one Instagram ad');
+
+  // Redelivered — and LiqPay's second notice for the same charge.
+  calls = [];
+  await lpCallback({ action: 'subscribe', order_id: orderId, status: 'subscribed', payment_id: 1, amount: 600 });
+  await lpCallback({ action: 'pay', order_id: orderId, status: 'success', payment_id: 1, amount: 600 });
+  check(tgPings().length === 0 && count('SELECT COUNT(*) AS n FROM instagram_ads WHERE store_id = ?', 's20') === 1, 'a repeated LiqPay callback fulfilled twice');
+
+  // Next month's charge renews; a redelivery of it does not renew again.
+  DB.db.prepare("UPDATE promos SET until = '2000-01-01' WHERE store_id = 's20'").run();
+  await lpCallback({ action: 'regular', order_id: orderId, status: 'success', payment_id: 2, amount: 600 });
+  check(row('SELECT until FROM promos WHERE store_id = ?', 's20').until === plusDays(34), 'a later LiqPay charge did not renew the subscription');
+  DB.db.prepare("UPDATE promos SET until = '2000-01-01' WHERE store_id = 's20'").run();
+  await lpCallback({ action: 'regular', order_id: orderId, status: 'success', payment_id: 2, amount: 600 });
+  check(row('SELECT until FROM promos WHERE store_id = ?', 's20').until === '2000-01-01', 'a redelivered renewal renewed again');
+  check(tgPings().length === 0, 'a renewal pinged the owner');
+
+  // Cancelled.
+  await lpCallback({ action: 'unsubscribe', order_id: orderId, status: 'unsubscribed' });
+  check(row('SELECT status FROM promos WHERE store_id = ?', 's20').status === 'canceled', 'unsubscribed did not end the LiqPay subscription');
+
+  // The return page sends the buyer to the app's thanks screen.
+  const back = await lpGet(`/liqpay-return?id=${orderId}&to=promoted%3Dfeatured`);
+  check(back.status === 302 && back.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=featured', `return redirect wrong: ${back.status} ${back.headers.get('Location')}`);
+  const evil = await lpGet(`/liqpay-return?id=${orderId}&to=${encodeURIComponent('x=1&y=<script>')}`);
+  check(evil.headers.get('Location') === 'https://www.lvivsecondhand.com/', 'the return redirect passes through an arbitrary query');
+}
+
+{
+  // A one-off run is a plain payment, not a subscription; a failed payment does nothing.
+  const c = await lpCheckout('/promote?store=s21&tier=spotlight&cadence=run7&lang=en');
+  check(c.params && c.params.action === 'pay' && c.params.amount === 400 && !c.params.subscribe_periodicity && c.params.language === 'en',
+    `7-day Spotlight run params wrong: ${JSON.stringify(c.params)}`);
+  calls = [];
+  await lpCallback({ order_id: c.params.order_id, status: 'failure', payment_id: 7, amount: 400 });
+  check(row('SELECT status FROM payments WHERE id = ?', c.params.order_id).status === 'failed' && !row('SELECT * FROM promos WHERE store_id = ?', 's21') && tgPings().length === 0,
+    'a failed LiqPay payment was fulfilled or announced');
+  const back = await lpGet(`/liqpay-return?id=${c.params.order_id}&to=promoted%3Dspotlight`);
+  check(back.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=cancel', 'a failed payment returned to the thanks screen');
+}
+
+{
+  // Flash deal: the text is required up front, and the sandbox status counts as paid with sandbox keys.
+  const none = await lpGet('/flash-deal?store=s22&tier=24h&lang=ua');
+  check(none.status === 400, `a LiqPay flash deal without text answered HTTP ${none.status}, expected 400`);
+  const c = await lpCheckout('/flash-deal?store=s22&tier=24h&lang=ua&text=' + encodeURIComponent('Все по 40 ₴'));
+  check(c.params && c.params.amount === 60, `24h flash deal charged ${c.params && c.params.amount}, expected 60`);
+  calls = [];
+  await lpCallback({ order_id: c.params.order_id, status: 'sandbox', payment_id: 22, amount: 60 });
+  const f = row('SELECT * FROM flash_deals WHERE id = ?', c.params.order_id);
+  check(f && f.status === 'pending' && f.text === 'Все по 40 ₴', `LiqPay flash deal not recorded for review: ${JSON.stringify(f)}`);
+  check(tgPings().length === 1 && tgPings()[0].body.text.includes('/flash-deal/approve?id=' + c.params.order_id), 'owner did not get the approval link for a LiqPay flash deal');
+}
+
+{
+  // An order must carry a way to reach the buyer.
+  const none = await lpGet('/order?store=s23&item=deal&lang=ua');
+  check(none.status === 400, `a LiqPay order without an email answered HTTP ${none.status}, expected 400`);
+  const c = await lpCheckout('/order?store=s23&item=deal&lang=ua&email=owner%40shop.ua&text=' + encodeURIComponent('вітрина'));
+  check(c.params && c.params.amount === 300, `deal-of-the-week charged ${c.params && c.params.amount}, expected 300`);
+  calls = [];
+  await lpCallback({ order_id: c.params.order_id, status: 'success', payment_id: 23, amount: 300 });
+  const o = row('SELECT * FROM orders WHERE id = ?', c.params.order_id);
+  check(o && o.email === 'owner@shop.ua' && o.note === 'вітрина' && o.amount === 30000, `LiqPay order row wrong: ${JSON.stringify(o)}`);
+  check(tgPings().length === 1 && /owner@shop\.ua/.test(tgPings()[0].body.text), 'owner was not given the buyer\'s email for a LiqPay order');
+
+  // A sandbox status must not count with live keys.
+  const live = { ...lpEnv, LIQPAY_PUBLIC_KEY: 'i000000live' };
+  const res = await mod.default.fetch(new Request('https://x/order?store=s24&item=poster&email=a%40b.ua'), live, { waitUntil() {} });
+  const data = (/name="data" value="([^"]+)"/.exec(await res.text()) || [])[1];
+  const id = JSON.parse(Buffer.from(data, 'base64').toString('utf8')).order_id;
+  const cb = b64json({ order_id: id, status: 'sandbox', payment_id: 24, amount: 150 });
+  await mod.default.fetch(new Request('https://x/liqpay-callback', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ data: cb, signature: lpSign(cb) }).toString(),
+  }), live, { waitUntil() {} });
+  check(!row('SELECT * FROM orders WHERE id = ?', id), 'a sandbox payment was fulfilled on a live LiqPay shop');
+}
+
+{
+  // With LiqPay off, nothing about it is reachable.
+  const res = await mod.default.fetch(new Request('https://x/liqpay-callback', { method: 'POST', body: 'data=x&signature=y', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }), env, { waitUntil() {} });
+  check(res.status === 503, `/liqpay-callback answered HTTP ${res.status} with LiqPay off, expected 503`);
+}
+
+// ── 10 · the Worker charges what the app shows ───────────────────────────────
+// The app's rate card is display-only; what is charged lives in the Worker.
+// Under Stripe the charged amount comes from Stripe's own Price objects, but
+// under LiqPay it comes from these constants, so a mismatch would charge a
+// store a different number than the one it agreed to.
+{
+  const fs = await import('node:fs');
+  const html = fs.readFileSync('index.html', 'utf8');
+  const worker = fs.readFileSync('worker/worker.js', 'utf8');
+  for (const m of html.matchAll(/\{ tier:'(\w+)',\s*monthly:(\d+),\s*annual:(\d+),\s*run1:(\d+),\s*run7:(\d+),\s*run30:(\d+)/g)) {
+    const [, tier, monthly, annual, run1, run7, run30] = m;
+    const want = { monthly, annual, run1, run7, run30 };
+    for (const [cad, uahStr] of Object.entries(want)) {
+      const re = cad.startsWith('run')
+        ? new RegExp(`${tier}_${cad}:\\s*\\{\\s*amount:\\s*(\\d+)`)
+        : new RegExp(`${tier}_${cad}:\\s*(\\d+)`);
+      const got = (re.exec(worker) || [])[1];
+      check(Number(got) === Number(uahStr) * 100, `${tier} ${cad}: app shows ₴${uahStr}, Worker charges ${got == null ? 'nothing' : got / 100}`);
+    }
+  }
+  for (const m of html.matchAll(/\{ item:'(\w+)',\s*price:(\d+)/g)) {
+    const got = (new RegExp(`\\b${m[1]}:\\s*\\{[^}]*amount:\\s*(\\d+)`).exec(worker) || [])[1];
+    check(Number(got) === Number(m[2]) * 100, `extra "${m[1]}": app shows ₴${m[2]}, Worker charges ${got == null ? 'nothing' : got / 100}`);
+  }
+  for (const m of html.matchAll(/\{ tier:'(\w+)',\s*hours:\d+,\s*price:(\d+)/g)) {
+    const got = (new RegExp(`'${m[1]}':\\s*\\{\\s*amount:\\s*(\\d+)`).exec(worker) || [])[1];
+    check(Number(got) === Number(m[2]) * 100, `flash deal ${m[1]}: app shows ₴${m[2]}, Worker charges ${got == null ? 'nothing' : got / 100}`);
+  }
+}
+
 if (errors.length) {
   console.error('\nPayment check FAILED:');
   for (const e of errors) console.error('  ✗ ' + e);
   process.exit(1);
 }
-console.log('Payments OK — purchase, redelivery, renewal, cancellation, run, order and both flash-deal paths fulfil correctly.');
+console.log('Payments OK — Stripe and LiqPay: every kind of sale fulfils once; forged, failed and sandbox-on-live events do nothing; charged amounts match the app.');

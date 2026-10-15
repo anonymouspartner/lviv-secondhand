@@ -108,139 +108,123 @@ the three with **true card subscriptions**, which keeps the monthly/annual tiers
 auto-renewing the way Stripe does today (§3.4). The design below is
 provider-agnostic, so another acquirer stays one adapter away.
 
-### 3.2 Shape of the change
+### 3.2 What was built
 
-Today each route (`/promote`, `/flash-deal`, `/order`) builds a Stripe form inline,
-and `/stripe-webhook` hands raw Stripe events to `applyPromoEvent` /
-`applyFlashDealEvent`. Split that into three layers:
+**Built and tested; off until switched on (§3.8).** Stripe still takes every payment
+until `PAY_PROVIDER` says otherwise.
 
 ```
-route  ─▶  createCheckout(env, intent)  ─▶  provider adapter (stripe | liqpay)
-                                                     │
-webhook (/stripe-webhook | /liqpay-callback)  ─▶  normalise  ─▶  fulfil(env, payment, ctx)
+/promote · /flash-deal · /order ─┬─ Stripe: Checkout Session (unchanged)
+                                 └─ LiqPay: liqpayCheckout() → 'created' payments row + signed form
+/stripe-webhook ── stripePayment() ─┐
+/liqpay-callback ── applyLiqpayCallback() ─┴─▶ claimPayment() ─▶ fulfil() ─▶ promo | order | flash deal
+                                                renewPromo() / cancelPromo() for subscriptions
 ```
 
-- **`intent`** — `{ kind: 'promo'|'flashDeal'|'order', storeId, tier, cadence, item,
-  amount (kopiyky), label, text, pin, lang }`. Amounts already live in kopiyky in
-  `PROMO_RUNS` / `FLASH_DEAL_TIERS`; add kopiyky amounts beside the Stripe Price ids
-  in `PROMO_PRICES` and `ORDER_ITEMS` so a non-Stripe provider has a number to charge.
-  Kopiyky stay the internal unit everywhere; **LiqPay takes hryvnias**, so its
-  adapter divides by 100 at the boundary and nowhere else.
-- **`fulfil()`** — the body of today's `checkout.session.completed` branches, taking
-  a normalised payment instead of a Stripe object. Stripe and LiqPay both end here,
-  so promos, orders, flash deals, Instagram ads and Telegram notices behave
-  identically whichever provider took the money. Renewals get the same treatment:
-  `renew(env, subRef)` replaces the `invoice.paid` branch, `cancel(env, subRef)` the
-  `customer.subscription.deleted` one.
-- **Provider selection** — `PAY_PROVIDER = "liqpay" | "stripe"` in `[vars]`, falling
-  back to Stripe when the LiqPay keys are absent (same "inert until configured" rule
-  the Stripe code follows). `/status` reports which provider is live and whether its
-  secrets are present.
+All in `worker/worker.js`:
 
-### 3.3 New table: `payments`
+- **`fulfil()`** — one delivery path for promotions, orders and flash deals, taking a
+  normalised payment `{ id, provider, kind, storeId, tier, cadence, item, pin, text,
+  amount (kopiyky), currency, email, subRef, custRef }`. Placements, the owner's
+  Telegram pings, the Instagram queue and map patches behave the same whichever
+  provider took the money. `renewPromo()` / `cancelPromo()` handle subscriptions by
+  the provider's subscription reference.
+- **Provider selection** — `payProvider(env)`: LiqPay only when `PAY_PROVIDER` is
+  `"liqpay"` **and** both keys are set; otherwise Stripe. `/status` reports
+  `provider`, which is how the app knows to show its extra inputs.
+- **Amounts** — kopiyky everywhere; `PROMO_AMOUNTS` and `ORDER_ITEMS[*].amount` added
+  beside the Stripe Price ids. LiqPay takes hryvnias, converted only inside its
+  adapter.
+
+### 3.3 The `payments` ledger
 
 ```sql
-CREATE TABLE IF NOT EXISTS payments (
-  id TEXT PRIMARY KEY,          -- our order_id (LiqPay) / session id (Stripe) / invoice no.
-  provider TEXT NOT NULL,       -- 'liqpay' | 'stripe' | 'invoice'
-  kind TEXT NOT NULL,           -- 'promo' | 'flashDeal' | 'order'
-  store_id TEXT NOT NULL,
-  intent TEXT NOT NULL,         -- JSON: tier, cadence, item, pin …
-  text TEXT,                    -- offer line / deal text / note, cleaned
-  amount INTEGER NOT NULL,      -- kopiyky
-  status TEXT NOT NULL DEFAULT 'created',  -- created → paid | failed | expired
-  created TEXT NOT NULL DEFAULT (datetime('now')),
-  paid TEXT
-)
+payments (id TEXT PRIMARY KEY, provider, kind, store_id, intent JSON, text,
+          amount INTEGER, email, status 'created'|'paid'|'failed', created, paid)
 ```
 
-Added to `ensureSchema` like every other table. It does two jobs:
+- **Exactly once.** A payment is fulfilled only by the call that moves its row to
+  `paid` (`claimPayment()`). Providers redeliver events; before this, a redelivered
+  Stripe purchase pinged the owner again and queued a second Instagram ad.
+- **Text behind the paywall.** LiqPay's checkout has no free-text field, so the app
+  sends the offer line / deal text / email with the checkout request and the Worker
+  holds them in a `created` row. Nothing reads them until the paid callback flips
+  the row, so — as with Stripe — unpaid text is never published.
+- **Every LiqPay charge** is also recorded under its own `payment_id`
+  (`lp_pay_<id>`), which is what makes a redelivered callback and a redelivered
+  renewal no-ops.
 
-1. **Replaces Stripe's custom fields.** Local checkouts have no free-text field, so
-   the offer line, flash-deal text and order note move into the app sheet. The
-   paywall property is kept: the text is written to `payments.text` with status
-   `created` and is **never read by `/promos` or the map until the webhook flips it
-   to `paid`**. Cleaned on the way in with `cleanText()` and escaped on render, as
-   today.
-2. **Idempotency.** Webhooks retry; `fulfil()` runs only on the `created → paid`
-   transition (`UPDATE … WHERE id = ? AND status = 'created'`, act only if a row
-   changed).
+### 3.4 Subscriptions
 
-### 3.4 Subscriptions → LiqPay `subscribe` (+ renewal link for invoices)
+- Monthly / annual on LiqPay are `action: "subscribe"` with
+  `subscribe_periodicity: "month" | "year"`. The first charge fulfils; any later
+  charge (a new `payment_id` on an already-paid subscription order) renews.
+  `promos.sub_id` holds the LiqPay `order_id`.
+- `unsubscribed` → `cancelPromo()`. `reversed` (refund or chargeback) ends a
+  subscription and tells the owner; for anything else the owner decides, because a
+  newer purchase may already have replaced it.
+- **Cancelling** a LiqPay subscription: by email to the address on the offer page
+  (§8.1 there); the owner cancels it in the LiqPay dashboard. The in-app "Manage
+  billing" link stays Stripe-only, and is hidden for LiqPay placements.
+- 🧪 Confirm in the sandbox that a recurring charge's callback carries the
+  subscription's original `order_id` — renewal depends on it.
+- **Bank-transfer stores** (§5) can't be auto-charged; for them the daily cron sends
+  a renewal invoice 5 days before `until` (not built yet — part of §5).
+- Live Stripe subscriptions keep renewing through `/stripe-webhook`; nothing is
+  migrated by force.
 
-LiqPay keeps the monthly/annual tiers auto-renewing:
+### 3.5 LiqPay specifics
 
-- Monthly / annual checkouts use `action: "subscribe"` with
-  `subscribe_periodicity: "month" | "year"` and `subscribe_date_start` = now (UTC,
-  `YYYY-MM-DD HH:MM:SS`). The first charge fulfils like a purchase; each later charge
-  arrives on the callback and calls `renew()`, which extends `promos.until` by the
-  same grace rule as today (`graceDays()`).
-- `promos.sub_id` stores our LiqPay `order_id`, so renewals and cancellations find
-  the row the same way Stripe's `sub_id` does. ⚖️/🧪 Confirm in the sandbox which
-  `order_id` the recurring callbacks carry before relying on it.
-- Status `unsubscribed` → `cancel()`.
-- **Cancelling** replaces Stripe's `/billing` portal: an owner-facing
-  `/billing?store=<id>&pin=<pin>` (or a link in the store's Telegram) calls LiqPay's
-  `unsubscribe` API and confirms. Until that's built, the offer page says "write to
-  us and we cancel within a day" and the owner cancels in the LiqPay dashboard.
-- **Bank-transfer stores** (§5) can't be auto-charged, so for them the existing daily
-  cron (`0 7 * * *` in `worker/wrangler.toml`) sends a **renewal invoice** 5 days
-  before `until`, to the store's Telegram if it follows itself via `store_subs` and
-  always to the owner. Paying early extends from the current `until`, not from today.
-- Live Stripe subscriptions keep renewing through `/stripe-webhook` until they end
-  naturally; nothing is migrated by force. `/billing` keeps sending Stripe customers
-  to Stripe's portal.
-
-### 3.5 LiqPay adapter specifics
-
-- **Checkout.** Build the params JSON — `version: 3`, `public_key`, `action`
-  (`pay` or `subscribe`), `amount` (**hryvnias**), `currency: "UAH"`, `description`
-  (tier label), `order_id` (our `payments.id`), `language: "uk"`, `result_url` (the
-  existing `?promoted=` / `?flashdeal=` / `?ordered=` return URLs), `server_url`
-  (`/liqpay-callback`). Then `data = base64(JSON)` and
-  `signature = base64(sha1(private_key + data + private_key))`.
-  The checkout is a **POST** of `data` + `signature` to
-  `https://www.liqpay.ua/api/3/checkout`, so the routes can't just 302 as they do
-  for Stripe: they return a tiny self-submitting HTML form (same tab the app already
-  opens with `window.open`). That page carries no secret — only the signed `data`.
-- **Callback** `POST /liqpay-callback` (form-encoded `data` + `signature`):
-  recompute the signature over `data` with the private key and compare in constant
-  time (reuse the loop in `verifyStripeSig`); reject on mismatch. Then decode `data`.
-  Handle it **before** rate limiting, as `/stripe-webhook` is.
-- **Re-check before fulfilling.** LiqPay has no timestamp in the signature, so a
-  captured callback could be replayed. The `created → paid` transition (§3.3)
-  already makes a replay a no-op for one-off payments; for renewals, also call
-  LiqPay's `status` API for that `order_id` and fulfil only what it confirms.
-- Statuses: `success` / `subscribed` fulfil; `unsubscribed` cancels; `failure` /
-  `error` / `reversed` mark the row (a `reversed` paid promo is also set
-  `canceled` and the owner is told). Anything else (`processing`, 3-DS waits) is
-  ignored until a final status arrives.
-- Secrets: `LIQPAY_PUBLIC_KEY` in `[vars]`, `LIQPAY_PRIVATE_KEY` via
-  `wrangler secret put`, never committed. Sandbox keys during testing. Document in
-  `wrangler.toml` alongside the Stripe ones.
+- **Checkout** — `data = base64(JSON params)`,
+  `signature = base64(sha1(private_key + data + private_key))`, posted to
+  `https://www.liqpay.ua/api/3/checkout`. That's a form POST, so the route answers
+  with a small self-submitting page (with a button as a fallback) instead of a
+  redirect. The page carries only the signed `data`, never the private key.
+- **Callback** `POST /liqpay-callback` — signature verified in constant time before
+  anything is read; handled before rate limiting; `503` while LiqPay is off.
+- **Statuses** — `success` / `subscribed` fulfil; `sandbox` counts as paid **only
+  while the keys are sandbox keys**, so a test card can never fulfil on the live
+  shop; `failure` / `error` mark the row failed; `processing` and 3-D Secure waits
+  are ignored until a final status arrives.
+- **Return** — `result_url` is `/liqpay-return`, which sends the buyer to the app's
+  existing thanks screen (`?promoted=` / `?flashdeal=` / `?ordered=`), or to the
+  "cancelled" one if the payment is known to have failed. It only accepts those
+  three return shapes.
+- **Promotion codes** (`FEATURED50`) are a Stripe feature; LiqPay's checkout has
+  nowhere to enter one, so the app hides the coupon line under LiqPay. If the intro
+  offer should continue, it needs a price of its own.
 
 ### 3.6 Front end (`index.html`)
 
-- Promote sheet: add the optional offer-line input (48 chars, `OFFER_MAX`).
-- Flash-deal sheet: add the required deal-text input (120 chars, `DEAL_MAX`) next to
-  the PIN; keep `FLASH_TIERS` prices in sync with the Worker.
-- Order buttons: optional note.
-- Send the text via `POST` (not the query string) so it doesn't land in logs or
-  history; the route still answers with the redirect URL.
-- `checkPromotedReturn()` already handles the return; no change beyond copy.
-- Pass the app language through as LiqPay's `language` (`uk` / `en`) — unlike
-  Stripe, LiqPay has a Ukrainian checkout, so the `STRIPE_LOCALES` workaround isn't
-  needed on this path.
+Under LiqPay only (Stripe mode is unchanged):
 
-### 3.7 Tests & checks
+- Promote sheet: optional **offer line** (48 chars) and **email** inputs. Email is
+  required for an à la carte extra, since it's arranged by hand.
+- Flash-deal sheet: required **deal text** (120 chars).
+- Payment note reads "Secure card payment via LiqPay (PrivatBank)"; coupon line hidden.
+- These travel as query parameters on the checkout link. The text is ad copy meant
+  to be public once paid, and the email goes no further than the Worker.
 
-- `scripts/check-wiring.mjs`: assert the `FLASH_TIERS` ↔ `FLASH_DEAL_TIERS` amounts
-  and the new kopiyky amounts agree.
-- Unit-level fixtures under `scripts/fixtures/` for the callback: a valid signed
-  LiqPay payload, a tampered one, a replayed one, a `failure` status, a recurring
-  charge, an `unsubscribed`.
-- End-to-end on the LiqPay **sandbox keys** before switching `PAY_PROVIDER` — one
-  run, one flash deal, one order, and one monthly subscription.
+### 3.7 Tests
+
+`scripts/check-payments.mjs` (in CI) runs the Worker against a real SQLite database
+and feeds it signed events: Stripe purchase, redelivery, renewal, cancellation,
+one-off run, order, both flash-deal paths; LiqPay checkout params and signature,
+forged / processing / failed / sandbox-on-live callbacks, subscription, repeated
+callbacks, renewal and its redelivery, cancellation, the return redirect; and that
+every price the app shows equals what the Worker charges.
+
+### 3.8 Switching LiqPay on
+
+1. In GitHub → the repository → Settings → Secrets and variables → Actions, add
+   `LIQPAY_PUBLIC_KEY` and `LIQPAY_PRIVATE_KEY` (the **sandbox** keys first) and
+   `PAY_PROVIDER` = `liqpay`.
+2. Re-run the "Deploy metrics Worker" workflow (Actions tab) so it pushes them.
+3. Make one sandbox purchase of each kind with LiqPay's test card: a 1-day run, a
+   monthly plan, a flash deal, an extra. Each should ping you on Telegram.
+4. Once the shop is approved, replace the two keys with the live ones and re-run the
+   deploy. To go back to Stripe at any point, set `PAY_PROVIDER` to `stripe` and
+   re-run.
 
 ---
 
@@ -325,11 +309,11 @@ with the accountant.
 | --- | --- | --- | --- |
 | 1 | Phase 0 paperwork | none | — |
 | 2 | Seller identity + `offer.html` (§2) | none | yes |
-| 3 | `payments` table, `fulfil()` refactor, Stripe still the only adapter | medium — touches the live purchase path | yes, revert |
-| 4 | LiqPay adapter + `/liqpay-callback` on the **sandbox keys** | low | yes |
-| 5 | Sheet inputs for offer/deal text/note (§3.6) | low | yes |
+| 3 | ✅ `payments` table, `fulfil()` refactor, Stripe still the only adapter | medium — touches the live purchase path | yes, revert |
+| 4 | ✅ built — LiqPay adapter + `/liqpay-callback`; next: run it on the **sandbox keys** (§3.8) | low | yes |
+| 5 | ✅ Sheet inputs for offer / deal text / email (§3.6) | low | yes |
 | 6 | `PAY_PROVIDER=liqpay` live for **runs, flash deals, orders** | medium | flip the var back |
-| 7 | LiqPay subscriptions + cancel flow (§3.4); monthly/annual move to LiqPay | medium | flip the var back |
+| 7 | LiqPay subscriptions (§3.4, built) go live with step 6 | medium | flip the var back |
 | 8 | ПРРО (§4) | ⚖️ must be live **before** step 6 | — |
 | 9 | Invoices (§5) | low | yes |
 | 10 | Play organisation account (§7) | none | — |
