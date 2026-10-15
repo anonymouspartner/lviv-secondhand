@@ -765,6 +765,9 @@ header{ background:var(--ink); padding:calc(15px + env(safe-area-inset-top,0px))
     <p style="text-align:center;margin-top:14px;font-size:13px;color:var(--muted);">
       <a href="privacy.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">🔒 Privacy Policy · Політика конфіденційності</a>
     </p>
+    <p style="text-align:center;margin-top:4px;font-size:13px;color:var(--muted);">
+      <a href="offer.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">📄 Public offer · Публічна оферта</a>
+    </p>
   </div>
 </div>
 
@@ -791,6 +794,7 @@ header{ background:var(--ink); padding:calc(15px + env(safe-area-inset-top,0px))
     </div>
     <p class="promo-hint" id="promo-disclosure" style="margin-top:14px;"></p>
     <p class="promo-hint" id="promo-secure" style="text-align:center;"></p>
+    <p class="promo-hint" style="text-align:center;margin-top:-6px;"><a href="offer.html" target="_blank" rel="noopener">📄 Публічна оферта · Terms of sale</a></p>
     <button class="sheet-cancel" id="promo-cancel" onclick="document.getElementById('promo-overlay').classList.add('hidden')">Cancel</button>
   </div>
 </div>
@@ -808,6 +812,7 @@ header{ background:var(--ink); padding:calc(15px + env(safe-area-inset-top,0px))
     <input type="text" class="field" id="flash-pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••"/>
     <p class="promo-hint" id="flash-pin-hint"></p>
     <p class="promo-hint" id="flash-secure" style="text-align:center;"></p>
+    <p class="promo-hint" style="text-align:center;margin-top:-6px;"><a href="offer.html" target="_blank" rel="noopener">📄 Публічна оферта · Terms of sale</a></p>
     <button class="sheet-cancel" id="flash-cancel" onclick="document.getElementById('flash-overlay').classList.add('hidden')">Cancel</button>
   </div>
 </div>
@@ -3668,6 +3673,7 @@ function renderHelp(){
           + `<button class="sheet-btn" style="background:#ff5a5f;margin-top:8px;" onclick="openDonate()">${escHtml(t('donateBtn'))}</button>`
         : '')
     + `<p style="text-align:center;margin-top:4px;font-size:13px;color:var(--muted);"><a href="privacy.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">🔒 Privacy Policy · Політика конфіденційності</a></p>`
+    + `<p style="text-align:center;margin-top:4px;font-size:13px;color:var(--muted);"><a href="offer.html" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">📄 Public offer · Публічна оферта</a></p>`
     + `<p style="text-align:center;margin-top:4px;font-size:11px;color:var(--muted);"><a href="jobs/" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:underline;">💼 Careers · Вакансії</a></p>`
     + `<p style="text-align:center;margin-top:6px;font-size:11px;color:var(--muted);">v${escHtml(APP_VERSION)}</p>`
     + `<p style="text-align:center;margin-top:2px;font-size:11px;color:var(--muted);">© 2026 Lviv Second Hand · All rights reserved</p>`;
@@ -3764,7 +3770,7 @@ if ('serviceWorker' in navigator) {
 // UPDATE CHECK — notify when a newer build is deployed, so nobody is stuck on
 // a cached version (no reinstall needed). Bump APP_VERSION on each deploy.
 // ─────────────────────────────────────────────
-const APP_VERSION = '2026-09-07.1';
+const APP_VERSION = '2026-10-15.1';
 
 // ─────────────────────────────────────────────
 // DONATIONS — points at a Stripe Payment Link (hosted checkout). No API keys

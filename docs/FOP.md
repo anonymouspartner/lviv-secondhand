@@ -68,17 +68,21 @@ email, phone/Telegram — in one place:
 
 **Pages.**
 
-- [ ] `privacy.html` §1 "Who we are" and §9 "Contact": name the ФОП as the operator
+- [x] `privacy.html` §1 "Who we are" and §9 "Contact": name the ФОП as the operator
       and give a real contact address; keep the GitHub link as a secondary channel.
       Bump "Last updated".
-- [ ] New `offer.html` — **публічна оферта** for paid placements, UA first + EN.
+- [x] New `offer.html` — **публічна оферта** for paid placements, UA first + EN.
       Covers: what each tier/run/flash deal delivers (pull from `ADVERTISING.md` §2),
       price & currency, when service starts (on payment / on approval for flash
       deals without a PIN), labelling (`Реклама`), refusal & refund policy, renewal
       (§3.4), how to cancel, seller details. Same page chrome as `privacy.html`.
-- [ ] Link the offer from: the promote sheet, the flash-deal sheet, the order
-      buttons, `privacy.html` §10, and `sitemap.xml`.
-- [ ] `promoSecure` string (UA/EN) — today it reassures about Stripe; reword to be
+- [x] Link the offer from: the promote sheet, the flash-deal sheet, the order
+      buttons, the help sheet, `privacy.html` §1, and `sitemap.xml`.
+- [ ] **Fill in the ФОП details** — every highlighted placeholder in `offer.html`
+      and `privacy.html` (`grep -n 'mark class=.todo' offer.html privacy.html`).
+      Not merged until this is done.
+- [ ] `promoSecure` string (UA/EN) — leave as is until LiqPay is live (it is still
+      true while Stripe takes the payments), then reword to be
       provider-neutral ("Безпечна оплата карткою · Умови — публічна оферта").
 
 **Done when:** an acquirer reviewer can find seller name, tax id, contact, offer and

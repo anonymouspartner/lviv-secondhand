@@ -593,6 +593,7 @@ function sitemap(stores, chains) {
     { loc: `${ORIGIN}/store/`, freq: 'weekly', pri: '0.8' },
     { loc: `${ORIGIN}/jobs/`, freq: 'monthly', pri: '0.3' },
     { loc: `${ORIGIN}/privacy.html`, freq: 'yearly', pri: '0.1' },
+    { loc: `${ORIGIN}/offer.html`, freq: 'yearly', pri: '0.1' },
   ];
   const entries = [
     ...staticUrls,
