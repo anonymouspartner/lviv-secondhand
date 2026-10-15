@@ -14,7 +14,7 @@ where money comes in, where it goes out, and what the public pages must say.
 
 | Today | With the ФОП |
 | --- | --- |
-| Stripe only. Charged in ₴, settled in USD: ≈2.9% + fixed **+ ≈1% FX** per sale | A Ukrainian acquirer settles in ₴ to the ФОП account, ≈1.3–2%, no FX |
+| Stripe only. Charged in ₴, settled in USD: ≈2.9% + fixed **+ ≈1% FX** per sale | LiqPay settles in ₴ to the existing PrivatBank ФОП account, ≈1.5%, no FX |
 | Stripe's checkout has **no Ukrainian locale** (`STRIPE_LOCALES` in `worker/worker.js`) | Local checkout pages are Ukrainian-first |
 | Bank transfer is an informal fallback (`ADVERTISING.md` §6) | Proper **рахунок + акт** a store (usually a ФОП itself) can expense |
 | Agents are paid to a card by hand, from a personal account | Paid from the business account, with the tax position clear |
@@ -37,11 +37,15 @@ offer page (§2) and the ПРРО (§4) during onboarding.
 - [ ] ⚖️ **КВЕДи** include advertising and the web platform:
       **73.11** (рекламні агентства), **73.12** (посередництво в розміщенні реклами),
       **63.12** (веб-портали). Add via Дія if missing.
-- [ ] **Business (ФОП) account** — Monobank ФОП or PrivatBank. Note the IBAN.
-- [ ] **Internet acquiring contract** — see §3.1 for the choice. Get the API token
-      and the **test** token.
-- [ ] ⚖️ **ПРРО** (software cash register) — e.g. Checkbox. Register it with ДПС and
-      connect it to the acquirer (§4).
+- [x] **Business (ФОП) account** — **PrivatBank**, already open. Note the IBAN for
+      `SELLER_IBAN` (§2).
+- [ ] **LiqPay** — PrivatBank's own acquirer, connected from Privat24 для бізнесу
+      (§3.1). Create a shop for `www.lvivsecondhand.com`, keep the **public** and
+      **private** keys, and note the **sandbox** keys for testing.
+- [ ] **Автоклієнт API** in Privat24 для бізнесу — read-only statement access, so
+      bank-transfer invoices can be marked paid automatically (§5).
+- [ ] ⚖️ **ПРРО** (software cash register) — PrivatBank's own ПРРО or Checkbox.
+      Register it with ДПС and connect it to LiqPay (§4).
 - [ ] **D-U-N-S number** for the ФОП (free, via Dun & Bradstreet's Apple/Google
       request form) — needed for §7.
 - [ ] Decide what stays on Stripe: the existing account, live subscriptions, and the
@@ -86,19 +90,20 @@ refund terms from the checkout button in two taps.
 
 ### 3.1 Provider choice
 
-| | plata by mono | LiqPay | WayForPay |
+| | **LiqPay** | plata by mono | WayForPay |
 | --- | --- | --- | --- |
-| Fee ≈ | 1.3% | 1.5% | 2% |
-| Webhook auth | ECDSA `X-Sign`, public key from API | base64 `data` + SHA signature | HMAC-MD5 |
-| Recurring | card tokens (charge yourself) | `subscribe` action | regular payments |
-| ПРРО | Checkbox, native | Checkbox, native | Checkbox / own |
-| Test mode | test token | sandbox | test merchant |
+| Fee ≈ | 1.5% | 1.3% | 2% |
+| Webhook auth | base64 `data` + signature with the private key | ECDSA `X-Sign` | HMAC-MD5 |
+| Recurring | `subscribe` action — real card subscriptions | card tokens (charge yourself) | regular payments |
+| ПРРО | PrivatBank ПРРО / Checkbox | Checkbox | Checkbox / own |
+| Test mode | sandbox keys | test token | test merchant |
+| Needs a new bank account | **no** — settles to the existing PrivatBank ФОП | yes (mono ФОП) | no |
 
-**Recommendation: plata by mono**, with recurring handled as prepaid periods (§3.4)
-rather than card subscriptions. Lowest fee, the strongest webhook signature of the
-three, native Checkbox, and the money lands in the same bank the owner likely uses
-for the ФОП. The design below is provider-agnostic, so swapping to LiqPay is one
-adapter.
+**Decision: LiqPay.** The ФОП already banks with PrivatBank, so LiqPay settles
+straight into the existing account with no second bank to open. It is the only one of
+the three with **true card subscriptions**, which keeps the monthly/annual tiers
+auto-renewing the way Stripe does today (§3.4). The design below is
+provider-agnostic, so another acquirer stays one adapter away.
 
 ### 3.2 Shape of the change
 
@@ -107,21 +112,25 @@ and `/stripe-webhook` hands raw Stripe events to `applyPromoEvent` /
 `applyFlashDealEvent`. Split that into three layers:
 
 ```
-route  ─▶  createCheckout(env, intent)  ─▶  provider adapter (stripe | mono)
+route  ─▶  createCheckout(env, intent)  ─▶  provider adapter (stripe | liqpay)
                                                      │
-webhook (/stripe-webhook | /mono-webhook)  ─▶  normalise  ─▶  fulfil(env, payment, ctx)
+webhook (/stripe-webhook | /liqpay-callback)  ─▶  normalise  ─▶  fulfil(env, payment, ctx)
 ```
 
 - **`intent`** — `{ kind: 'promo'|'flashDeal'|'order', storeId, tier, cadence, item,
   amount (kopiyky), label, text, pin, lang }`. Amounts already live in kopiyky in
   `PROMO_RUNS` / `FLASH_DEAL_TIERS`; add kopiyky amounts beside the Stripe Price ids
   in `PROMO_PRICES` and `ORDER_ITEMS` so a non-Stripe provider has a number to charge.
+  Kopiyky stay the internal unit everywhere; **LiqPay takes hryvnias**, so its
+  adapter divides by 100 at the boundary and nowhere else.
 - **`fulfil()`** — the body of today's `checkout.session.completed` branches, taking
-  a normalised payment instead of a Stripe object. Stripe and mono both end here, so
-  promos, orders, flash deals, Instagram ads and Telegram notices behave identically
-  whichever provider took the money.
-- **Provider selection** — `PAY_PROVIDER = "mono" | "stripe"` in `[vars]`, falling
-  back to Stripe when the mono token is absent (same "inert until configured" rule
+  a normalised payment instead of a Stripe object. Stripe and LiqPay both end here,
+  so promos, orders, flash deals, Instagram ads and Telegram notices behave
+  identically whichever provider took the money. Renewals get the same treatment:
+  `renew(env, subRef)` replaces the `invoice.paid` branch, `cancel(env, subRef)` the
+  `customer.subscription.deleted` one.
+- **Provider selection** — `PAY_PROVIDER = "liqpay" | "stripe"` in `[vars]`, falling
+  back to Stripe when the LiqPay keys are absent (same "inert until configured" rule
   the Stripe code follows). `/status` reports which provider is live and whether its
   secrets are present.
 
@@ -129,8 +138,8 @@ webhook (/stripe-webhook | /mono-webhook)  ─▶  normalise  ─▶  fulfil(env
 
 ```sql
 CREATE TABLE IF NOT EXISTS payments (
-  id TEXT PRIMARY KEY,          -- provider invoice id
-  provider TEXT NOT NULL,       -- 'mono' | 'stripe' | 'invoice'
+  id TEXT PRIMARY KEY,          -- our order_id (LiqPay) / session id (Stripe) / invoice no.
+  provider TEXT NOT NULL,       -- 'liqpay' | 'stripe' | 'invoice'
   kind TEXT NOT NULL,           -- 'promo' | 'flashDeal' | 'order'
   store_id TEXT NOT NULL,
   intent TEXT NOT NULL,         -- JSON: tier, cadence, item, pin …
@@ -154,40 +163,57 @@ Added to `ensureSchema` like every other table. It does two jobs:
    transition (`UPDATE … WHERE id = ? AND status = 'created'`, act only if a row
    changed).
 
-### 3.4 Subscriptions → prepaid periods + renewal link
+### 3.4 Subscriptions → LiqPay `subscribe` (+ renewal link for invoices)
 
-Stripe subscriptions (`mode: 'subscription'`, `invoice.paid`, `/billing` portal) have
-no drop-in equivalent. Replace them with something simpler that also suits stores
-paying by bank transfer:
+LiqPay keeps the monthly/annual tiers auto-renewing:
 
-- Monthly / annual become **prepaid periods**: a payment sets `promos.until` exactly
-  like a run does today (`PROMO_RUNS` logic, 31 or 365 days + grace).
-- The existing daily cron (`0 7 * * *` in `worker/wrangler.toml`) sends a **renewal
-  link** 5 days and 1 day before `until` — to the store's Telegram if it follows
-  itself via `store_subs`, and always to the owner. The link opens a pre-filled
-  checkout for the same tier.
-- Paying early **extends** from the current `until`, not from today.
+- Monthly / annual checkouts use `action: "subscribe"` with
+  `subscribe_periodicity: "month" | "year"` and `subscribe_date_start` = now (UTC,
+  `YYYY-MM-DD HH:MM:SS`). The first charge fulfils like a purchase; each later charge
+  arrives on the callback and calls `renew()`, which extends `promos.until` by the
+  same grace rule as today (`graceDays()`).
+- `promos.sub_id` stores our LiqPay `order_id`, so renewals and cancellations find
+  the row the same way Stripe's `sub_id` does. ⚖️/🧪 Confirm in the sandbox which
+  `order_id` the recurring callbacks carry before relying on it.
+- Status `unsubscribed` → `cancel()`.
+- **Cancelling** replaces Stripe's `/billing` portal: an owner-facing
+  `/billing?store=<id>&pin=<pin>` (or a link in the store's Telegram) calls LiqPay's
+  `unsubscribe` API and confirms. Until that's built, the offer page says "write to
+  us and we cancel within a day" and the owner cancels in the LiqPay dashboard.
+- **Bank-transfer stores** (§5) can't be auto-charged, so for them the existing daily
+  cron (`0 7 * * *` in `worker/wrangler.toml`) sends a **renewal invoice** 5 days
+  before `until`, to the store's Telegram if it follows itself via `store_subs` and
+  always to the owner. Paying early extends from the current `until`, not from today.
 - Live Stripe subscriptions keep renewing through `/stripe-webhook` until they end
-  naturally; nothing is migrated by force.
-- `/billing` stays for Stripe customers only; the offer page explains renewal for
-  everyone else.
+  naturally; nothing is migrated by force. `/billing` keeps sending Stripe customers
+  to Stripe's portal.
 
-If automatic card charging turns out to matter to stores, add mono card tokenisation
-later — it slots in as "the cron charges the token instead of sending a link".
+### 3.5 LiqPay adapter specifics
 
-### 3.5 Mono adapter specifics
-
-- `POST https://api.monobank.ua/api/merchant/invoice/create` with `X-Token`,
-  `amount` (kopiyky), `ccy: 980`, `merchantPaymInfo.reference` = our payment id,
-  `destination` = tier label, `redirectUrl` = the existing `?promoted=` /
-  `?flashdeal=` / `?ordered=` return URLs, `webHookUrl` = `/mono-webhook`.
-  Redirect the buyer to the returned `pageUrl` — same 302 the routes do now.
-- `/mono-webhook`: verify `X-Sign` (ECDSA over the raw body) with the merchant
-  public key, fetched from `/api/merchant/pubkey` and cached in KV; on a verification
-  failure refetch once (key rotation), then reject. Handle it **before** rate
-  limiting, as `/stripe-webhook` is.
-- Only `status: "success"` fulfils. `failure` / `expired` mark the row; nothing else.
-- Secrets: `MONO_TOKEN` (via `wrangler secret put`), never committed. Document in
+- **Checkout.** Build the params JSON — `version: 3`, `public_key`, `action`
+  (`pay` or `subscribe`), `amount` (**hryvnias**), `currency: "UAH"`, `description`
+  (tier label), `order_id` (our `payments.id`), `language: "uk"`, `result_url` (the
+  existing `?promoted=` / `?flashdeal=` / `?ordered=` return URLs), `server_url`
+  (`/liqpay-callback`). Then `data = base64(JSON)` and
+  `signature = base64(sha1(private_key + data + private_key))`.
+  The checkout is a **POST** of `data` + `signature` to
+  `https://www.liqpay.ua/api/3/checkout`, so the routes can't just 302 as they do
+  for Stripe: they return a tiny self-submitting HTML form (same tab the app already
+  opens with `window.open`). That page carries no secret — only the signed `data`.
+- **Callback** `POST /liqpay-callback` (form-encoded `data` + `signature`):
+  recompute the signature over `data` with the private key and compare in constant
+  time (reuse the loop in `verifyStripeSig`); reject on mismatch. Then decode `data`.
+  Handle it **before** rate limiting, as `/stripe-webhook` is.
+- **Re-check before fulfilling.** LiqPay has no timestamp in the signature, so a
+  captured callback could be replayed. The `created → paid` transition (§3.3)
+  already makes a replay a no-op for one-off payments; for renewals, also call
+  LiqPay's `status` API for that `order_id` and fulfil only what it confirms.
+- Statuses: `success` / `subscribed` fulfil; `unsubscribed` cancels; `failure` /
+  `error` / `reversed` mark the row (a `reversed` paid promo is also set
+  `canceled` and the owner is told). Anything else (`processing`, 3-DS waits) is
+  ignored until a final status arrives.
+- Secrets: `LIQPAY_PUBLIC_KEY` in `[vars]`, `LIQPAY_PRIVATE_KEY` via
+  `wrangler secret put`, never committed. Sandbox keys during testing. Document in
   `wrangler.toml` alongside the Stripe ones.
 
 ### 3.6 Front end (`index.html`)
@@ -199,16 +225,19 @@ later — it slots in as "the cron charges the token instead of sending a link".
 - Send the text via `POST` (not the query string) so it doesn't land in logs or
   history; the route still answers with the redirect URL.
 - `checkPromotedReturn()` already handles the return; no change beyond copy.
-- Show **mono's** checkout in Ukrainian regardless of app language (EN users still
-  get an English app; the payment page is the bank's).
+- Pass the app language through as LiqPay's `language` (`uk` / `en`) — unlike
+  Stripe, LiqPay has a Ukrainian checkout, so the `STRIPE_LOCALES` workaround isn't
+  needed on this path.
 
 ### 3.7 Tests & checks
 
 - `scripts/check-wiring.mjs`: assert the `FLASH_TIERS` ↔ `FLASH_DEAL_TIERS` amounts
   and the new kopiyky amounts agree.
-- Unit-level fixtures under `scripts/fixtures/` for the webhook: a valid signed mono
-  payload, a tampered one, a replayed one, a `failure` status.
-- End-to-end on the mono **test token** before switching `PAY_PROVIDER`.
+- Unit-level fixtures under `scripts/fixtures/` for the callback: a valid signed
+  LiqPay payload, a tampered one, a replayed one, a `failure` status, a recurring
+  charge, an `unsubscribed`.
+- End-to-end on the LiqPay **sandbox keys** before switching `PAY_PROVIDER` — one
+  run, one flash deal, one order, and one monthly subscription.
 
 ---
 
@@ -217,8 +246,8 @@ later — it slots in as "the cron charges the token instead of sending a link".
 A ФОП on groups 2–4 generally must issue a fiscal receipt for card payments taken
 online. Plan for it to need **no code**:
 
-- [ ] Connect Checkbox to the mono acquiring account; the bank fiscalises each
-      successful payment and emails the receipt.
+- [ ] Turn on fiscalisation for the LiqPay shop (PrivatBank's ПРРО or Checkbox);
+      each successful payment is fiscalised and the receipt emailed.
 - [ ] To make that email arrive, ask for the buyer's email (optional field) in the
       sheet and pass it as the receipt destination.
 - [ ] If the integration can't do it, fall back to calling the Checkbox API from
@@ -239,9 +268,12 @@ For stores that would rather pay as a business, and at ₴0 acquiring fee.
       amount, and the payment purpose string (`Оплата за рекламні послуги згідно
       рахунку №…, без ПДВ`). Token-gated like `/flash-deal/approve`.
 - [ ] Owner marks it paid from Telegram (`/paid <id>`) once the transfer shows in
-      the bank → the same `fulfil()` as an online payment. Later, optional: poll the
-      Monobank personal API statement for the invoice number and mark it
-      automatically.
+      the bank → the same `fulfil()` as an online payment.
+- [ ] Then automate it: the 5-minute cron reads the PrivatBank **Автоклієнт API**
+      statement for the ФОП account, matches the invoice number in the payment
+      purpose and the amount, and calls `fulfil()` — owner told on Telegram either
+      way. Token stored as a Worker secret, read-only scope. A transfer whose
+      purpose or amount doesn't match is reported, never guessed.
 - [ ] **Акт виконаних робіт** page from the same row once the period ends — the
       store's accountant will ask for it.
 - [ ] Invoice numbering: sequential per year, stored in KV/D1.
@@ -283,13 +315,13 @@ should make this visible rather than leave it to memory.
 ## 8. Stripe & donations — what happens to them
 
 - **Stripe stays configured** as `PAY_PROVIDER` fallback and for its live
-  subscriptions until they lapse. After a month of clean mono traffic, stop creating
-  new Stripe sessions; leave `/stripe-webhook` running until the last subscription
-  ends.
+  subscriptions until they lapse. After a month of clean LiqPay traffic, stop
+  creating new Stripe sessions; leave `/stripe-webhook` running until the last
+  subscription ends.
 - **Donations** (`DONATE_URL` in `index.html`): ⚖️ money paid to the ФОП is generally
   business income and taxed as such. Either keep the Stripe donation link outside the
-  ФОП, or move it to a mono "jar" (банка) on a personal card and label it plainly as
-  a personal tip jar. Owner's call — record the decision here.
+  ФОП, or move donations to a LiqPay `paydonate` link on the ФОП and declare them as
+  income. Owner's call — record the decision here.
 
 ---
 
@@ -300,33 +332,34 @@ should make this visible rather than leave it to memory.
 | 1 | Phase 0 paperwork | none | — |
 | 2 | Seller identity + `offer.html` (§2) | none | yes |
 | 3 | `payments` table, `fulfil()` refactor, Stripe still the only adapter | medium — touches the live purchase path | yes, revert |
-| 4 | Mono adapter + `/mono-webhook` on the **test token** | low | yes |
+| 4 | LiqPay adapter + `/liqpay-callback` on the **sandbox keys** | low | yes |
 | 5 | Sheet inputs for offer/deal text/note (§3.6) | low | yes |
-| 6 | `PAY_PROVIDER=mono` live for **runs, flash deals, orders** | medium | flip the var back |
-| 7 | Prepaid periods + renewal cron (§3.4); monthly/annual move to mono | medium | flip the var back |
+| 6 | `PAY_PROVIDER=liqpay` live for **runs, flash deals, orders** | medium | flip the var back |
+| 7 | LiqPay subscriptions + cancel flow (§3.4); monthly/annual move to LiqPay | medium | flip the var back |
 | 8 | ПРРО (§4) | ⚖️ must be live **before** step 6 | — |
 | 9 | Invoices (§5), agent ФОП flow (§6) | low | yes |
 | 10 | Play organisation account (§7) | none | — |
 
 Step 3 ships alone and is verified against real Stripe purchases (one ₴50
-`verified_run1`) before any mono code lands, so a regression is caught while there is
-only one provider to blame.
+`verified_run1`) before any LiqPay code lands, so a regression is caught while there
+is only one provider to blame.
 
 ---
 
 ## 10. Docs to update as each phase lands
 
 - `ADVERTISING.md` §4 (fees), §6 (collection, Tax/FOP → link here), §7 (provider).
-- `README.md` monetisation costs line (EN + UA) — drop the FX note once mono is live.
-- `privacy.html` — seller identity; mention the acquirer as a processor of payment
-  data (we still never see card numbers).
-- `worker/wrangler.toml` — `PAY_PROVIDER`, `MONO_TOKEN`, `SELLER_*`.
+- `README.md` monetisation costs line (EN + UA) — drop the FX note once LiqPay is live.
+- `privacy.html` — seller identity; name LiqPay (PrivatBank) as a processor of
+  payment data (we still never see card numbers).
+- `worker/wrangler.toml` — `PAY_PROVIDER`, `LIQPAY_PUBLIC_KEY`,
+  `LIQPAY_PRIVATE_KEY` (secret), the Автоклієнт token (secret), `SELLER_*`.
 - `FIELD_AGENT.md`, `PLAY_STORE.md`, `PLAY_LISTING.md` — §6 and §7.
 
 ## 11. Open decisions for the owner
 
-1. Acquirer: mono (recommended) or LiqPay/WayForPay?
-2. Auto-charging subscriptions, or prepaid periods + renewal link (recommended)?
+1. ~~Acquirer~~ — decided: **LiqPay**, on the existing PrivatBank ФОП account.
+2. ПРРО: PrivatBank's own or Checkbox?
 3. How much of the registration address to publish (⚖️).
 4. Donations: inside the ФОП, or kept personal?
 5. Are current agents willing to register as ФОП, or does the bot need the
