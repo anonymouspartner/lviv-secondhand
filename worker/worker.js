@@ -211,6 +211,10 @@ async function ensureSchema(env) {
   // history. `checked` spaces out the polling and `alerted` keeps the drift
   // alarm to once a day; both are written even when a poll finds nothing, which
   // is why they live here rather than being derived from `updated`.
+  // The payments ledger — one row per payment, any provider. See claimPayment().
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, provider TEXT NOT NULL, kind TEXT NOT NULL, store_id TEXT NOT NULL, intent TEXT NOT NULL DEFAULT '{}', text TEXT, amount INTEGER, email TEXT, status TEXT NOT NULL DEFAULT 'created', created TEXT NOT NULL DEFAULT (datetime('now')), paid TEXT)"
+  ).run();
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS chain_feed (chain TEXT PRIMARY KEY, post_id INTEGER, day TEXT, prices TEXT, raw TEXT, checked TEXT, alerted TEXT, updated TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
@@ -636,114 +640,156 @@ async function signBountyToken(env, storeId) {
   return `${storeId}.${expB36}.${mac}`;
 }
 
-// Apply a verified Stripe event to the promos table (activate / extend / cancel).
-async function applyPromoEvent(env, ev, ctx) {
-  const o = (ev && ev.data && ev.data.object) || {};
-  const type = ev && ev.type;
-  const graceDays = (cad) => (cad === 'annual' ? 372 : 34); // period + a few days' grace
-  if (type === 'checkout.session.completed') {
-    const storeId = o.client_reference_id || (o.metadata && o.metadata.storeId);
-    const md = o.metadata || {};
-    // À la carte purchases are orders for the owner to fulfil, not placements.
-    if (md.item && ORDER_ITEMS[md.item]) {
-      if (!storeId) return;
-      await env.DB.prepare(
-        "INSERT INTO orders (id, store_id, item, amount, currency, email, note, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', datetime('now')) " +
-        'ON CONFLICT(id) DO NOTHING'
-      ).bind(
-        o.id, storeId, md.item, o.amount_total || null, o.currency || null,
-        (o.customer_details && o.customer_details.email) || null,
-        cleanOffer(readCustomField(o, 'note') || md.note) || null
-      ).run();
-      const email = (o.customer_details && o.customer_details.email) || '—';
-      const note = cleanOffer(readCustomField(o, 'note') || md.note);
-      tgNotify(env, ctx,
-        `🧾 NEW ORDER — you need to fulfil this\n\n` +
-        `Item:  ${ORDER_ITEMS[md.item].label}\n` +
-        `Store: ${storeId}\n` +
-        `Paid:  ${uah(o.amount_total)}\n` +
-        `Email: ${email}\n` +
-        (note ? `Note:  ${note}\n` : '') +
-        `\n${storeLink(storeId)}`);
-      return;
-    }
-    const tier = md.tier;
-    const rawCadence = md.cadence;
-    const cadence = PROMO_CADENCES.has(rawCadence) ? rawCadence : 'monthly';
-    if (!storeId || !PROMO_TIERS.has(tier)) return;
-    // Re-clean rather than trusting the round-trip: metadata could have been set
-    // by any caller holding the key, not just our own /promote.
-    const offer = cleanOffer(readCustomField(o, 'offer') || md.offer) || null;
-    // A run ends exactly when it was bought to end; a subscription runs to the next
-    // invoice plus a few days' grace. A run has no subscription, so no portal either.
-    const run = PROMO_RUNS[`${tier}_${cadence}`];
-    const until = addDaysStr(kyivDateStr(), run ? run.days : graceDays(cadence));
-    await env.DB.prepare(
-      "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
-      "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
-    ).bind(storeId, tier, offer, until, o.subscription || null, cadence, run ? null : (o.customer || null)).run();
-    // A paid tier also queues an Instagram advertisement — on PURCHASE only.
-    //
-    // Deliberately not on renewal (invoice.paid, below). A subscription bills
-    // every month, so queueing there would hand you one approval per paying
-    // store per month, forever, each showing the same offer the last one did.
-    // That is a chore rather than a feature, and recurring presence is what the
-    // weekly deals post already provides.
-    //
-    // And only when the store supplied an offer line. It is optional at
-    // checkout, and inventing copy for someone else's paid advertisement is not
-    // ours to do — so a tier bought without one gets the on-map placement it
-    // paid for, and the notification below says why no ad appeared.
-    if (offer) {
-      ctx.waitUntil(
-        queueInstagramAd(env, { storeId, text: offer, tier })
-          .catch((e) => tgNotify(env, ctx, `⚠️ Could not queue the Instagram ad for ${storeId}: ${e.message}`))
-      );
-    }
-    // A promotion fulfils itself, so this is information rather than a task.
-    tgNotify(env, ctx,
-      `💸 PROMOTION PAID — already live, nothing to do\n\n` +
-      `Store: ${storeId}\n` +
-      `Plan:  ${tier} · ${run ? run.days + '-day run' : cadence}\n` +
-      `Paid:  ${uah(o.amount_total)}\n` +
-      (offer ? `Offer: ${offer}\n` : '') +
-      `Until: ${until}\n` +
-      (offer
-        ? `\n📣 An Instagram ad is being prepared — you'll get it here to approve.`
-        : `\n📣 No Instagram ad: this purchase carried no offer line. Ask the store for one and queue it by hand (Actions → Queue an Instagram ad).`) +
-      `\n\n${storeLink(storeId)}`);
-  } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
-    // Renewal: extends the placement, queues no advertisement. See the comment
-    // at the purchase branch above for why.
-    const subId = o.subscription;
-    if (!subId) return;
-    const row = await env.DB.prepare('SELECT cadence FROM promos WHERE sub_id = ?').bind(subId).first();
-    const until = addDaysStr(kyivDateStr(), graceDays(row && row.cadence));
-    await env.DB.prepare("UPDATE promos SET until = ?, status = 'active', updated = datetime('now') WHERE sub_id = ?").bind(until, subId).run();
-  } else if (type === 'customer.subscription.deleted' ||
-             (type === 'customer.subscription.updated' && ['canceled', 'unpaid', 'incomplete_expired'].includes(o.status))) {
-    await env.DB.prepare("UPDATE promos SET status = 'canceled', updated = datetime('now') WHERE sub_id = ?").bind(o.id).run();
+// ── Payments: one fulfilment path for every provider ─────────────────────────
+// Each payment provider has its own event shape. An adapter (stripePayment()
+// below; LiqPay's in docs/FOP.md §3) turns one into a normalised payment:
+//
+//   { id, provider, kind: 'promo' | 'order' | 'flashDeal', storeId,
+//     tier, cadence, item, pin, text, amount (kopiyky), currency, email,
+//     subRef, custRef }
+//
+// and from there every provider takes the same road: claimPayment() records
+// it exactly once, fulfil() delivers it. Renewals and cancellations of a
+// subscription go through renewPromo()/cancelPromo() by the provider's
+// subscription reference. So promotions, orders, flash deals, the owner's
+// Telegram pings and the Instagram queue behave identically whichever provider
+// took the money.
+
+// The payments table is the ledger: one row per payment, keyed by the
+// provider's own id for it. A provider that cannot carry free text through its
+// checkout (LiqPay) writes the row as 'created' — with the offer line or deal
+// text — before redirecting, and the paid event flips it; Stripe carries the
+// text itself, so its row is first written already 'paid'. Either way the
+// row's existence in 'paid' is what makes fulfilment happen once: providers
+// redeliver events, and without this a redelivered purchase pinged the owner
+// again and queued a second Instagram ad.
+const changed = (r) => !!(r && r.meta && r.meta.changes > 0);
+const INTENT_KEYS = ['tier', 'cadence', 'item', 'pin', 'subRef', 'custRef', 'currency'];
+
+// Returns the payment to fulfil, or null when it was already fulfilled.
+async function claimPayment(env, pay) {
+  const flipped = await env.DB.prepare(
+    "UPDATE payments SET status = 'paid', paid = datetime('now') WHERE id = ? AND status = 'created'"
+  ).bind(pay.id).run();
+  if (changed(flipped)) {
+    // Prepared before checkout: what the buyer chose and wrote lives in the
+    // row; the provider's event adds only what it alone knows.
+    const row = await env.DB.prepare('SELECT * FROM payments WHERE id = ?').bind(pay.id).first();
+    let intent = {};
+    try { intent = JSON.parse((row && row.intent) || '{}'); } catch {}
+    const stored = { kind: row.kind, storeId: row.store_id, text: row.text, amount: row.amount, email: row.email, ...intent };
+    const fresh = Object.fromEntries(Object.entries(pay).filter(([, v]) => v != null && v !== ''));
+    return { ...stored, ...fresh };
   }
+  const intent = {};
+  for (const k of INTENT_KEYS) if (pay[k] != null) intent[k] = pay[k];
+  const inserted = await env.DB.prepare(
+    "INSERT INTO payments (id, provider, kind, store_id, intent, text, amount, email, status, created, paid) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'paid', datetime('now'), datetime('now')) ON CONFLICT(id) DO NOTHING"
+  ).bind(pay.id, pay.provider, pay.kind, pay.storeId, JSON.stringify(intent), pay.text || null,
+    pay.amount == null ? null : pay.amount, pay.email || null).run();
+  return changed(inserted) ? pay : null;
+}
+
+// Deliver a paid, claimed payment.
+async function fulfil(env, ctx, pay) {
+  if (pay.kind === 'order') return fulfilOrder(env, ctx, pay);
+  if (pay.kind === 'flashDeal') return fulfilFlashDeal(env, ctx, pay);
+  if (pay.kind === 'promo') return fulfilPromo(env, ctx, pay);
+}
+
+// À la carte purchases are orders for the owner to fulfil, not placements.
+async function fulfilOrder(env, ctx, pay) {
+  const note = cleanOffer(pay.text) || null;
+  await env.DB.prepare(
+    "INSERT INTO orders (id, store_id, item, amount, currency, email, note, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', datetime('now')) " +
+    'ON CONFLICT(id) DO NOTHING'
+  ).bind(pay.id, pay.storeId, pay.item, pay.amount == null ? null : pay.amount, pay.currency || null, pay.email || null, note).run();
+  tgNotify(env, ctx,
+    `🧾 NEW ORDER — you need to fulfil this\n\n` +
+    `Item:  ${ORDER_ITEMS[pay.item].label}\n` +
+    `Store: ${pay.storeId}\n` +
+    `Paid:  ${uah(pay.amount)}\n` +
+    `Email: ${pay.email || '—'}\n` +
+    (note ? `Note:  ${note}\n` : '') +
+    `\n${storeLink(pay.storeId)}`);
+}
+
+const PROMO_GRACE_DAYS = (cad) => (cad === 'annual' ? 372 : 34); // period + a few days' grace
+
+async function fulfilPromo(env, ctx, pay) {
+  const { storeId, tier } = pay;
+  const cadence = PROMO_CADENCES.has(pay.cadence) ? pay.cadence : 'monthly';
+  // Re-clean rather than trusting the round-trip: the text came back from a
+  // provider, and could have been set by any caller holding the key.
+  const offer = cleanOffer(pay.text) || null;
+  // A run ends exactly when it was bought to end; a subscription runs to the next
+  // invoice plus a few days' grace. A run has no subscription, so no portal either.
+  const run = PROMO_RUNS[`${tier}_${cadence}`];
+  const until = addDaysStr(kyivDateStr(), run ? run.days : PROMO_GRACE_DAYS(cadence));
+  await env.DB.prepare(
+    "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
+    "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
+  ).bind(storeId, tier, offer, until, pay.subRef || null, cadence, run ? null : (pay.custRef || null)).run();
+  // A paid tier also queues an Instagram advertisement — on PURCHASE only.
+  //
+  // Deliberately not on renewal (renewPromo, below). A subscription bills
+  // every month, so queueing there would hand you one approval per paying
+  // store per month, forever, each showing the same offer the last one did.
+  // That is a chore rather than a feature, and recurring presence is what the
+  // weekly deals post already provides.
+  //
+  // And only when the store supplied an offer line. It is optional at
+  // checkout, and inventing copy for someone else's paid advertisement is not
+  // ours to do — so a tier bought without one gets the on-map placement it
+  // paid for, and the notification below says why no ad appeared.
+  if (offer) {
+    ctx.waitUntil(
+      queueInstagramAd(env, { storeId, text: offer, tier })
+        .catch((e) => tgNotify(env, ctx, `⚠️ Could not queue the Instagram ad for ${storeId}: ${e.message}`))
+    );
+  }
+  // A promotion fulfils itself, so this is information rather than a task.
+  tgNotify(env, ctx,
+    `💸 PROMOTION PAID — already live, nothing to do\n\n` +
+    `Store: ${storeId}\n` +
+    `Plan:  ${tier} · ${run ? run.days + '-day run' : cadence}\n` +
+    `Paid:  ${uah(pay.amount)}\n` +
+    (offer ? `Offer: ${offer}\n` : '') +
+    `Until: ${until}\n` +
+    (offer
+      ? `\n📣 An Instagram ad is being prepared — you'll get it here to approve.`
+      : `\n📣 No Instagram ad: this purchase carried no offer line. Ask the store for one and queue it by hand (Actions → Queue an Instagram ad).`) +
+    `\n\n${storeLink(storeId)}`);
+}
+
+// Renewal: extends the placement, queues no advertisement. See the comment in
+// fulfilPromo for why.
+async function renewPromo(env, subRef) {
+  if (!subRef) return;
+  const row = await env.DB.prepare('SELECT cadence FROM promos WHERE sub_id = ?').bind(subRef).first();
+  const until = addDaysStr(kyivDateStr(), PROMO_GRACE_DAYS(row && row.cadence));
+  await env.DB.prepare("UPDATE promos SET until = ?, status = 'active', updated = datetime('now') WHERE sub_id = ?").bind(until, subRef).run();
+}
+
+async function cancelPromo(env, subRef) {
+  if (!subRef) return;
+  await env.DB.prepare("UPDATE promos SET status = 'canceled', updated = datetime('now') WHERE sub_id = ?").bind(subRef).run();
 }
 
 // A flash deal (see GET /flash-deal). Unlike a promo tier, a flash deal isn't
 // self-fulfilling: it only reaches the map once approved — automatically if
 // the buyer supplied a PIN on file for that store, otherwise via the owner
 // tapping the link in their Telegram notification (GET /flash-deal/approve).
-async function applyFlashDealEvent(env, ev, ctx) {
-  if (ev.type !== 'checkout.session.completed') return;
-  const o = (ev && ev.data && ev.data.object) || {};
-  const md = o.metadata || {};
-  const storeId = o.client_reference_id || md.storeId;
-  const tier = FLASH_DEAL_TIERS[md.tier];
-  if (!storeId || !tier) return;
-  const text = cleanText(readCustomField(o, 'dealText'), DEAL_MAX);
-  if (!text) return; // required field on Checkout; nothing sane to publish without it
-  const id = o.id;
+async function fulfilFlashDeal(env, ctx, pay) {
+  const { storeId, id } = pay;
+  const tier = FLASH_DEAL_TIERS[pay.tier];
+  const text = cleanText(pay.text, DEAL_MAX);
+  if (!text) return; // required at checkout; nothing sane to publish without it
   const startsAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + tier.hours * 3600000).toISOString();
 
-  const pin = clean(md.pin, 4);
+  const pin = clean(pay.pin, 4);
   const pinRow = pin ? await env.DB.prepare('SELECT pin FROM store_pins WHERE store_id = ?').bind(storeId).first() : null;
   const pinOk = !!(pinRow && pinRow.pin === pin);
 
@@ -753,7 +799,7 @@ async function applyFlashDealEvent(env, ev, ctx) {
   await env.DB.prepare(
     "INSERT INTO flash_deals (id, store_id, tier, text, alert, starts_at, expires_at, token, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
     'ON CONFLICT(id) DO NOTHING'
-  ).bind(id, storeId, md.tier, text, tier.alert ? 1 : 0, startsAt, expiresAt, dealToken, pinOk ? 'auto' : 'pending').run();
+  ).bind(id, storeId, pay.tier, text, tier.alert ? 1 : 0, startsAt, expiresAt, dealToken, pinOk ? 'auto' : 'pending').run();
 
   const updates = { flashDeal: { text, startsAt, expiresAt, alert: tier.alert } };
   if (pinOk) {
@@ -761,7 +807,7 @@ async function applyFlashDealEvent(env, ev, ctx) {
       await dispatchMapPatch(env, storeId, updates);
       tgNotify(env, ctx,
         `⚡ FLASH DEAL PAID — auto-published (PIN verified)\n\n` +
-        `Store: ${storeId}\nText:  ${text}\nUntil: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n${storeLink(storeId)}`);
+        `Store: ${storeId}\nText:  ${text}\nUntil: ${expiresAt}\nPaid:  ${uah(pay.amount)}\n\n${storeLink(storeId)}`);
       if (tier.alert) await broadcastFlashDeal(env, ctx, storeId, text, expiresAt);
     } catch (e) {
       tgNotify(env, ctx, `⚠️ Flash deal for ${storeId} was PIN-verified but failed to dispatch — check the map-update workflow logs.\n\n${storeLink(storeId)}`);
@@ -787,9 +833,57 @@ async function applyFlashDealEvent(env, ev, ctx) {
   const approveLink = `${WORKER_URL}/flash-deal/approve?id=${encodeURIComponent(id)}&t=${encodeURIComponent(dealToken)}`;
   tgNotify(env, ctx,
     `⚡ FLASH DEAL PAID — needs your review before it goes live\n\n` +
-    `Store: ${storeId}\nTier:  ${tier.label}\nText:  ${text}\nWould run until: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n` +
+    `Store: ${storeId}\nTier:  ${tier.label}\nText:  ${text}\nWould run until: ${expiresAt}\nPaid:  ${uah(pay.amount)}\n\n` +
     `Tap to approve & publish:\n${approveLink}\n\n` +
     `${storeLink(storeId)}`);
+}
+
+// ── Stripe adapter ───────────────────────────────────────────────────────────
+// A completed Checkout Session → a normalised payment, or null when it is not
+// one of ours. Metadata is validated here, once, because it could have been set
+// by any caller holding the key, not just our own /promote, /order and
+// /flash-deal.
+function stripePayment(o) {
+  const md = o.metadata || {};
+  const storeId = o.client_reference_id || md.storeId;
+  if (!storeId) return null;
+  const base = {
+    id: o.id, provider: 'stripe', storeId,
+    amount: o.amount_total == null ? null : o.amount_total,
+    currency: o.currency || null,
+    email: (o.customer_details && o.customer_details.email) || null,
+  };
+  if (md.kind === 'flashDeal') {
+    if (!FLASH_DEAL_TIERS[md.tier]) return null;
+    return { ...base, kind: 'flashDeal', tier: md.tier, pin: md.pin || null, text: readCustomField(o, 'dealText') };
+  }
+  if (md.item) {
+    if (!ORDER_ITEMS[md.item]) return null;
+    return { ...base, kind: 'order', item: md.item, text: readCustomField(o, 'note') || md.note || '' };
+  }
+  if (!PROMO_TIERS.has(md.tier)) return null;
+  return {
+    ...base, kind: 'promo', tier: md.tier, cadence: md.cadence,
+    text: readCustomField(o, 'offer') || md.offer || '',
+    subRef: o.subscription || null, custRef: o.customer || null,
+  };
+}
+
+// Apply a verified Stripe event: a purchase, a renewal, or a cancellation.
+async function applyStripeEvent(env, ev, ctx) {
+  const o = (ev && ev.data && ev.data.object) || {};
+  const type = ev && ev.type;
+  if (type === 'checkout.session.completed') {
+    const pay = stripePayment(o);
+    if (!pay) return;
+    const claimed = await claimPayment(env, pay);
+    if (claimed) await fulfil(env, ctx, claimed);
+  } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
+    await renewPromo(env, o.subscription);
+  } else if (type === 'customer.subscription.deleted' ||
+             (type === 'customer.subscription.updated' && ['canceled', 'unpaid', 'incomplete_expired'].includes(o.status))) {
+    await cancelPromo(env, o.id);
+  }
 }
 
 // Pings every Telegram chat following this store (store_subs — see /api/sub)
@@ -1086,7 +1180,7 @@ async function createGithubIssue(env, title, body, labels) {
 }
 
 // A store's PIN lets its owner's future flash-deal purchase publish without
-// waiting on manual review (see applyFlashDealEvent). Four digits, uniform —
+// waiting on manual review (see fulfilFlashDeal). Four digits, uniform —
 // crypto.getRandomValues modulo 10000 is fine here because 2^32 is not a
 // multiple of 10000 only by a negligible bias at this size, and the PIN is a
 // convenience gate, not a credential protecting money.
@@ -1514,7 +1608,7 @@ export default {
       // /promote's runs, which still reference an existing Product): the deal
       // text is required at checkout (the paywall — never collected in the app
       // itself), and a matching PIN publishes it immediately instead of waiting
-      // on the owner. See applyFlashDealEvent().
+      // on the owner. See fulfilFlashDeal().
       if (url.pathname === '/flash-deal') {
         const store = url.searchParams.get('store') || '';
         const tierKey = url.searchParams.get('tier') || '';
@@ -1906,9 +2000,7 @@ export default {
       let ev; try { ev = JSON.parse(payload); } catch { return new Response('bad json', { status: 400 }); }
       try {
         await ensureSchema(env);
-        const md = (ev.data && ev.data.object && ev.data.object.metadata) || {};
-        if (md.kind === 'flashDeal') await applyFlashDealEvent(env, ev, ctx);
-        else await applyPromoEvent(env, ev, ctx);
+        await applyStripeEvent(env, ev, ctx);
       } catch {}
       return new Response('ok', { status: 200 }); // 2xx so Stripe stops retrying
     }

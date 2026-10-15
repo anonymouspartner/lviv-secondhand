@@ -17,7 +17,6 @@ where money comes in, where it goes out, and what the public pages must say.
 | Stripe only. Charged in ₴, settled in USD: ≈2.9% + fixed **+ ≈1% FX** per sale | LiqPay settles in ₴ to the existing PrivatBank ФОП account, ≈1.5%, no FX |
 | Stripe's checkout has **no Ukrainian locale** (`STRIPE_LOCALES` in `worker/worker.js`) | Local checkout pages are Ukrainian-first |
 | Bank transfer is an informal fallback (`ADVERTISING.md` §6) | Proper **рахунок + акт** a store (usually a ФОП itself) can expense |
-| Agents are paid to a card by hand, from a personal account | Paid from the business account, with the tax position clear |
 | Play account planned as an individual (`PLAY_STORE.md`) | Organisation account via a free D-U-N-S number |
 | `privacy.html` "Who we are" names no seller; contact is GitHub issues | Seller identified as e-commerce law expects, plus a public offer |
 
@@ -284,24 +283,15 @@ For stores that would rather pay as a business, and at ₴0 acquiring fee.
 
 ---
 
-## 6. Phase 5 — field agents ⚖️
+## 6. Phase 5 — field agents — decided: no change
 
-Paying a private person (not a ФОП) for services makes the ФОП a **tax agent**:
-withhold ПДФО (18%) and the military levy, and pay ЄСВ (22%) on top, with quarterly
-reporting. Paying another ФОП against their invoice involves none of that. The bot
-should make this visible rather than leave it to memory.
+The owner pays agents directly, as today. Nothing in the bot changes: `/card`,
+`/report` and `/admin agents` stay as they are.
 
-- [ ] `/card` flow also asks: "Ви ФОП? · Are you a ФОП?" — store `is_fop` and
-      РНОКПП alongside the payout card/IBAN.
-- [ ] `/report` and `/admin agents`: split payable totals into **ФОП agents** (pay
-      the invoice in full) and **non-ФОП** (show gross, estimated withholding and the
-      employer-side cost, with a ⚠️ to check with the accountant).
-- [ ] `FIELD_AGENT.md`: add a section recommending agents register as ФОП group 2/3
-      (КВЕД 73.11 / 74.90) before Phase 2 sales commissions begin, and a template
-      **договір про надання послуг** + monthly **акт** between the owner's ФОП and
-      the agent's.
-- [ ] Payouts go from the ФОП account to the agent's **IBAN** (not card number) with
-      a purpose line referencing the act — prefer IBAN in the `/card` prompt.
+⚖️ Worth knowing, not acting on: paying a private person (not a ФОП) for services
+from the ФОП account can make the ФОП a tax agent for that payment (ПДФО, the
+military levy, ЄСВ). How the owner pays is the owner's call; confirm the position
+with the accountant.
 
 ---
 
@@ -341,7 +331,7 @@ should make this visible rather than leave it to memory.
 | 6 | `PAY_PROVIDER=liqpay` live for **runs, flash deals, orders** | medium | flip the var back |
 | 7 | LiqPay subscriptions + cancel flow (§3.4); monthly/annual move to LiqPay | medium | flip the var back |
 | 8 | ПРРО (§4) | ⚖️ must be live **before** step 6 | — |
-| 9 | Invoices (§5), agent ФОП flow (§6) | low | yes |
+| 9 | Invoices (§5) | low | yes |
 | 10 | Play organisation account (§7) | none | — |
 
 Step 3 ships alone and is verified against real Stripe purchases (one ₴50
@@ -358,7 +348,7 @@ is only one provider to blame.
   payment data (we still never see card numbers).
 - `worker/wrangler.toml` — `PAY_PROVIDER`, `LIQPAY_PUBLIC_KEY`,
   `LIQPAY_PRIVATE_KEY` (secret), the Автоклієнт token (secret), `SELLER_*`.
-- `FIELD_AGENT.md`, `PLAY_STORE.md`, `PLAY_LISTING.md` — §6 and §7.
+- `PLAY_STORE.md`, `PLAY_LISTING.md` — §7.
 
 ## 11. Open decisions for the owner
 
@@ -366,5 +356,4 @@ is only one provider to blame.
 2. ПРРО: PrivatBank's own or Checkbox?
 3. How much of the registration address to publish (⚖️).
 4. Donations: inside the ФОП, or kept personal?
-5. Are current agents willing to register as ФОП, or does the bot need the
-   withholding view from day one?
+5. ~~Agents~~ — decided: paid directly, no bot changes (§6).

@@ -110,7 +110,7 @@ Small stores buy foot traffic, not "impressions." Give them tangible proof:
 - **Collection:** **Stripe** is the primary processor (see §7); cash or bank transfer
   (₴0 fee) stays available as a fallback for stores that prefer it.
 - **Tax/FOP:** the owner is now registered as a ФОП. The plan for using it —
-  local acquiring in ₴, invoices, fiscal receipts, agent payouts — is in
+  local acquiring in ₴, invoices, fiscal receipts — is in
   [FOP.md](FOP.md) (this is not legal advice).
 - **Ad labelling:** every paid placement is marked `Реклама / Sponsored`; keep
   featured density low (≈1 sponsored per screen/area) so the map stays trusted.
