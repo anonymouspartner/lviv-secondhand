@@ -32,7 +32,7 @@ Stripe account itself stays exactly as it is — it is shared with another busin
 Everything after this depends on these. Order matters: the acquirer will ask for the
 offer page (§2) and the ПРРО (§4) during onboarding.
 
-- [ ] ⚖️ **Tax group 3 (5%, non-VAT)** — the usual fit for selling advertising to
+- [x] ⚖️ **Tax group 3 (5%, non-VAT)** — registered as such — the usual fit for selling advertising to
       businesses. Group 2 limits who you may serve; check it covers your buyers
       before staying on it.
 - [ ] ⚖️ **КВЕДи** include advertising and the web platform:
@@ -80,9 +80,9 @@ email, phone/Telegram — in one place:
       (§3.4), how to cancel, seller details. Same page chrome as `privacy.html`.
 - [x] Link the offer from: the promote sheet, the flash-deal sheet, the order
       buttons, the help sheet, `privacy.html` §1, and `sitemap.xml`.
-- [ ] **Fill in the ФОП details** — every highlighted placeholder in `offer.html`
-      and `privacy.html` (`grep -n 'mark class=.todo' offer.html privacy.html`).
-      Not merged until this is done.
+- [x] **ФОП details filled in** (16 Oct 2026) — РНОКПП, registered address, tax
+      status (single tax, group 3, no VAT), IBAN and contact, in `offer.html` §1.1/§12,
+      `privacy.html` and `SELLER_*` in `worker/wrangler.toml`.
 - [x] `promoSecure` string (UA/EN) names LiqPay (PrivatBank); there is no Stripe
       checkout left to describe.
 
@@ -392,6 +392,6 @@ step 6, stores pay by invoice; the LiqPay sandbox run (§3.8) comes first.
 
 1. ~~Acquirer~~ — decided: **LiqPay**, on the existing PrivatBank ФОП account.
 2. ПРРО: PrivatBank's own or Checkbox?
-3. How much of the registration address to publish (⚖️).
+3. ~~Address~~ — decided: the full registered address is published (offer §12).
 4. Donations: inside the ФОП, or kept personal?
 5. ~~Agents~~ — decided: paid directly, no bot changes (§6).

@@ -36,14 +36,14 @@ VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYM
 OWNER_ID = "1212541015"
 # The ФОП's details, printed on bank-transfer invoices and acts (GET /invoice,
 # the bot's /invoice). Public by design — the same details the offer page
-# (offer.html §12) shows — so they live here rather than as secrets. Until all
-# five are filled in, /invoice answers that they are missing instead of
-# issuing an invoice with blanks. SELLER_BANK defaults to PrivatBank.
+# (offer.html §12) shows — so they live here rather than as secrets. If one is
+# ever blanked, /invoice answers that it is missing instead of issuing an
+# invoice with blanks. SELLER_BANK defaults to PrivatBank.
 SELLER_NAME = "ФОП Хейген Тімоті Рендалл"
-SELLER_TAX_ID = ""
-SELLER_ADDRESS = ""
+SELLER_TAX_ID = "3537413536"
+SELLER_ADDRESS = "79008, Львівська обл., м. Львів, вул. Театральна, буд. 7, кв. 6"
 SELLER_IBAN = "UA503052990000026008031043785"
-SELLER_TAX_STATUS = ""
+SELLER_TAX_STATUS = "Платник єдиного податку 3 групи, не є платником ПДВ"
 # The Барахолка channel, so the listings sweep can delete an expired post.
 # Not a secret — a public channel handle is public by definition, same
 # reasoning as OWNER_ID above and as the TG_CHANNEL repository *variable* the

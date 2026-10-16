@@ -60,9 +60,7 @@ subscription still apply.
 
 ## What happens next
 
-1. **Merge PR #348** once the ФОП details are filled in (registered address, tax
-   group, the owner's OK to publish the РНОКПП, the public contact). Invoices go
-   live: `/invoice <store> <plan> [buyer]` in the bot, `/paid <number>` when the
+1. **Merge PR #348** (the ФОП details are filled in). Invoices go live: `/invoice <store> <plan> [buyer]` in the bot, `/paid <number>` when the
    money arrives.
 2. **Sandbox test:** set the repository secret `PAY_PROVIDER` = `liqpay` (the
    sandbox keys are already there), re-run "Deploy metrics Worker" and make one test

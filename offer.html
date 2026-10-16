@@ -10,11 +10,10 @@
 <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <!--
-  SELLER DETAILS — every <mark class="todo"> below is a placeholder for the
-  ФОП's registered data. Fill ALL of them (Ukrainian and English sections, and
-  the matching ones in privacy.html) before this page is merged: LiqPay's
+  SELLER DETAILS — the ФОП's registered data, as on the Виписка (§1.1 and §12,
+  in both languages). Keep them in step with privacy.html and the SELLER_* vars
+  in worker/wrangler.toml, which print the same details on invoices. LiqPay's
   shop review reads this page and rejects a shop whose seller is unidentified.
-  `grep -n 'mark class=.todo' offer.html privacy.html` lists what is left.
 -->
 <style>
   :root{
@@ -78,7 +77,7 @@
 
   <div class="card">
     <h2>1. Загальні положення</h2>
-    <p>1.1. Цей документ є офертою (пропозицією укласти договір) <strong>ФОП Хейген Тімоті Рендалл</strong> (далі — «Виконавець»), РНОКПП <mark class="todo">0000000000</mark>, адресованою будь-якій фізичній особі, фізичній особі-підприємцю або юридичній особі (далі — «Замовник»), відповідно до статей 633, 641 Цивільного кодексу України.</p>
+    <p>1.1. Цей документ є офертою (пропозицією укласти договір) <strong>ФОП Хейген Тімоті Рендалл</strong> (далі — «Виконавець»), РНОКПП 3537413536, адресованою будь-якій фізичній особі, фізичній особі-підприємцю або юридичній особі (далі — «Замовник»), відповідно до статей 633, 641 Цивільного кодексу України.</p>
     <p>1.2. <strong>Акцептом</strong> цієї оферти (повним і безумовним прийняттям її умов) є оплата обраної послуги. З моменту оплати договір вважається укладеним у письмовій формі (ст. 642 ЦК України, Закон України «Про електронну комерцію»).</p>
     <p>1.3. Оплачуючи послугу для магазину, Замовник підтверджує, що є власником цього магазину або уповноважений діяти від його імені.</p>
 
@@ -104,7 +103,7 @@
     <p>3.3. Кожне платне розміщення в Застосунку позначається як <strong>«Реклама»</strong> відповідно до Закону України «Про рекламу». Виконавець не гарантує певної кількості переглядів, відвідувань чи продажів.</p>
 
     <h2>4. Ціни</h2>
-    <p>4.1. Ціни вказано в гривнях. <mark class="todo">Виконавець є платником єдиного податку 3 групи й не є платником ПДВ</mark>, тому ціни вказано без ПДВ.</p>
+    <p>4.1. Ціни вказано в гривнях. Виконавець є платником єдиного податку 3 групи й не є платником ПДВ, тому ціни вказано без ПДВ.</p>
     <div class="table-wrap"><table>
       <thead><tr><th>Підписка</th><th>Місяць</th><th>Рік</th></tr></thead>
       <tbody>
@@ -188,12 +187,12 @@
     <h2>12. Реквізити Виконавця</h2>
     <dl>
       <dt>Виконавець</dt><dd>ФОП Хейген Тімоті Рендалл</dd>
-      <dt>РНОКПП</dt><dd><mark class="todo">0000000000</mark></dd>
-      <dt>Адреса</dt><dd><mark class="todo">м. Львів, …</mark></dd>
-      <dt>Оподаткування</dt><dd><mark class="todo">Єдиний податок, 3 група, без ПДВ</mark></dd>
+      <dt>РНОКПП</dt><dd>3537413536</dd>
+      <dt>Адреса</dt><dd>79008, Львівська обл., м. Львів, вул. Театральна, буд. 7, кв. 6</dd>
+      <dt>Оподаткування</dt><dd>Платник єдиного податку 3 групи (5%), не є платником ПДВ</dd>
       <dt>Банк</dt><dd>АТ КБ «ПриватБанк», IBAN UA50 3052 9900 0002 6008 0310 4378 5</dd>
       <dt>Ел. пошта</dt><dd><a href="mailto:hello@lvivsecondhand.com">hello@lvivsecondhand.com</a></dd>
-      <dt>Телефон / Telegram</dt><dd><mark class="todo">+380 …</mark></dd>
+      <dt>Telegram</dt><dd><a href="https://t.me/Secondhandlvivbot" target="_blank" rel="noopener">@Secondhandlvivbot</a></dd>
     </dl>
   </div>
 
@@ -208,7 +207,7 @@
 
   <div class="card">
     <h2>1. General</h2>
-    <p>1.1. This document is an offer to contract made by <strong>Sole proprietor (ФОП) Хейген Тімоті Рендалл</strong> (the “Provider”), tax number (РНОКПП) <mark class="todo">0000000000</mark>, to any individual, sole proprietor or company (the “Customer”), under Articles 633 and 641 of the Civil Code of Ukraine.</p>
+    <p>1.1. This document is an offer to contract made by <strong>Sole proprietor (ФОП) Хейген Тімоті Рендалл</strong> (the “Provider”), tax number (РНОКПП) 3537413536, to any individual, sole proprietor or company (the “Customer”), under Articles 633 and 641 of the Civil Code of Ukraine.</p>
     <p>1.2. Paying for a service is <strong>acceptance</strong> of this offer in full. The agreement is concluded in writing from the moment of payment (Art. 642 of the Civil Code; Law of Ukraine “On Electronic Commerce”).</p>
     <p>1.3. By paying for a store's service the Customer confirms they own that store or are authorised to act for it.</p>
 
@@ -234,7 +233,7 @@
     <p>3.3. Every paid placement in the App is labelled <strong>“Реклама / Sponsored”</strong> as required by the Law of Ukraine “On Advertising”. The Provider does not guarantee any number of views, visits or sales.</p>
 
     <h2>4. Prices</h2>
-    <p>4.1. Prices are in hryvnia (₴). <mark class="todo">The Provider is a group 3 single-tax payer and not registered for VAT</mark>, so prices include no VAT. The rates are those in the tables of section 4 of the Ukrainian version above: Verified+ ₴250/month, ₴2,500/year; Featured ₴600/month, ₴6,000/year; Spotlight ₴1,200/month, ₴12,000/year; one-off runs of 1 / 7 / 30 days from ₴50 / ₴100 / ₴250; flash deals ₴30 (3 h), ₴60 (24 h), ₴120 (24 h + Telegram alert); extras ₴300 (Deal of the week), ₴150 (poster), ₴400 (sponsored push).</p>
+    <p>4.1. Prices are in hryvnia (₴). The Provider is a group 3 single-tax payer and not registered for VAT, so prices include no VAT. The rates are those in the tables of section 4 of the Ukrainian version above: Verified+ ₴250/month, ₴2,500/year; Featured ₴600/month, ₴6,000/year; Spotlight ₴1,200/month, ₴12,000/year; one-off runs of 1 / 7 / 30 days from ₴50 / ₴100 / ₴250; flash deals ₴30 (3 h), ₴60 (24 h), ₴120 (24 h + Telegram alert); extras ₴300 (Deal of the week), ₴150 (poster), ₴400 (sponsored push).</p>
     <p>4.2. The price shown in the App at the time of payment applies. Price changes never affect a period already paid; a subscription price change is announced at least 14 days before the next charge.</p>
     <p>4.3. Promo-code discounts apply on the terms shown next to the code.</p>
 
@@ -285,12 +284,12 @@
     <h2>12. Provider details</h2>
     <dl>
       <dt>Provider</dt><dd>Sole proprietor (ФОП) Хейген Тімоті Рендалл</dd>
-      <dt>Tax number (РНОКПП)</dt><dd><mark class="todo">0000000000</mark></dd>
-      <dt>Address</dt><dd><mark class="todo">Lviv, …</mark></dd>
-      <dt>Tax status</dt><dd><mark class="todo">Single tax, group 3, not VAT-registered</mark></dd>
+      <dt>Tax number (РНОКПП)</dt><dd>3537413536</dd>
+      <dt>Address</dt><dd>7 Teatralna St., apt. 6, Lviv, 79008, Lviv Oblast, Ukraine</dd>
+      <dt>Tax status</dt><dd>Single-tax payer, group 3 (5%), not registered for VAT</dd>
       <dt>Bank</dt><dd>JSC CB PrivatBank, IBAN UA50 3052 9900 0002 6008 0310 4378 5</dd>
       <dt>Email</dt><dd><a href="mailto:hello@lvivsecondhand.com">hello@lvivsecondhand.com</a></dd>
-      <dt>Phone / Telegram</dt><dd><mark class="todo">+380 …</mark></dd>
+      <dt>Telegram</dt><dd><a href="https://t.me/Secondhandlvivbot" target="_blank" rel="noopener">@Secondhandlvivbot</a></dd>
     </dl>
   </div>
 </main>
