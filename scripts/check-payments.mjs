@@ -401,14 +401,23 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   await lpCallback({ order_id: fs.params.order_id, status: 'success', payment_id: 43, amount: 100 });
   check(row('SELECT status FROM promos WHERE store_id = ?', 's42'), 'a success after a decline on the same checkout was never delivered');
 
-  // Switching new checkouts back to Stripe keeps LiqPay subscriptions working.
+  // Switching card checkout off keeps LiqPay subscriptions already sold working.
   const sub = await lpCheckout('/promote?store=s43&tier=featured&cadence=monthly');
   await lpCallback({ order_id: sub.params.order_id, status: 'subscribed', payment_id: 44, amount: 600 });
-  const backToStripe = { ...lpEnv, PAY_PROVIDER: 'stripe' };
+  const checkoutOff = { ...lpEnv, PAY_PROVIDER: 'off' };
   DB.db.prepare("UPDATE promos SET until = '2000-01-01' WHERE store_id = 's43'").run();
-  const r1 = await lpCallback({ order_id: sub.params.order_id, status: 'success', payment_id: 45, amount: 600 }, { e: backToStripe });
+  const r1 = await lpCallback({ order_id: sub.params.order_id, status: 'success', payment_id: 45, amount: 600 }, { e: checkoutOff });
   check(r1.status === 200 && row('SELECT until FROM promos WHERE store_id = ?', 's43').until === plusDays(34),
-    `after switching checkout back to Stripe a LiqPay renewal answered HTTP ${r1.status} and did not renew`);
+    `after switching checkout off a LiqPay renewal answered HTTP ${r1.status} and did not renew`);
+
+  // A renewal whose database write fails is retried by the redelivery, not lost.
+  DB.db.prepare("UPDATE promos SET until = '2000-01-01' WHERE store_id = 's43'").run();
+  calls = [];
+  DB.failOnce = /UPDATE promos SET until/;
+  const rf = await lpCallback({ order_id: sub.params.order_id, status: 'success', payment_id: 451, amount: 600 });
+  check(rf.status === 500 && tgPings().some((t) => /renewal was paid but not applied/.test(t.body.text)), `a failed renewal answered HTTP ${rf.status} or was not reported`);
+  const rr = await lpCallback({ order_id: sub.params.order_id, status: 'success', payment_id: 451, amount: 600 });
+  check(rr.status === 200 && row('SELECT until FROM promos WHERE store_id = ?', 's43').until === plusDays(34), 'the redelivery of a failed renewal did not renew');
 
   // A renewal that fails is flagged; nothing else changes.
   calls = [];
@@ -469,6 +478,35 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   await lpCallback({ order_id: sp.params.order_id, status: 'success', payment_id: 470, amount: 400 });
   check(tgPings().length === 1 && /by hand/.test(tgPings()[0].body.text) && /deal-of-the-week/.test(tgPings()[0].body.text),
     'a Spotlight purchase did not tell the owner about the deal-of-the-week and Telegram mention it owes');
+}
+
+// ── 10c · Stripe is no longer used for new checkouts ────────────────────────
+// The Stripe account stays (it is shared with another product, Capybara), and
+// so do its keys on the Worker — but the site no longer sells through it.
+{
+  const withStripeKey = { ...env, STRIPE_API_KEY: 'rk_live_still_set' };
+  calls = [];
+  const st = await (await mod.default.fetch(new Request('https://x/status'), withStripeKey, { waitUntil() {} })).json();
+  check(st.provider === 'none' && st.promoConfigured === false, `with only the Stripe key set the app is still offered checkout: ${JSON.stringify({ provider: st.provider, promoConfigured: st.promoConfigured })}`);
+  for (const path of ['/promote?store=s60&tier=featured&cadence=monthly', '/flash-deal?store=s60&tier=3h&text=x', '/order?store=s60&item=poster&email=a%40b.ua']) {
+    const r = await mod.default.fetch(new Request('https://x' + path), withStripeKey, { waitUntil() {} });
+    check(r.status === 503, `${path} answered HTTP ${r.status} with only the Stripe key set, expected 503`);
+  }
+  check(calls.filter((c) => c.url.includes('api.stripe.com')).length === 0, 'a purchase route still called Stripe');
+
+  // Capybara shares the account and its events reach this webhook: a renewal
+  // of a subscription that is not ours is silent, not a refund alarm.
+  calls = [];
+  await deliver({ id: 'evt_capy_inv', type: 'invoice.paid', data: { object: { id: 'in_capy', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_capybara' } } } } });
+  await deliver(session('cs_capy', { amount_total: 1000, currency: 'usd', payment_status: 'paid', customer_details: { email: 'c@capy.app' } }));
+  check(tgPings().length === 0, 'an event from the other product on the shared Stripe account pinged the owner');
+
+  // But a hryvnia payment with no store can only be one of this site's old
+  // Payment Links, still live at Stripe: tell the owner, nothing was delivered.
+  calls = [];
+  await deliver(session('cs_old_link', { amount_total: 60000, currency: 'uah', payment_status: 'paid', customer_details: { email: 'shop@ua.ua' } }));
+  check(tgPings().length === 1 && /OLD PAYMENT LINK/.test(tgPings()[0].body.text) && /shop@ua\.ua/.test(tgPings()[0].body.text) && /₴600/.test(tgPings()[0].body.text),
+    'a payment through an old Stripe Payment Link went unnoticed');
 }
 
 // ── 11 · sandbox keys never publish anything ─────────────────────────────────
@@ -589,10 +627,9 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
 }
 
 // ── 13 · the Worker charges what the app shows ───────────────────────────────
-// The app's rate card is display-only; what is charged lives in the Worker.
-// Under Stripe the charged amount comes from Stripe's own Price objects, but
-// under LiqPay it comes from these constants, so a mismatch would charge a
-// store a different number than the one it agreed to.
+// The app's rate card is display-only; what is charged lives in the Worker's
+// constants, so a mismatch would charge a store a different number than the
+// one it agreed to.
 {
   const fs = await import('node:fs');
   const html = fs.readFileSync('index.html', 'utf8');

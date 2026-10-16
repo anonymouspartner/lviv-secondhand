@@ -7,7 +7,7 @@
 //     makes to shoppers in its own disclosure copy, so РЕКЛАМА · SPONSORED is not
 //     a styling choice and must not be removed to make an ad perform better.
 //   * The store's own words are escaped and length-capped. The offer text arrives
-//     from a Stripe Checkout custom field — buyer-supplied, never trusted.
+//     from the buyer, typed in the app before paying — never trusted.
 //   * The facts around the offer (name, address, hours) come from stores.json,
 //     not from the buyer, so an advertiser cannot invent an address.
 //

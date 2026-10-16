@@ -48,7 +48,7 @@ jobs:
         working-directory: .
         env:
           # Via env, never interpolated into the shell: the offer text is
-          # buyer-supplied through a Stripe custom field.
+          # buyer-supplied, typed in the app before paying.
           D_ID:    ${{ github.event.client_payload.ad_id }}
           D_STORE: ${{ github.event.client_payload.store_id }}
           D_TEXT:  ${{ github.event.client_payload.text }}

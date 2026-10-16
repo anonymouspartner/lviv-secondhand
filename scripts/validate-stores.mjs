@@ -129,7 +129,7 @@ function main() {
   for (const id of dupIds) errors.push(`Duplicate store id: "${id}".`);
 
   // Expired flash deals. Nothing prunes them: a sale is written into stores.json
-  // by the Stripe webhook and stays there for good. The app checks expiresAt
+  // by the payment callback and stays there for good. The app checks expiresAt
   // before rendering, and no other surface reads flashDeal at all, so a stale
   // one is dead weight rather than a wrong page — which is exactly why it would
   // never be noticed. Warn rather than fail: a deal that lapsed an hour ago is

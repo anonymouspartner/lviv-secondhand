@@ -63,7 +63,7 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS push_subs (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT UNIQUE NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, stores TEXT NOT NULL DEFAULT '[]', created TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
-  // Paid in-app promotions, self-fulfilled from Stripe (see stripe-webhook).
+  // Paid in-app promotions, self-fulfilled from the payment callbacks.
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS promos (store_id TEXT PRIMARY KEY, tier TEXT NOT NULL, offer TEXT, until TEXT NOT NULL, sub_id TEXT, cadence TEXT, cust_id TEXT, status TEXT NOT NULL DEFAULT 'active', updated TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
@@ -235,22 +235,12 @@ const LISTING_CATEGORIES = new Set(['women', 'men', 'shoes', 'kids', 'accessorie
 
 const isoDaysFromNow = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 
-// ── Store promotions ↔ Stripe ────────────────────────────────────────────────
-// The rate card (docs/ADVERTISING.md) as Stripe Price ids, keyed by tier+cadence.
-// A store-bound Checkout Session (GET /promote) carries the store id in metadata;
-// the signed webhook (POST /stripe-webhook) writes/expires the promo in D1; the
-// app reads the live set from GET /promos and renders the gold pin/badge/offer.
-const PROMO_PRICES = {
-  verified_monthly:  'price_1U1dvd7ZlQqI3gQVAk6edEci',
-  verified_annual:   'price_1U1dvn7ZlQqI3gQVH2XJobOD',
-  featured_monthly:  'price_1U1dvq7ZlQqI3gQV51PMcCVM',
-  featured_annual:   'price_1U1dvt7ZlQqI3gQVd8utdXLA',
-  spotlight_monthly: 'price_1U1dvv7ZlQqI3gQVR5qnNNHk',
-  spotlight_annual:  'price_1U1dw17ZlQqI3gQVuizcyhYi',
-};
-// The same rate card in kopiyky, for a provider with no pre-created Price
-// objects to point at (LiqPay). Must agree with PROMO_PLANS in index.html and
-// with the live Stripe Prices — scripts/check-payments.mjs checks the first.
+// ── Store promotions ─────────────────────────────────────────────────────────
+// The rate card (docs/ADVERTISING.md) in kopiyky, keyed by tier+cadence. A
+// purchase (GET /promote → LiqPay) carries the store id in the prepared payment;
+// the signed callback writes/expires the promo in D1; the app reads the live set
+// from GET /promos and renders the gold pin/badge/offer. Must agree with
+// PROMO_PLANS in index.html — scripts/check-payments.mjs checks it.
 const PROMO_AMOUNTS = {
   verified_monthly:   25000, verified_annual:   250000,
   featured_monthly:   60000, featured_annual:   600000,
@@ -260,14 +250,7 @@ const PROMO_TIERS = new Set(['verified', 'featured', 'spotlight']);
 const PROMO_CADENCES = new Set(['monthly', 'annual', 'run1', 'run7', 'run30']);
 
 // Ad-hoc runs: pay once for a fixed window, no subscription and nothing to cancel.
-// Priced inline against the existing tier Products (no new Price objects to create
-// or keep in sync) — a 30-day run costs the same as one month, a 7-day run a third.
-// `amount` is in kopiyky, as Stripe expects.
-const TIER_PRODUCTS = {
-  verified:  'prod_V1hJ671Gc5MJUt',
-  featured:  'prod_V1hKO1ma6cXUiE',
-  spotlight: 'prod_V1hKo6mVYDGRYn',
-};
+// A 30-day run costs the same as one month, a 7-day run a third. Kopiyky.
 const PROMO_RUNS = {
   verified_run1:   {  amount:  5000, days: 1  },
   verified_run7:   {  amount: 10000, days: 7  },
@@ -283,45 +266,21 @@ const isRun = (c) => c === 'run1' || c === 'run7' || c === 'run30';
 
 // À la carte one-offs. These are *orders*, not placements: the app has no surface to
 // render them into (the poster is physical, deal-of-week and sponsored push are not
-// built), so the purchase is recorded for the owner to fulfil by hand. Prices are the
-// ones already live in Stripe — see docs/ADVERTISING.md §7.
+// built), so the purchase is recorded for the owner to fulfil by hand. Kopiyky.
 const ORDER_ITEMS = {
-  deal:   { price: 'price_1U1dwY7ZlQqI3gQVMZEzRBQT', amount: 30000, label: 'Deal of the week' },
-  poster: { price: 'price_1U1dwb7ZlQqI3gQVGSqqTa3x', amount: 15000, label: 'Poster placement' },
-  push:   { price: 'price_1U1dwe7ZlQqI3gQV1yCPZoEc', amount: 40000, label: 'Sponsored push' },
+  deal:   { amount: 30000, label: 'Deal of the week' },
+  poster: { amount: 15000, label: 'Poster placement' },
+  push:   { amount: 40000, label: 'Sponsored push' },
 };
 
-// The shopper-facing offer line ("-10% з застосунком"). It is collected as a Stripe
-// Checkout custom field rather than in the app, so it sits behind the paywall: only
-// someone who reaches the payment page can write it, and only a completed payment
-// makes it public. Still cleaned on the way out of Stripe — angle brackets stripped,
-// whitespace collapsed, length capped — and escaped again on render.
+// The shopper-facing offer line ("-10% з застосунком"). It is typed in the app
+// and held with the prepared payment, so only a completed payment makes it
+// public. Cleaned on the way in — angle brackets stripped, whitespace
+// collapsed, length capped — and escaped again on render.
 const OFFER_MAX = 48;
-// Labels for that field. Stripe caps a custom-field label at 50 characters.
-const OFFER_FIELD = {
-  key: 'offer',
-  ua: 'Пропозиція для покупців (необовʼязково)',
-  en: 'Offer shown to shoppers (optional)',
-};
-const NOTE_FIELD = {
-  key: 'note',
-  ua: 'Що саме просуваємо? (необовʼязково)',
-  en: 'What should we promote? (optional)',
-};
-// Attach a free-text field to a Checkout Session. `opts.required` (default
-// false, matching every existing caller) and `opts.max` (default OFFER_MAX)
-// let a caller ask for something like the flash-deal text, which must not be
-// empty and runs longer than the 48-char offer line.
-function addCustomField(form, field, locale, opts) {
-  opts = opts || {};
-  form.set('custom_fields[0][key]', field.key);
-  form.set('custom_fields[0][label][type]', 'custom');
-  form.set('custom_fields[0][label][custom]', locale === 'en' ? field.en : field.ua);
-  form.set('custom_fields[0][type]', 'text');
-  form.set('custom_fields[0][optional]', opts.required ? 'false' : 'true');
-  form.set('custom_fields[0][text][maximum_length]', String(opts.max || OFFER_MAX));
-}
-// Read it back off the completed session.
+// Read a free-text field off a completed Stripe Checkout Session. Kept for the
+// webhook, which still processes events for purchases made through Stripe
+// (none are sold through it any more — see docs/STRIPE_RETIREMENT.md).
 function readCustomField(o, key) {
   const list = (o && o.custom_fields) || [];
   for (const f of list) if (f && f.key === key) return (f.text && f.text.value) || '';
@@ -342,21 +301,13 @@ function cleanEmail(raw) {
 // ── Flash deals (Feature 4) ──────────────────────────────────────────────────
 // A short-lived sale, not a placement tier: pay once for a 3h/24h window, the
 // deal text goes live immediately, and it self-expires (the app hides it
-// client-side once `expires_at` passes — see index.html). No pre-created
-// Stripe object needed: price_data[product_data][name] builds an ad-hoc
-// product+price inline, same as the ad-hoc promo runs above but without even
-// an existing Product id to reference.
+// client-side once `expires_at` passes — see index.html).
 const FLASH_DEAL_TIERS = {
   '3h':        { amount: 3000,  hours: 3,  alert: false, label: 'Flash deal — 3 hours' },
   '24h':       { amount: 6000,  hours: 24, alert: false, label: 'Flash deal — 24 hours' },
   '24h_alert': { amount: 12000, hours: 24, alert: true,  label: 'Flash deal — 24 hours + Telegram alert' },
 };
 const DEAL_MAX = 120;
-const DEAL_TEXT_FIELD = {
-  key: 'dealText',
-  ua: 'Текст спалах-знижки (обовʼязково)',
-  en: 'Flash-deal text (required)',
-};
 
 // Mirrors scripts/patch-store.js's dispatchMapPatch() — see that file's
 // comment for why this is reimplemented rather than imported (node:fs isn't
@@ -599,21 +550,6 @@ async function probePortal(env) {
     return { state, status: res.status, msg };
   } catch { return { state: 'fetch_failed', status: 0, msg: '' }; }
 }
-// /status is hit on every app load, so it must never wait on Stripe: it serves the
-// last known verdict and refreshes it in the background at most every 10 minutes.
-// null simply means "not probed yet on this isolate" — ask again in a moment.
-let _portal = { at: 0, state: null };
-const PORTAL_TTL = 10 * 60 * 1000;
-function portalReadyCached(env, ctx) {
-  const now = Date.now();
-  if (env.STRIPE_API_KEY && now - _portal.at > PORTAL_TTL) {
-    _portal.at = now; // claim the slot first so concurrent requests don't all probe
-    const p = probePortal(env).then(r => { _portal.state = r.state; }).catch(() => {});
-    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
-  }
-  return _portal.state;
-}
-
 // Verify Stripe's `Stripe-Signature` header (HMAC-SHA256 over `${t}.${payload}`).
 async function verifyStripeSig(payload, header, secret) {
   const parts = {};
@@ -826,16 +762,18 @@ async function fulfilPromo(env, ctx, pay) {
 // Renewal: extends the placement, queues no advertisement. See the comment in
 // fulfilPromo for why.
 //
-// A charge that renews nothing means a store is being billed for a placement
-// that no longer exists — the subscription was replaced, refunded or ended here
-// but is still alive at the provider. That is money to give back, so the owner
-// is told rather than the charge being dropped.
+// A LiqPay charge that renews nothing means a store is being billed for a
+// placement that no longer exists — the subscription was replaced, refunded or
+// ended here but is still alive at LiqPay. That is money to give back, so the
+// owner is told rather than the charge being dropped. Not for Stripe: the Stripe
+// account is shared with another product (Capybara), whose subscription
+// invoices reach this webhook too and are rightly matched by nothing here.
 async function renewPromo(env, ctx, subRef) {
   if (!subRef) return;
   const row = await env.DB.prepare('SELECT cadence FROM promos WHERE sub_id = ?').bind(subRef).first();
   const until = addDaysStr(kyivDateStr(), PROMO_GRACE_DAYS(row && row.cadence));
   const res = await env.DB.prepare("UPDATE promos SET until = ?, status = 'active', updated = datetime('now') WHERE sub_id = ?").bind(until, subRef).run();
-  if (!changed(res)) {
+  if (!changed(res) && String(subRef).startsWith('lp_')) {
     tgNotify(env, ctx,
       `⚠️ A subscription was charged but matches no placement\n\n` +
       `Subscription: ${subRef}\n\n` +
@@ -959,7 +897,20 @@ async function applyStripeEvent(env, ev, ctx) {
   const type = ev && ev.type;
   if (type === 'checkout.session.completed') {
     const pay = stripePayment(o);
-    if (!pay) return;
+    if (!pay) {
+      // Not one of the Worker's own checkouts. Most are the other product on
+      // this shared Stripe account (Capybara, charged in USD) and are none of
+      // our business. A paid one in hryvnias, though, can only be one of this
+      // site's old Payment Links, which are still live at Stripe but no longer
+      // offered anywhere: someone paid and nothing was delivered.
+      if (String(o.currency || '').toLowerCase() === 'uah' && o.payment_status === 'paid') {
+        tgNotify(env, ctx,
+          `⚠️ A STRIPE PAYMENT ARRIVED THROUGH AN OLD PAYMENT LINK\n\n` +
+          `Paid:  ${uah(o.amount_total)}\nEmail: ${(o.customer_details && o.customer_details.email) || '—'}\nSession: ${o.id}\n\n` +
+          `The site no longer sells through Stripe, so nothing was delivered. Arrange it by hand, or refund it in the Stripe dashboard.`);
+      }
+      return;
+    }
     const claimed = await claimPayment(env, pay);
     if (claimed) await fulfilOnce(env, ctx, claimed);
   } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
@@ -991,7 +942,11 @@ async function applyStripeEvent(env, ev, ctx) {
 //     else; conversion happens only at the boundary, in this block.
 const LIQPAY_CHECKOUT_URL = 'https://www.liqpay.ua/api/3/checkout';
 const liqpayKeys = (env) => !!(env.LIQPAY_PUBLIC_KEY && env.LIQPAY_PRIVATE_KEY);
-const payProvider = (env) => (env.PAY_PROVIDER === 'liqpay' && liqpayKeys(env) ? 'liqpay' : 'stripe');
+// The site sells through LiqPay only. Stripe is no longer used for new
+// checkouts (docs/STRIPE_RETIREMENT.md): with PAY_PROVIDER unset, or the keys
+// missing, there is simply no card checkout ('none') and the app hides the buy
+// buttons — sales go by bank-transfer invoice. The Stripe webhook still runs.
+const payProvider = (env) => (env.PAY_PROVIDER === 'liqpay' && liqpayKeys(env) ? 'liqpay' : 'none');
 // Sandbox keys pay with LiqPay's public test cards. A sandbox payment proves the
 // signing, the callback and the ledger, and is announced to the owner as a test —
 // but it never publishes anything (see applyLiqpayCallback), because the test
@@ -1000,7 +955,7 @@ const payProvider = (env) => (env.PAY_PROVIDER === 'liqpay' && liqpayKeys(env) ?
 // while the keys are sandbox keys; the owner tests by opening the purchase
 // links directly (docs/FOP.md §3.8).
 const liqpaySandbox = (env) => String(env.LIQPAY_PUBLIC_KEY || '').startsWith('sandbox_');
-const checkoutReady = (env) => (payProvider(env) === 'liqpay' ? !liqpaySandbox(env) : !!env.STRIPE_API_KEY);
+const checkoutReady = (env) => payProvider(env) === 'liqpay' && !liqpaySandbox(env);
 
 function b64Utf8(str) {
   const bytes = new TextEncoder().encode(str);
@@ -1159,8 +1114,9 @@ async function applyLiqpayCallback(env, ctx, d) {
   // Every successful charge is recorded under its own payment_id. This is what
   // makes a redelivered callback, or LiqPay's second notice for the same
   // charge, do nothing twice.
+  const chargeId = `lp_pay_${d.payment_id || id}`;
   const charge = await claimPayment(env, {
-    id: `lp_pay_${d.payment_id || id}`, provider: 'liqpay', kind: 'charge', storeId: row.store_id, amount,
+    id: chargeId, provider: 'liqpay', kind: 'charge', storeId: row.store_id, amount,
   });
 
   if (row.status !== 'paid') {
@@ -1175,7 +1131,19 @@ async function applyLiqpayCallback(env, ctx, d) {
     }
     await fulfilOnce(env, ctx, claimed);
   } else if (charge && isSub && !sandbox) {
-    await renewPromo(env, ctx, id);
+    // The charge is already recorded as handled, so if the renewal throws it
+    // must be put back where the redelivery can claim it again — otherwise the
+    // retry finds it handled, renews nothing, and the store has paid for a
+    // month the placement never gets.
+    try {
+      await renewPromo(env, ctx, id);
+    } catch (e) {
+      try { await env.DB.prepare("UPDATE payments SET status = 'fulfil_failed' WHERE id = ?").bind(chargeId).run(); } catch {}
+      tgNotify(env, ctx,
+        `⚠️ A LiqPay renewal was paid but not applied — will retry\n\nStore: ${row.store_id}\nOrder: ${id}\n` +
+        `Error: ${String((e && e.message) || e).slice(0, 200)}\n\nLiqPay will redeliver it. If this repeats, extend the placement by hand.`);
+      throw e;
+    }
   }
 }
 
@@ -1986,7 +1954,7 @@ export default {
       if (url.pathname === '/status') {
         let subs = null;
         try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
-        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: checkoutReady(env), provider: payProvider(env), portal: portalReadyCached(env, ctx) }, 200, origin);
+        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: checkoutReady(env), provider: payProvider(env) }, 200, origin);
       }
       // Live paid promotions: { storeId: {tier, offer?, until} }. The app merges
       // these onto STORES so the gold pin/badge/offer render automatically.
@@ -2043,114 +2011,42 @@ export default {
         const store = url.searchParams.get('store') || '';
         const tier = url.searchParams.get('tier') || 'featured';
         const cadence = url.searchParams.get('cadence') || 'monthly';
-        const loc = stripeLocale(url.searchParams.get('lang'));
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
         const run = isRun(cadence) ? PROMO_RUNS[`${tier}_${cadence}`] : null;
-        const price = run ? null : PROMO_PRICES[`${tier}_${cadence}`];
-        if (!run && !price) return new Response('unknown tier', { status: 400, headers: cors(origin) });
-        if (payProvider(env) === 'liqpay') {
-          return liqpayCheckout(env, {
-            kind: 'promo', storeId: store, tier, cadence,
-            amount: run ? run.amount : PROMO_AMOUNTS[`${tier}_${cadence}`],
-            text: cleanOffer(url.searchParams.get('text')), email: cleanEmail(url.searchParams.get('email')),
-          }, {
-            lang: url.searchParams.get('lang'), returnTo: 'promoted=' + tier,
-            description: `Lviv Second Hand — ${TIER_LABEL[tier]}, ${CADENCE_LABEL[cadence]} — магазин ${store}`,
-            subscribe: run ? null : (cadence === 'annual' ? 'year' : 'month'),
-          });
-        }
-        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
-        const form = new URLSearchParams();
-        form.set('mode', run ? 'payment' : 'subscription');
-        if (run) {
-          // Inline price against the tier's existing Product — one-off, nothing recurring.
-          form.set('line_items[0][price_data][currency]', 'uah');
-          form.set('line_items[0][price_data][product]', TIER_PRODUCTS[tier]);
-          form.set('line_items[0][price_data][unit_amount]', String(run.amount));
-        } else {
-          form.set('line_items[0][price]', price);
-        }
-        form.set('line_items[0][quantity]', '1');
-        form.set('allow_promotion_codes', 'true');
-        form.set('locale', loc);
-        // The offer line is asked for on the payment page itself, so only a buyer
-        // who got that far can write one, and only a completed payment publishes it.
-        addCustomField(form, OFFER_FIELD, loc);
-        form.set('client_reference_id', store);
-        form.set('metadata[storeId]', store);
-        form.set('metadata[tier]', tier);
-        form.set('metadata[cadence]', cadence);
-        if (!run) {
-          form.set('subscription_data[metadata][storeId]', store);
-          form.set('subscription_data[metadata][tier]', tier);
-          form.set('subscription_data[metadata][cadence]', cadence);
-        }
-        form.set('success_url', APP_URL + '?promoted=' + encodeURIComponent(tier));
-        form.set('cancel_url', APP_URL + '?promoted=cancel');
-        let data;
-        try {
-          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form,
-          });
-          data = await res.json();
-          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
-        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
-        return Response.redirect(data.url, 302);
+        const amount = run ? run.amount : PROMO_AMOUNTS[`${tier}_${cadence}`];
+        if (!amount) return new Response('unknown tier', { status: 400, headers: cors(origin) });
+        if (payProvider(env) !== 'liqpay') return new Response('checkout not available', { status: 503, headers: cors(origin) });
+        return liqpayCheckout(env, {
+          kind: 'promo', storeId: store, tier, cadence, amount,
+          text: cleanOffer(url.searchParams.get('text')), email: cleanEmail(url.searchParams.get('email')),
+        }, {
+          lang: url.searchParams.get('lang'), returnTo: 'promoted=' + tier,
+          description: `Lviv Second Hand — ${TIER_LABEL[tier]}, ${CADENCE_LABEL[cadence]} — магазин ${store}`,
+          subscribe: run ? null : (cadence === 'annual' ? 'year' : 'month'),
+        });
       }
-      // Flash deal: /flash-deal?store=<id>&tier=3h|24h|24h_alert&pin=<optional 4-digit>.
-      // A one-off, short-lived sale — no pre-created Stripe object at all (unlike
-      // /promote's runs, which still reference an existing Product): the deal
-      // text is required at checkout (the paywall — never collected in the app
-      // itself), and a matching PIN publishes it immediately instead of waiting
-      // on the owner. See fulfilFlashDeal().
+      // Flash deal: /flash-deal?store=<id>&tier=3h|24h|24h_alert&pin=<optional 4-digit>&text=…
+      // A one-off, short-lived sale. The deal text is required up front and held
+      // with the prepared payment, so only a completed payment publishes it; a
+      // matching PIN publishes it immediately instead of waiting on the owner.
+      // See fulfilFlashDeal().
       if (url.pathname === '/flash-deal') {
         const store = url.searchParams.get('store') || '';
         const tierKey = url.searchParams.get('tier') || '';
         const pin = clean(url.searchParams.get('pin'), 4);
-        const loc = stripeLocale(url.searchParams.get('lang'));
         const tier = FLASH_DEAL_TIERS[tierKey];
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !tier) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
-        if (payProvider(env) === 'liqpay') {
-          const text = cleanText(url.searchParams.get('text'), DEAL_MAX);
-          if (!text) return new Response('deal text required', { status: 400, headers: cors(origin) });
-          return liqpayCheckout(env, {
-            kind: 'flashDeal', storeId: store, tier: tierKey, pin: pin || null, amount: tier.amount, text,
-            email: cleanEmail(url.searchParams.get('email')),
-          }, { lang: url.searchParams.get('lang'), returnTo: 'flashdeal=' + tierKey, description: `Lviv Second Hand — ${tier.label} — магазин ${store}` });
-        }
-        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
-        const form = new URLSearchParams();
-        form.set('mode', 'payment');
-        form.set('line_items[0][price_data][currency]', 'uah');
-        form.set('line_items[0][price_data][unit_amount]', String(tier.amount));
-        form.set('line_items[0][price_data][product_data][name]', tier.label);
-        form.set('line_items[0][quantity]', '1');
-        form.set('locale', loc);
-        addCustomField(form, DEAL_TEXT_FIELD, loc, { required: true, max: DEAL_MAX });
-        form.set('client_reference_id', store);
-        form.set('metadata[kind]', 'flashDeal');
-        form.set('metadata[storeId]', store);
-        form.set('metadata[tier]', tierKey);
-        if (pin) form.set('metadata[pin]', pin);
-        form.set('success_url', APP_URL + '?flashdeal=' + encodeURIComponent(tierKey));
-        form.set('cancel_url', APP_URL + '?flashdeal=cancel');
-        let data;
-        try {
-          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form,
-          });
-          data = await res.json();
-          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
-        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
-        return Response.redirect(data.url, 302);
+        if (payProvider(env) !== 'liqpay') return new Response('checkout not available', { status: 503, headers: cors(origin) });
+        const text = cleanText(url.searchParams.get('text'), DEAL_MAX);
+        if (!text) return new Response('deal text required', { status: 400, headers: cors(origin) });
+        return liqpayCheckout(env, {
+          kind: 'flashDeal', storeId: store, tier: tierKey, pin: pin || null, amount: tier.amount, text,
+          email: cleanEmail(url.searchParams.get('email')),
+        }, { lang: url.searchParams.get('lang'), returnTo: 'flashdeal=' + tierKey, description: `Lviv Second Hand — ${tier.label} — магазин ${store}` });
       }
       // Owner taps this from the Telegram notification to approve & publish a
       // flash deal that didn't have a matching PIN. GET (not POST) so it works
@@ -2344,49 +2240,23 @@ export default {
           return new Response('dispatch failed — check GH_PAT and the map-update workflow logs', { status: 502 });
         }
       }
-      // À la carte one-off: /order?store=<id>&item=deal|poster|push. Unlike /promote
-      // this buys a service the owner delivers by hand, so the webhook records an order
-      // rather than a placement. Nothing in the app changes when one is bought.
+      // À la carte one-off: /order?store=<id>&item=deal|poster|push&email=…. Unlike
+      // /promote this buys a service the owner delivers by hand, so the payment
+      // records an order rather than a placement. Nothing in the app changes.
       if (url.pathname === '/order') {
         const store = url.searchParams.get('store') || '';
         const item = url.searchParams.get('item') || '';
-        const loc = stripeLocale(url.searchParams.get('lang'));
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !ORDER_ITEMS[item]) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
-        if (payProvider(env) === 'liqpay') {
-          // An extra is arranged by hand, so we must be able to reach the buyer;
-          // Stripe asks for the email itself, LiqPay does not.
-          const email = cleanEmail(url.searchParams.get('email'));
-          if (!email) return new Response('email required', { status: 400, headers: cors(origin) });
-          return liqpayCheckout(env, {
-            kind: 'order', storeId: store, item, amount: ORDER_ITEMS[item].amount, currency: 'uah',
-            text: cleanOffer(url.searchParams.get('text')), email,
-          }, { lang: url.searchParams.get('lang'), returnTo: 'ordered=' + item, description: `Lviv Second Hand — ${ORDER_ITEMS[item].label} — магазин ${store}` });
-        }
-        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
-        const form = new URLSearchParams();
-        form.set('mode', 'payment');
-        form.set('line_items[0][price]', ORDER_ITEMS[item].price);
-        form.set('line_items[0][quantity]', '1');
-        form.set('allow_promotion_codes', 'true');
-        form.set('locale', loc);
-        addCustomField(form, NOTE_FIELD, loc);
-        form.set('client_reference_id', store);
-        form.set('metadata[storeId]', store);
-        form.set('metadata[item]', item);
-        form.set('success_url', APP_URL + '?ordered=' + encodeURIComponent(item));
-        form.set('cancel_url', APP_URL + '?ordered=cancel');
-        try {
-          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form,
-          });
-          const data = await res.json();
-          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
-          return Response.redirect(data.url, 302);
-        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
+        if (payProvider(env) !== 'liqpay') return new Response('checkout not available', { status: 503, headers: cors(origin) });
+        // Arranged by hand, so we must be able to reach the buyer.
+        const email = cleanEmail(url.searchParams.get('email'));
+        if (!email) return new Response('email required', { status: 400, headers: cors(origin) });
+        return liqpayCheckout(env, {
+          kind: 'order', storeId: store, item, amount: ORDER_ITEMS[item].amount, currency: 'uah',
+          text: cleanOffer(url.searchParams.get('text')), email,
+        }, { lang: url.searchParams.get('lang'), returnTo: 'ordered=' + item, description: `Lviv Second Hand — ${ORDER_ITEMS[item].label} — магазин ${store}` });
       }
       // Owner's queue of à la carte orders to fulfil. Private: these carry buyer
       // emails, so it is gated on the same ADMIN_KEY as the broadcast test.
@@ -2531,9 +2401,13 @@ export default {
       return new Response('ok', { status: 200 });
     }
 
-    // ── Stripe webhook: self-fulfil paid promotions ──
-    // Handled before rate-limiting/JSON-parse because the raw body is needed for
-    // signature verification. Inert (503) until STRIPE_WEBHOOK_SECRET is set.
+    // ── Stripe webhook ──
+    // The site no longer sells through Stripe, but the account stays and is
+    // shared with another business, so its events keep arriving: verify them,
+    // apply any that are ours (renewals/cancellations of an old subscription),
+    // answer 200 to the rest. Handled before rate-limiting/JSON-parse because
+    // the raw body is needed for signature verification. Inert (503) until
+    // STRIPE_WEBHOOK_SECRET is set.
     if (url.pathname === '/stripe-webhook') {
       if (!env.STRIPE_WEBHOOK_SECRET) return new Response('not configured', { status: 503 });
       const payload = await request.text();
