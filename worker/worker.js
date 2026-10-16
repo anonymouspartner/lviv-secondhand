@@ -803,14 +803,20 @@ async function fulfilPromo(env, ctx, pay) {
         .catch((e) => tgNotify(env, ctx, `⚠️ Could not queue the Instagram ad for ${storeId}: ${e.message}`))
     );
   }
-  // A promotion fulfils itself, so this is information rather than a task.
+  // A promotion fulfils itself on the map, so this is mostly information —
+  // except Spotlight, whose deal-of-the-week slot and Telegram mention are
+  // arranged by hand (offer §3.2, §6.6).
+  const handWork = tier === 'spotlight'
+    ? `\n🖐 Spotlight — to do by hand during the paid period: put the store in the deal-of-the-week post, and mention it in the Telegram bot/channel.\n`
+    : '';
   tgNotify(env, ctx,
-    `💸 PROMOTION PAID — already live, nothing to do\n\n` +
+    (handWork ? `💸 PROMOTION PAID — live on the map, plus work for you\n\n` : `💸 PROMOTION PAID — already live, nothing to do\n\n`) +
     `Store: ${storeId}\n` +
     `Plan:  ${tier} · ${run ? run.days + '-day run' : cadence}\n` +
     `Paid:  ${uah(pay.amount)}\n` +
     (offer ? `Offer: ${offer}\n` : '') +
     `Until: ${until}\n` +
+    handWork +
     (offer
       ? `\n📣 An Instagram ad is being prepared — you'll get it here to approve.`
       : `\n📣 No Instagram ad: this purchase carried no offer line. Ask the store for one and queue it by hand (Actions → Queue an Instagram ad).`) +
@@ -1052,18 +1058,31 @@ async function liqpayCheckout(env, intent, { lang, returnTo, description, subscr
   const data = b64Utf8(JSON.stringify(params));
   const signature = await liqpaySign(env.LIQPAY_PRIVATE_KEY, data);
   // data and signature are base64, so they are safe inside an attribute as-is.
+  //
+  // A confirmation step, not an auto-submit: the text and email ride on the
+  // checkout link, and LiqPay's own page shows neither, so this is the one
+  // place the payer sees what will be published under their store and where
+  // the receipt goes — before paying, whoever wrote the link.
   const ua = liqpayLang(lang) === 'uk';
+  const line = (label, value) => `<div class="row"><span>${label}</span><b>${htmlEsc(value)}</b></div>`;
   const html = `<!doctype html><html lang="${ua ? 'uk' : 'en'}"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">` +
-    `<title>${ua ? 'Перехід до оплати' : 'Going to payment'}</title>` +
-    `<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f2f4f6;color:#1a1a2e;` +
-    `display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;text-align:center}` +
-    `button{background:#1b5e38;color:#fff;border:0;border-radius:12px;padding:14px 22px;font-size:16px;font-weight:700}</style></head><body>` +
-    `<form id="f" method="POST" action="${LIQPAY_CHECKOUT_URL}" accept-charset="utf-8">` +
+    `<title>${ua ? 'Перевірте замовлення' : 'Check your order'}</title>` +
+    `<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f2f4f6;color:#1a1a2e;margin:0;padding:24px 16px}` +
+    `main{max-width:460px;margin:0 auto;background:#fff;border-radius:16px;padding:20px;border:1px solid #e5e7eb}` +
+    `h1{font-size:19px;margin:0 0 14px}.row{display:flex;flex-direction:column;gap:2px;margin:0 0 12px}.row span{color:#6b7280;font-size:13px}` +
+    `.row b{overflow-wrap:anywhere}.note{color:#6b7280;font-size:13px;margin:14px 0}` +
+    `button{width:100%;background:#1b5e38;color:#fff;border:0;border-radius:12px;padding:14px 22px;font-size:16px;font-weight:700;cursor:pointer}</style></head><body><main>` +
+    `<h1>${ua ? 'Перевірте замовлення' : 'Check your order'}</h1>` +
+    line(ua ? 'Послуга' : 'Service', description) +
+    line(ua ? 'До сплати' : 'Amount', `₴${(intent.amount / 100).toLocaleString('uk-UA')}${subscribe ? (ua ? (subscribe === 'year' ? ' / рік' : ' / місяць') : (subscribe === 'year' ? ' / year' : ' / month')) : ''}`) +
+    (intent.text ? line(ua ? 'Текст, який побачать покупці після оплати' : 'Text shoppers will see once paid', intent.text) : '') +
+    (intent.email ? line(ua ? 'Email для чека і звʼязку' : 'Email for the receipt and contact', intent.email) : '') +
+    `<p class="note">${ua ? 'Якщо щось не так — закрийте цю сторінку і змініть дані в застосунку. ' : 'If anything is wrong, close this page and change it in the app. '}` +
+    `<a href="${APP_URL}offer.html">${ua ? 'Умови (публічна оферта)' : 'Terms of sale'}</a></p>` +
+    `<form method="POST" action="${LIQPAY_CHECKOUT_URL}" accept-charset="utf-8">` +
     `<input type="hidden" name="data" value="${data}"><input type="hidden" name="signature" value="${signature}">` +
-    `<p>${ua ? 'Переходимо до захищеної сторінки оплати LiqPay…' : 'Taking you to the secure LiqPay payment page…'}</p>` +
-    `<button type="submit">${ua ? 'Перейти до оплати' : 'Continue to payment'}</button></form>` +
-    `<script>document.getElementById('f').submit()</script></body></html>`;
+    `<button type="submit">${ua ? 'Оплатити через LiqPay' : 'Pay with LiqPay'}</button></form></main></body></html>`;
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
 }
 
@@ -1219,6 +1238,7 @@ function uahWords(kop) {
 }
 
 const htmlEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const kyivDateOf = (utc) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(new Date(String(utc).replace(' ', 'T') + 'Z'));
 const uaDate = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}.${m}.${y}`; };
 const uahPlain = (kop) => (kop / 100).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -1232,7 +1252,9 @@ async function createInvoice(env, { storeId, tier, cadence, item, buyer }) {
   const token = newToken();
   for (let attempt = 0; attempt < 3; attempt++) {
     const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM payments WHERE provider = 'invoice' AND id LIKE ?").bind(`inv-${year}-%`).first();
-    const number = `${year}-${String(((c && c.n) || 0) + 1 + attempt).padStart(3, '0')}`;
+    // Re-read on every attempt: a row that won a race is already in the count,
+    // so adding the attempt number too would skip a number.
+    const number = `${year}-${String(((c && c.n) || 0) + 1).padStart(3, '0')}`;
     const id = `inv-${number}`;
     const intent = { tier: line.tier, cadence: line.cadence, item: line.item, number, token, title: line.title, buyer: cleanText(buyer, 160) || `Магазин ${storeId}`, issued: kyivDateStr() };
     const res = await env.DB.prepare(
@@ -1267,7 +1289,10 @@ function renderInvoice(env, row, doc) {
   let it = {};
   try { it = JSON.parse(row.intent || '{}'); } catch {}
   const act = doc === 'act';
-  const date = act ? (row.paid || kyivDateStr()).slice(0, 10) : it.issued;
+  // payments.paid is UTC (datetime('now')); the invoice is dated in Kyiv time,
+  // so the act is too — otherwise an invoice paid just after Kyiv midnight
+  // would get an act dated the day before.
+  const date = act ? (row.paid ? kyivDateOf(row.paid) : kyivDateStr()) : it.issued;
   const title = act ? `Акт надання послуг № ${it.number}` : `Рахунок на оплату № ${it.number}`;
   const amount = row.amount;
   const seller = [

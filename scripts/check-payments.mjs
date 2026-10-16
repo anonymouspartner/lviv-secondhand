@@ -265,6 +265,10 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   check(c.sig === lpSign(c.data), 'LiqPay checkout form is not signed with the private key');
   check(c.html.includes('action="https://www.liqpay.ua/api/3/checkout"'), 'LiqPay checkout form does not post to LiqPay');
   check(!c.html.includes(LP_PRIV), 'the checkout page leaks the LiqPay private key');
+  // The payer confirms what will be published and where the receipt goes —
+  // LiqPay's page shows neither, and both ride on the link.
+  check(!/<script/i.test(c.html) && c.html.includes('-15% з застосунком') && c.html.includes('shop@example.com') && c.html.includes('₴600'),
+    'the checkout page does not show the payer the text, email and price before paying, or still auto-submits');
   const p = c.params || {};
   check(p.action === 'subscribe' && p.subscribe_periodicity === 'month' && /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(p.subscribe_date_start || ''),
     `monthly plan is not a LiqPay subscription: ${JSON.stringify(p)}`);
@@ -292,6 +296,7 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   check(promo && promo.offer === '-15% з застосунком', 'the offer text collected in the app did not reach the placement');
   check(promo && promo.cust_id === null, 'a LiqPay placement offers the Stripe billing portal');
   check(tgPings().length === 1 && /PROMOTION PAID/.test(tgPings()[0].body.text) && /₴600/.test(tgPings()[0].body.text), 'owner was not told about the LiqPay purchase');
+  check(!/by hand/.test(tgPings()[0].body.text), 'a Featured purchase told the owner there is work to do by hand');
   check(count('SELECT COUNT(*) AS n FROM instagram_ads WHERE store_id = ?', 's20') === 1, 'LiqPay purchase with an offer did not queue one Instagram ad');
 
   // Redelivered — and LiqPay's second notice for the same charge.
@@ -457,6 +462,15 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   check(((await promos({ ...env, STRIPE_API_KEY: 'rk_test' })).s46 || {}).manage === true, '/promos stopped offering Manage billing to a Stripe subscriber');
 }
 
+// ── 10b · Spotlight tells the owner what is delivered by hand ────────────────
+{
+  const sp = await lpCheckout('/promote?store=s47&tier=spotlight&cadence=run7');
+  calls = [];
+  await lpCallback({ order_id: sp.params.order_id, status: 'success', payment_id: 470, amount: 400 });
+  check(tgPings().length === 1 && /by hand/.test(tgPings()[0].body.text) && /deal-of-the-week/.test(tgPings()[0].body.text),
+    'a Spotlight purchase did not tell the owner about the deal-of-the-week and Telegram mention it owes');
+}
+
 // ── 11 · sandbox keys never publish anything ─────────────────────────────────
 {
   // LiqPay's test cards are public. While the Worker holds sandbox keys, a test
@@ -548,6 +562,10 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   const unknown = await api(invEnv, '/api/invoice/paid', { id: `${year}-999` });
   check(unknown.j && unknown.j.reason === 'unknown_invoice', 'an unknown invoice number was accepted');
 
+  // Paid just after Kyiv midnight (21:30 UTC is 00:30 or 23:30 in Kyiv depending
+  // on DST — use 22:30 UTC, which is the next day in Kyiv all year).
+  DB.db.prepare("UPDATE payments SET paid = '2026-01-14 22:30:00' WHERE id = ?").run(`inv-${year}-001`);
+  check((await page(a.j.actUrl)).html.includes('від 15.01.2026'), 'the act is dated in UTC, not Kyiv time');
   const act = await page(a.j.actUrl);
   check(act.status === 200 && act.html.includes(`Акт надання послуг № ${year}-001`) && act.html.includes('претензій'), 'the act did not render after payment');
 

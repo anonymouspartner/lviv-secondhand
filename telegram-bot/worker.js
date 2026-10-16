@@ -1958,6 +1958,9 @@ const INVOICE_USAGE =
   + 'Текст після плану — покупець у рахунку · Anything after the plan is the buyer named on the invoice.\n\n'
   + 'Коли гроші надійдуть · When the money arrives: <code>/paid 2026-001</code>';
 const INVOICE_EXTRAS = new Set(['deal', 'poster', 'push']);
+// A 401 is a configuration fault that retrying never fixes — say so, rather
+// than "try again in a minute".
+const INVOICE_KEY_MISMATCH = '⚠️ ADMIN_KEY не збігається між ботом і metrics Worker — повторна спроба не допоможе. · ADMIN_KEY does not match between the bot and the metrics Worker; retrying will not help.';
 
 async function cmdInvoice(env, chatId, text) {
   const args = (text || '').replace(/^\/invoice(?:@\w+)?\s*/i, '').trim().split(/\s+/).filter(Boolean);
@@ -1980,6 +1983,7 @@ async function cmdInvoice(env, chatId, text) {
   if (!r.ok) {
     const why = /HTTP 503/.test(r.why)
       ? 'Не заповнено реквізити ФОП (SELLER_* у worker/wrangler.toml). · The ФОП details (SELLER_* in worker/wrangler.toml) are not filled in yet.'
+      : /HTTP 401/.test(r.why) ? INVOICE_KEY_MISMATCH
       : /HTTP 400/.test(r.why) ? 'Невідомий план. · Unknown plan.\n\n' + INVOICE_USAGE : METRICS_DOWN;
     await say(env, chatId, `⚠️ ${why}`);
     return;
@@ -1999,7 +2003,7 @@ async function cmdInvoicePaid(env, chatId, text) {
   const ref = (text || '').replace(/^\/paid(?:@\w+)?\s*/i, '').trim();
   if (!/^(inv-)?\d{4}-\d{3,}$/.test(ref)) { await say(env, chatId, 'Використання · Usage: <code>/paid 2026-001</code>'); return; }
   const r = await metricsCall(env, '/api/invoice/paid', { method: 'POST', headers: adminJsonHeaders(env), body: JSON.stringify({ id: ref }) });
-  if (!r.ok) { await say(env, chatId, METRICS_DOWN); return; }
+  if (!r.ok) { await say(env, chatId, /HTTP 401/.test(r.why) ? INVOICE_KEY_MISMATCH : METRICS_DOWN); return; }
   const d = r.data || {};
   if (d.reason === 'unknown_invoice') { await say(env, chatId, `⚠️ Немає рахунку № ${esc(ref)}. · No such invoice.`); return; }
   if (d.state === 'already_paid') { await say(env, chatId, `ℹ️ Рахунок № ${esc(ref)} уже позначено оплаченим. · Already marked paid — nothing changed.`); return; }
