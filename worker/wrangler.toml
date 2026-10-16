@@ -34,6 +34,16 @@ VAPID_PUBLIC = "BBfji9HA_fVrn42DeYako-WekhEo60jc_9f7UmHf67kpEqv7JdmLaonrkLWfSEYM
 # Not a secret (it is just a chat id, same value as telegram-bot/wrangler.toml).
 # The notification stays off until the BOT_TOKEN secret is also set — see below.
 OWNER_ID = "1212541015"
+# The ФОП's details, printed on bank-transfer invoices and acts (GET /invoice,
+# the bot's /invoice). Public by design — the same details the offer page
+# (offer.html §12) shows — so they live here rather than as secrets. If one is
+# ever blanked, /invoice answers that it is missing instead of issuing an
+# invoice with blanks. SELLER_BANK defaults to PrivatBank.
+SELLER_NAME = "ФОП Хейген Тімоті Рендалл"
+SELLER_TAX_ID = "3537413536"
+SELLER_ADDRESS = "79008, Львівська обл., м. Львів, вул. Театральна, буд. 7, кв. 6"
+SELLER_IBAN = "UA503052990000026008031043785"
+SELLER_TAX_STATUS = "Платник єдиного податку 3 групи, не є платником ПДВ"
 # The Барахолка channel, so the listings sweep can delete an expired post.
 # Not a secret — a public channel handle is public by definition, same
 # reasoning as OWNER_ID above and as the TG_CHANNEL repository *variable* the
@@ -47,27 +57,41 @@ TG_CHANNEL = "@Lviv_Secondhand"
 # to go somewhere other than the owner's own DMs.
 # MODERATOR_CHANNEL_ID = "-100..."
 
-# ── Paid promotions (Stripe self-fulfilment) — optional, off until configured ──
-# GET /promos serves the live promo set with no secret. Selling + auto-fulfil
-# need two secrets (set them as repo secrets so deploy-worker.yml pushes them,
-# or with `wrangler secret put`); the feature stays inert until both exist:
-#   STRIPE_API_KEY       — a *restricted* Stripe secret key with write access to
-#                          Checkout Sessions (create) — used by GET /promote to
-#                          open a store-bound checkout. NEVER commit it.
-#                          Optionally also Billing Portal Sessions (create), which
-#                          turns on GET /billing (the in-app "Manage billing" link);
-#                          without it that route fails and the app hides the link.
-#   STRIPE_WEBHOOK_SECRET — the signing secret of the Stripe webhook endpoint
-#                          pointed at https://lviv-metrics.lshanalytic.workers.dev/stripe-webhook
-#                          (events: checkout.session.completed, invoice.paid,
-#                          customer.subscription.deleted/updated). Verifies the
-#                          POST /stripe-webhook signature. NEVER commit it.
-#   BOT_TOKEN            — the same Telegram bot token the bot Worker uses (repo
-#                          secret BOT_TOKEN, already set if the bot is deployed).
-#                          With it, a paid promotion or à la carte order pings
-#                          OWNER_ID above. Without it, sales are silent and the
-#                          order queue has to be read from GET /orders by hand.
-# See docs/ADVERTISING.md §7 for the full activation steps.
+# ── Paid promotions, flash deals and extras — LiqPay (PrivatBank) — off by default ──
+# GET /promos serves the live promo set with no secret. Selling (/promote,
+# /flash-deal, /order) goes through LiqPay only; see docs/FOP.md §3. Three
+# values, all set as repository secrets so deploy-worker.yml pushes them (or
+# with `wrangler secret put`):
+#   LIQPAY_PUBLIC_KEY  — the shop's public key (sandbox_… while testing).
+#   LIQPAY_PRIVATE_KEY — the shop's private key. Signs checkouts and verifies
+#                        POST /liqpay-callback. NEVER commit it.
+#   PAY_PROVIDER       — "liqpay" to switch card checkout on; anything else (or
+#                        unset) means no card checkout at all (sell by bank-
+#                        transfer invoice from the bot). The callback keeps
+#                        working whenever both keys are set, so subscriptions
+#                        already sold keep renewing even with checkout off.
+# LiqPay needs no webhook set up on its side: every checkout names
+# https://lviv-metrics.lshanalytic.workers.dev/liqpay-callback as its server_url.
+# Sandbox keys (sandbox_…) never publish anything: test payments are announced to
+# the owner as tests, and the app hides checkout while they are set.
+#   BOT_TOKEN          — the same Telegram bot token the bot Worker uses (repo
+#                        secret BOT_TOKEN, already set if the bot is deployed).
+#                        With it, a sale, an invoice payment or a failed
+#                        fulfilment pings OWNER_ID above. Without it, sales are
+#                        silent and the order queue has to be read from GET
+#                        /orders by hand.
+#
+# ── Stripe — no longer sells; the account stays (docs/STRIPE_RETIREMENT.md) ──
+# The site no longer opens Stripe checkouts. The account is shared with
+# another business, so its webhook still delivers events here:
+#   STRIPE_WEBHOOK_SECRET — verifies POST /stripe-webhook. While it is set the
+#                          route answers 200 to everything it can verify, ignores
+#                          events that are not ours, and pings OWNER_ID if a UAH
+#                          payment still arrives through an old Payment Link.
+#   STRIPE_API_KEY       — only used by GET /billing (the Stripe customer portal)
+#                          for a store that bought a Stripe subscription before
+#                          the switch; none are active. Kept as the owner asked.
+# NEVER commit either.
 #
 # ── Field-scout deep link (POST /api/bounty/stash) — optional ──
 # Signs a short-lived token identifying a store, for the app's
@@ -77,9 +101,9 @@ TG_CHANNEL = "@Lviv_Secondhand"
 # which verifies the token this one signs:
 #   BOUNTY_SECRET — printf '%s' "<random>" | npx wrangler@3 secret put BOUNTY_SECRET
 #
-# ── Flash deals (GET /flash-deal, POST /stripe-webhook, GET /flash-deal/approve) — optional ──
-# A short-lived paid sale (Stripe self-fulfilment, same pattern as promotions
-# above). Needs STRIPE_API_KEY + STRIPE_WEBHOOK_SECRET above, plus:
+# ── Flash deals (GET /flash-deal, POST /liqpay-callback, GET /flash-deal/approve) — optional ──
+# A short-lived paid sale (same checkout and fulfilment as promotions above).
+# Needs the LiqPay values above, plus:
 #   GH_PAT — classic PAT with the `repo` scope, used to dispatch the
 #               published deal to .github/workflows/update-map.yml (same
 #               pipeline the field-scout flow uses — see scripts/patch-store.js):

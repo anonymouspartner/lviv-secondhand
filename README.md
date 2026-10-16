@@ -132,13 +132,13 @@ A single-store correction (a field-scout visit, a Telegram edit suggestion) does
 
 ## 📣 Store promotions (advertising)
 
-Shop owners can promote their own store without contacting anyone. Open the store in the app → **📣 Own this store? Promote it** → pick a plan and pay in ₴ (Stripe). The app, the rate card and the prices are Ukrainian by default; Stripe's own payment page is not, because Stripe offers no Ukrainian locale — it falls back to Stripe's language detection.
+Shop owners can promote their own store without contacting anyone. Open the store in the app → **📣 Own this store? Promote it** → pick a plan and pay in ₴ by card through LiqPay (PrivatBank), whose payment page is Ukrainian-first. Stores can also pay by bank transfer against an invoice (рахунок) the owner issues from the bot. Terms of sale: the public offer, [`offer.html`](offer.html).
 
-| Tier | Monthly | Annual | One-off 7 / 30 days |
+| Tier | Monthly | Annual | One-off 1 / 7 / 30 days |
 | --- | --- | --- | --- |
-| **Verified+** | ₴250 | ₴2,500 | ₴100 / ₴250 |
-| **Featured** | ₴600 | ₴6,000 | ₴200 / ₴600 |
-| **Spotlight** | ₴1,200 | ₴12,000 | ₴400 / ₴1,200 |
+| **Verified+** | ₴250 | ₴2,500 | ₴50 / ₴100 / ₴250 |
+| **Featured** | ₴600 | ₴6,000 | ₴100 / ₴200 / ₴600 |
+| **Spotlight** | ₴1,200 | ₴12,000 | ₴200 / ₴400 / ₴1,200 |
 
 **What each tier changes on screen** — the app enforces this, so paying more visibly gets more:
 
@@ -152,21 +152,21 @@ Subscriptions renew until cancelled; **one-off runs** last exactly the days paid
 
 ### For maintainers
 
-Purchases fulfil themselves: Stripe → signed webhook → D1 → the app's `/promos` fetch. Nothing needs hand-editing.
+Purchases fulfil themselves: LiqPay → signed callback → the `payments` ledger → D1 → the app's `/promos` fetch. A bank-transfer invoice goes live when the owner sends the bot `/paid <number>`. Nothing needs hand-editing.
 
 | Piece | Where |
 | --- | --- |
 | Rate card + tier rendering | `index.html` (`PROMO_PLANS`, `promoRank()`, `isAd()`) |
-| Checkout, webhook, promos/orders | `worker/worker.js` (`/promote`, `/order`, `/stripe-webhook`, `/promos`) |
-| Self-service billing | `/billing` → Stripe customer portal; readiness shows as `portal` on `/status` |
+| Checkout, callback, promos/orders | `worker/worker.js` (`/promote`, `/order`, `/liqpay-callback`, `/promos`) |
+| Invoices (рахунок + акт) | bot `/invoice` and `/paid` → `/api/invoice/*`, page at `/invoice` |
 | Owner alerts | Telegram ping on every paid promotion and order |
 | Order queue (hand-fulfilled) | `GET /orders` with `X-Admin-Key` |
 
-It all stays inert until `STRIPE_API_KEY` and `STRIPE_WEBHOOK_SECRET` exist — without them the buy button never appears.
+Card checkout stays off until `PAY_PROVIDER=liqpay` and both LiqPay keys are set (on sandbox keys the buy button stays hidden and nothing is published) — see [`docs/FOP.md`](docs/FOP.md) §3.8. Stripe no longer sells; its webhook stays only because the account is shared ([`docs/STRIPE_RETIREMENT.md`](docs/STRIPE_RETIREMENT.md)).
 
 ## ⚡ Flash deals
 
-A **short, paid sale window** — separate from the ongoing promotion tiers above, and priced and sold separately. Open a store → **⚡ Flash sale? Start one now** → pick a length and pay in ₴; the deal text itself is written on Stripe's own payment page, not in the app, so nobody unpaid can publish sale copy.
+A **short, paid sale window** — separate from the ongoing promotion tiers above, and priced and sold separately. Open a store → **⚡ Flash sale? Start one now** → pick a length, write the deal text and pay in ₴. The text is held by the Worker and published only once the payment arrives, so nobody unpaid can publish sale copy.
 
 | Length | Price |
 | --- | --- |
@@ -246,7 +246,7 @@ The app is **free for shoppers and always will be**. It is funded by the shops i
 **Costs**
 
 - **Infrastructure ≈ ₴0** — GitHub Pages, Cloudflare Workers, D1 and KV all sit inside free tiers. The app is a single static file with a self-hosted map library, so there is no server to rent and no CDN bill.
-- **Payments** — Stripe fees (≈2.9% + fixed, plus ~1% currency conversion, since the account settles in USD while stores are charged in ₴).
+- **Payments** — LiqPay ≈1.5% per card payment, settled in ₴ to the ФОП account; bank transfers against an invoice cost nothing.
 - **Field agent** — the only meaningful variable cost: ₴80 per verified store visit, ₴200 result bonuses, plus smaller public-poster and material-expense reimbursements (see the handbook below).
 
 **Why it works.** Software margin is very high and infrastructure does not scale with users, so the economics turn entirely on customer acquisition. Acquiring a Featured store costs roughly 2–3 visits plus a sales commission (≈₴500–750); at ₴600/month it repays in about a month and everything after that is close to pure margin.
@@ -305,7 +305,7 @@ Images must be **JPEG** — the API rejects PNG with a generic container error t
 
 A store buying a flash deal now also queues an **Instagram advertisement**. It is queued, never posted: the only route from a completed payment to the public feed is you tapping approve.
 
-1. Stripe webhook → `queueInstagramAd()` writes a row to `instagram_ads` as `rendering` and fires a `repository_dispatch`.
+1. The payment callback → `queueInstagramAd()` writes a row to `instagram_ads` as `rendering` and fires a `repository_dispatch`.
 2. **`instagram-ad.yml`** renders the ad, writes its caption, commits both, waits for Pages to serve the image, and sends it to you on Telegram as a photo with ✅ / ❌ links. **It publishes nothing.**
 3. Tapping ✅ hits the Worker's `/ad/approve?id=…&t=…`, authorised by a **per-ad token**, which fires a second dispatch.
 4. **`instagram-ad-publish.yml`** reads the committed caption back off disk and hands it to `instagram-post.yml`.
@@ -682,13 +682,13 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 ## 📣 Просування магазинів (реклама)
 
-Власник магазину може просунути свій магазин самостійно, без звернення до когось. Відкрийте магазин у застосунку → **📣 Власник магазину? Просувати** → оберіть тариф і оплатіть у ₴ (Stripe). Застосунок, прайс і ціни — українською за замовчуванням; сама сторінка оплати Stripe — ні, бо Stripe не має української локалі, тож мова визначається автоматично.
+Власник магазину може просунути свій магазин самостійно, без звернення до когось. Відкрийте магазин у застосунку → **📣 Власник магазину? Просувати** → оберіть тариф і оплатіть у ₴ карткою через LiqPay (ПриватБанк) — сторінка оплати українською. Магазин також може оплатити переказом за рахунком, який власник виставляє через бота. Умови — публічна оферта, [`offer.html`](offer.html).
 
-| Тариф | Щомісяця | Щороку | Разово 7 / 30 днів |
+| Тариф | Щомісяця | Щороку | Разово 1 / 7 / 30 днів |
 | --- | --- | --- | --- |
-| **Verified+** | ₴250 | ₴2 500 | ₴100 / ₴250 |
-| **Featured** | ₴600 | ₴6 000 | ₴200 / ₴600 |
-| **Spotlight** | ₴1 200 | ₴12 000 | ₴400 / ₴1 200 |
+| **Verified+** | ₴250 | ₴2 500 | ₴50 / ₴100 / ₴250 |
+| **Featured** | ₴600 | ₴6 000 | ₴100 / ₴200 / ₴600 |
+| **Spotlight** | ₴1 200 | ₴12 000 | ₴200 / ₴400 / ₴1 200 |
 
 **Що саме змінює кожен тариф** — застосунок дотримується цього, тож дорожчий тариф справді дає більше:
 
@@ -702,7 +702,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 
 ## ⚡ Спалах-знижки
 
-**Короткий платний розпродаж** — окремо від постійних тарифів вище, з окремим ціноутворенням. Відкрийте магазин → **⚡ Спалах-знижка? Почати зараз** → оберіть тривалість і оплатіть у ₴; сам текст пропозиції пишеться на сторінці оплати Stripe, а не в застосунку, тож ніхто, хто не заплатив, не може опублікувати текст розпродажу.
+**Короткий платний розпродаж** — окремо від постійних тарифів вище, з окремим ціноутворенням. Відкрийте магазин → **⚡ Спалах-знижка? Почати зараз** → оберіть тривалість, напишіть текст пропозиції й оплатіть у ₴. Текст публікується лише після надходження оплати, тож ніхто, хто не заплатив, не може опублікувати текст розпродажу.
 
 | Тривалість | Ціна |
 | --- | --- |
@@ -754,7 +754,7 @@ PWA (прогресивний веб-додаток) для пошуку та в
 **Витрати**
 
 - **Інфраструктура ≈ ₴0** — GitHub Pages, Cloudflare Workers, D1 і KV вкладаються в безкоштовні тарифи. Застосунок — один статичний файл із власною бібліотекою карт, тож немає ні сервера в оренду, ні рахунків за CDN.
-- **Оплати** — комісії Stripe (≈2,9% + фіксована, плюс ~1% за конвертацію валют, бо рахунок у USD, а магазини платять у ₴).
+- **Оплати** — LiqPay ≈1,5% з оплати карткою, зарахування в ₴ на рахунок ФОП; переказ за рахунком — без комісії.
 - **Польовий агент** — єдина суттєва змінна витрата: ₴80 за перевірений візит, бонуси ₴200, а також менші компенсації за публічні плакати й матеріали (див. довідник нижче).
 
 **Чому це працює.** Маржа програмного продукту дуже висока, а інфраструктура не дорожчає з кількістю користувачів, тож усе тримається на вартості залучення. Залучити магазин на Featured коштує приблизно 2–3 візити плюс комісія (≈₴500–750); за ₴600/місяць це окупається приблизно за місяць, а далі — майже чиста маржа.

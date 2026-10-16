@@ -54,6 +54,10 @@
 //   /admin fire <id>, /admin rehire <id> — OWNER only: revoke/restore an
 //                    agent's access instantly (KV-backed, no redeploy — see
 //                    docs/FIELD_AGENT.md §7)
+//   /invoice <store> <plan> [buyer] — OWNER only: issue a bank-transfer invoice
+//                    (рахунок) on the metrics Worker; replies with its link
+//   /paid <number> — OWNER only: mark that invoice paid, which publishes the
+//                    placement exactly as a card payment would
 //   /admin purge <id> — OWNER only: delete an id's logged visits and unwind
 //                    the counters (for clearing owner smoke-test visits)
 //
@@ -1936,6 +1940,77 @@ async function sendCsv(env, chatId, filename, caption, rows) {
   await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendDocument`, { method: 'POST', body: form });
 }
 
+// ── Bank-transfer invoices (owner only; docs/FOP.md §5) ──
+// /invoice <store> <tier> <monthly|annual|run1|run7|run30> [buyer…]
+// /invoice <store> <deal|poster|push> [buyer…]
+// Issues a рахунок on the metrics Worker and replies with its link and the
+// payment purpose. /paid <number> marks it paid once the transfer arrives,
+// which publishes the placement the same way a card payment does.
+const INVOICE_USAGE =
+  '🧾 <b>Рахунок для оплати переказом · Bank-transfer invoice</b>\n\n'
+  + '<code>/invoice c21 featured monthly</code>\n'
+  + '<code>/invoice c21 spotlight annual ФОП Іваненко І. І.</code>\n'
+  + '<code>/invoice c21 verified run30</code>\n'
+  + '<code>/invoice c21 poster</code>\n\n'
+  + 'Тарифи · tiers: verified, featured, spotlight\n'
+  + 'Період · period: monthly, annual, run1, run7, run30\n'
+  + 'Додатково · extras: deal, poster, push\n'
+  + 'Текст після плану — покупець у рахунку · Anything after the plan is the buyer named on the invoice.\n\n'
+  + 'Коли гроші надійдуть · When the money arrives: <code>/paid 2026-001</code>';
+const INVOICE_EXTRAS = new Set(['deal', 'poster', 'push']);
+// A 401 is a configuration fault that retrying never fixes — say so, rather
+// than "try again in a minute".
+const INVOICE_KEY_MISMATCH = '⚠️ ADMIN_KEY не збігається між ботом і metrics Worker — повторна спроба не допоможе. · ADMIN_KEY does not match between the bot and the metrics Worker; retrying will not help.';
+
+async function cmdInvoice(env, chatId, text) {
+  const args = (text || '').replace(/^\/invoice(?:@\w+)?\s*/i, '').trim().split(/\s+/).filter(Boolean);
+  if (args.length < 2) { await say(env, chatId, INVOICE_USAGE); return; }
+  const storeId = args[0].toLowerCase();
+  const store = STORES.find((x) => x.id === storeId);
+  if (!store) { await say(env, chatId, `⚠️ Немає магазину <code>${esc(storeId)}</code>. · No store with that id.`); return; }
+  const req = { storeId };
+  let rest;
+  if (INVOICE_EXTRAS.has(args[1].toLowerCase())) {
+    req.item = args[1].toLowerCase();
+    rest = args.slice(2);
+  } else {
+    req.tier = args[1].toLowerCase();
+    req.cadence = (args[2] || '').toLowerCase();
+    rest = args.slice(3);
+  }
+  req.buyer = rest.length ? rest.join(' ') : `Магазин «${store.name}»`;
+  const r = await metricsCall(env, '/api/invoice/create', { method: 'POST', headers: adminJsonHeaders(env), body: JSON.stringify(req) });
+  if (!r.ok) {
+    const why = /HTTP 503/.test(r.why)
+      ? 'Не заповнено реквізити ФОП (SELLER_* у worker/wrangler.toml). · The ФОП details (SELLER_* in worker/wrangler.toml) are not filled in yet.'
+      : /HTTP 401/.test(r.why) ? INVOICE_KEY_MISMATCH
+      : /HTTP 400/.test(r.why) ? 'Невідомий план. · Unknown plan.\n\n' + INVOICE_USAGE : METRICS_DOWN;
+    await say(env, chatId, `⚠️ ${why}`);
+    return;
+  }
+  const d = r.data || {};
+  const uahText = '₴' + (d.amount / 100).toLocaleString('uk-UA');
+  await say(env, chatId,
+    `🧾 <b>Рахунок № ${esc(d.number)}</b> · ${esc(uahText)}\n`
+    + `${esc(store.name)} (<code>${esc(storeId)}</code>)\n${esc(d.title)}\n\n`
+    + `Надішліть магазину · Send to the store:\n${esc(d.url)}\n\n`
+    + `Призначення платежу · Payment purpose:\n<code>${esc(d.purpose)}</code>\n\n`
+    + `Коли гроші надійдуть · When the money arrives: <code>/paid ${esc(d.number)}</code>\n`
+    + `Акт після оплати · Act after payment:\n${esc(d.actUrl)}`);
+}
+
+async function cmdInvoicePaid(env, chatId, text) {
+  const ref = (text || '').replace(/^\/paid(?:@\w+)?\s*/i, '').trim();
+  if (!/^(inv-)?\d{4}-\d{3,}$/.test(ref)) { await say(env, chatId, 'Використання · Usage: <code>/paid 2026-001</code>'); return; }
+  const r = await metricsCall(env, '/api/invoice/paid', { method: 'POST', headers: adminJsonHeaders(env), body: JSON.stringify({ id: ref }) });
+  if (!r.ok) { await say(env, chatId, /HTTP 401/.test(r.why) ? INVOICE_KEY_MISMATCH : METRICS_DOWN); return; }
+  const d = r.data || {};
+  if (d.reason === 'unknown_invoice') { await say(env, chatId, `⚠️ Немає рахунку № ${esc(ref)}. · No such invoice.`); return; }
+  if (d.state === 'already_paid') { await say(env, chatId, `ℹ️ Рахунок № ${esc(ref)} уже позначено оплаченим. · Already marked paid — nothing changed.`); return; }
+  if (d.reason === 'fulfil_failed') { await say(env, chatId, `⚠️ Оплату № ${esc(ref)} записано, але розміщення не вдалося опублікувати. Надішліть <code>/paid ${esc(ref)}</code> ще раз. · Payment recorded but the placement could not be published — send /paid again to retry.`); return; }
+  await say(env, chatId, `✅ Рахунок № ${esc(ref)} оплачено — розміщення опубліковано. · Marked paid and published.\nПідтвердження прийде окремим повідомленням. · The usual "paid" notice follows.`);
+}
+
 async function ownerExport(env, chatId) {
   const list = await env.VISITS.list({ prefix: 'visit:', limit: 1000 });
   const rows = [['ts', 'agentId', 'agentName', 'storeId', 'storeName', 'lat', 'lng', 'distM', 'pricing', 'lastDelivery', 'hours', 'poster', 'contact', 'mapChecked', 'notes', 'photoFileId']];
@@ -2668,6 +2743,8 @@ async function handleVisit(env, c, msg, ctx) {
 
   if (isOwner && (command === 'report' || command === 'visits')) { await ownerReport(env, c, chatId); return true; }
   if (isOwner && command === 'export') { await ownerExport(env, chatId); return true; }
+  if (isOwner && command === 'invoice') { await cmdInvoice(env, chatId, text); return true; }
+  if (isOwner && command === 'paid') { await cmdInvoicePaid(env, chatId, text); return true; }
 
   const session = await getSession(env, userId);
 

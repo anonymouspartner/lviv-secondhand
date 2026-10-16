@@ -68,10 +68,10 @@ an `offer` (no gold pin unless `tier` is set — use `tier` only for Featured/Sp
 ## 4. Unit economics (internal)
 
 - **Infra:** ~₴0 — Cloudflare + GitHub Pages free tiers.
-- **Payments:** card via **Stripe** ≈ **2.9% + a small fixed fee** per successful
-  charge (confirm your country's exact rate). On a ₴600 Featured that's ≈ ₴17 +
-  fixed — immaterial against the margin. Bank transfer / cash stays available at ₴0
-  fee where a store prefers it.
+- **Payments:** card via **LiqPay** (PrivatBank) ≈ **1.5%** per successful charge,
+  settled in ₴ to the ФОП account (confirm the current tariff). On a ₴600 Featured
+  that's ≈ ₴9 — immaterial against the margin. Bank transfer against an invoice
+  (the bot's `/invoice`) costs nothing.
 - **Fulfilment:** ~5 min owner time per sale (hand-edit `promo` + deploy).
 - **Agent cost now (Phase 1):** ₴80/verified visit + poster/sign-up bonuses.
 - **Agent cost when selling (Phase 2):** a **one-time sales commission per signed
@@ -105,13 +105,14 @@ Small stores buy foot traffic, not "impressions." Give them tangible proof:
 
 ## 6. Billing, cadence & compliance
 
-- **Cadence:** monthly or annual prepay; set a reminder to renew/extend `until`
-  before it lapses. Stripe handles recurring billing and renewal reminders for you.
-- **Collection:** **Stripe** is the primary processor (see §7); cash or bank transfer
-  (₴0 fee) stays available as a fallback for stores that prefer it.
-- **Tax/FOP:** ad revenue in Ukraine may need FOP registration / tax handling, and
-  Stripe onboarding depends on an eligible business entity/country — the owner's call
-  (this is not legal advice).
+- **Cadence:** monthly or annual. Card subscriptions renew through LiqPay; an
+  invoiced plan does not renew by itself — send a new `/invoice` before `until`.
+- **Collection:** **LiqPay** card checkout (see §7) once the shop is activated, and
+  bank transfer against an invoice (`/invoice`, `/paid`) at any time. Stripe is no
+  longer used — see [STRIPE_RETIREMENT.md](STRIPE_RETIREMENT.md).
+- **Tax/FOP:** the owner is now registered as a ФОП. The plan for using it —
+  local acquiring in ₴, invoices, fiscal receipts — is in
+  [FOP.md](FOP.md) (this is not legal advice).
 - **Ad labelling:** every paid placement is marked `Реклама / Sponsored`; keep
   featured density low (≈1 sponsored per screen/area) so the map stays trusted.
 - **Editorial content is not a free tier.** The app also shows HUMANA's daily
@@ -123,127 +124,58 @@ Small stores buy foot traffic, not "impressions." Give them tangible proof:
   that card. Letting the two look alike would tell shoppers the gold styling
   means nothing and tell stores the rate card is optional.
 
-## 7. Stripe: payments & product scheme
+## 7. Payments: LiqPay and invoices
 
-Payments into the app are processed through **Stripe**. The rate card in §2 maps
-one-to-one onto Stripe **Products** (the tier) and **Prices** (the amount + billing
-interval):
+Every sale goes through one of two routes, and both end in the same fulfilment code
+in `worker/worker.js` (`claimPayment()` → `fulfil()`): the placement goes live, the
+owner gets a Telegram ping, and an Instagram ad is queued when there is an offer line.
 
-| Tier | Stripe Product | Price(s) |
-|---|---|---|
-| **Verified+** | `Verified+` | ₴250 / month · ₴2,500 / year (10× — 2 months free) |
-| **Featured** | `Featured` | ₴600 / month · ₴6,000 / year |
-| **Spotlight** | `Spotlight` | ₴1,200 / month · ₴12,000 / year |
-| **À la carte** | `Deal of the week` / `Poster placement` / `Sponsored push` | one-time ₴300 / ₴150 / ₴400 |
+1. **Card, in the app — LiqPay (PrivatBank).** `GET /promote`, `/flash-deal` and
+   `/order` prepare the payment and show the payer a confirmation page (price, the
+   text that will be published, the receipt email), which posts the signed form to
+   LiqPay. LiqPay's signed callback (`POST /liqpay-callback`) delivers it. Monthly
+   and annual plans are LiqPay subscriptions. Off until `PAY_PROVIDER=liqpay` and
+   the LiqPay keys are set; on sandbox keys nothing is ever published and the app
+   hides the buttons. Details and switching on: [FOP.md](FOP.md) §3.
+2. **Bank transfer — invoices.** In the bot (owner only): `/invoice <store> <plan>
+   [buyer]` issues a printable рахунок with the IBAN and payment purpose;
+   `/paid <number>` marks it paid and publishes the placement; the акт is available
+   once paid. See [FOP.md](FOP.md) §5.
 
-- **Intro offer** (first month Featured at ₴300): a Stripe **coupon** (50% off the
-  first invoice) on the monthly price — keeps one clean product instead of a separate
-  discounted one.
-- **Currency:** prices are in **UAH (₴)**; confirm your Stripe account supports UAH
-  settlement (otherwise charge in a supported currency and show ₴ as guidance).
+**Stripe is no longer used** for new sales. The Stripe account stays (it is shared
+with another product), its webhook still answers, and the old Payment Links are
+still live at Stripe but no longer offered anywhere; a hryvnia payment through one
+pings the owner because nothing is delivered for it. See
+[STRIPE_RETIREMENT.md](STRIPE_RETIREMENT.md).
 
-**Checkout flow — two options:**
-
-1. **Payment Links (recommended first — no backend).** One Stripe **Payment Link**
-   per Price — send the store the link for their tier; the store pays by card; Stripe
-   emails the receipt and manages the subscription, retries, and renewal reminders.
-   Nothing to deploy — fits the static PWA. The owner still fulfils the placement by
-   hand (§3) once payment lands.
-2. **Worker + webhook self-fulfilment (built — activate with two secrets).** The
-   metrics Worker (`worker/`) now exposes three routes: `GET /promote?store=<id>&tier=
-   <t>&cadence=<c>` opens a **store-bound** Checkout Session, `POST /stripe-webhook`
-   verifies Stripe's signature and writes/expires the promo in D1, and `GET /promos`
-   serves the live set. The app fetches `/promos` on load and renders the gold pin/
-   badge/offer automatically — **no `index.html` edit per sale**. See "Self-fulfil
-   activation" below.
-
-### Live Stripe objects (account "Lviv Second Hand", live mode)
-
-Prices are **charged in UAH (₴)** and settle to the account's USD balance with Stripe's
-currency conversion (~1% on top of card fees). Send a store the link for its tier and
-cadence:
-
-| Tier | Monthly link (₴/mo) | Annual link (₴/yr — 2 months free) |
-|---|---|---|
-| **Verified+** | ₴250 · https://buy.stripe.com/14A3cp09O3NieWh1kmgA803 | ₴2,500 · https://buy.stripe.com/fZu28l7Cg1Fa7tP6EGgA809 |
-| **Featured** | ₴600 · https://buy.stripe.com/bJe28l1dS3Ni9BXe78gA804 | ₴6,000 · https://buy.stripe.com/eVq7sFbSw3NieWhfbcgA80a |
-| **Spotlight** | ₴1,200 · https://buy.stripe.com/dRm00d2hWfw05lH2oqgA805 | ₴12,000 · https://buy.stripe.com/dRm14hg8M2JecO9d34gA80b |
-
-**À la carte (one-time):**
-
-| Item | Payment Link |
-|---|---|
-| Deal of the week — ₴300 | https://buy.stripe.com/4gM7sF1dS6Zu01n4wygA806 |
-| Poster placement — ₴150 | https://buy.stripe.com/28E9AN6yc3Ni8xTgfggA807 |
-| Sponsored push — ₴400 | https://buy.stripe.com/14A4gt8GkerW5lH6EGgA808 |
-
-**Products & price IDs** (`prod` = product, monthly · annual price):
-- Verified+ `prod_V1hJ671Gc5MJUt` — `price_1U1dvd7ZlQqI3gQVAk6edEci` · `price_1U1dvn7ZlQqI3gQVH2XJobOD`
-- Featured `prod_V1hKO1ma6cXUiE` — `price_1U1dvq7ZlQqI3gQV51PMcCVM` · `price_1U1dvt7ZlQqI3gQVd8utdXLA`
-- Spotlight `prod_V1hKo6mVYDGRYn` — `price_1U1dvv7ZlQqI3gQVR5qnNNHk` · `price_1U1dw17ZlQqI3gQVuizcyhYi`
-- À la carte one-time — `price_1U1dwY7ZlQqI3gQVMZEzRBQT` (deal) · `price_1U1dwb7ZlQqI3gQVGSqqTa3x` (poster) · `price_1U1dwe7ZlQqI3gQV1yCPZoEc` (push)
-
-**Intro offer:** all six subscription links accept promo codes — a store enters
-**`FEATURED50`** (coupon `6QsSUgXf`, 50% off the first invoice) to get the first month
-of Featured at ₴300 (or the same discount on any tier's first charge).
-
-> The products/prices/links above are **live** — real charges. With self-fulfilment
-> activated (below), a paid checkout writes the promo to D1 and the app shows it on
-> its own; the generic Payment Links above still work but need the manual `promo` edit
-> (§3), so prefer the store-bound `/promote` links once activated.
-
-### Self-fulfil activation (owner, one-time)
-
-The code ships **inert** until two secrets are set — until then `/promos` returns an
-empty set and `/promote` + `/stripe-webhook` reply `503`, so nothing changes.
-
-1. **Restricted Stripe key.** Stripe Dashboard → Developers → API keys → **Create
-   restricted key** with **Checkout Sessions: Write** (everything else None). Add it as
-   the repo secret **`STRIPE_API_KEY`**. Add **Billing Portal Sessions: Write** too if
-   you want the in-app "Manage billing" link (optional — see below).
-2. **Webhook endpoint.** Stripe Dashboard → Developers → Webhooks → **Add endpoint** →
-   URL `https://lviv-metrics.lshanalytic.workers.dev/stripe-webhook`, events:
-   `checkout.session.completed`, `invoice.paid`,
-   `customer.subscription.deleted`, `customer.subscription.updated`. Copy its **signing
-   secret** (`whsec_…`) into the repo secret **`STRIPE_WEBHOOK_SECRET`**.
-3. **Deploy.** Push to `main` (or run the *Deploy metrics Worker* action) —
-   `deploy-worker.yml` sets both secrets on the Worker. Confirm at
-   `…workers.dev/status` (`promoConfigured: true`).
-
-**How a sale then flows:** the owner/agent sends a store-bound link
-`…/promote?store=<storeId>&tier=featured&cadence=monthly` (the app's in-store
-**"Own this store? Promote it"** button builds one) → the store pays (₴, `FEATURED50`
-still applies) → the webhook writes `promos(store_id, tier, offer, until, sub_id,
-cust_id)` in D1 → the app's `/promos` fetch shows the pin/badge/offer within a page
-load. Renewals extend `until` (`invoice.paid`); cancellation clears it
-(`customer.subscription.deleted`).
+- **Intro offer** (first month Featured at ₴300) was a Stripe coupon (`FEATURED50`).
+  LiqPay has no promotion codes; honour it with a ₴300 invoice, or withdraw it.
 
 ### Ad-hoc (one-off) purchases
 
 The promote sheet has a third tab, **One-off**, for stores that want a burst around a
 sale week and no subscription. Two things live there, and they behave differently.
 
-**Short paid runs — self-fulfilling.** Pay once, the placement runs for exactly that
-many days and stops. Nothing recurs, nothing to cancel, no billing portal.
+**Short paid runs — self-fulfilling.** Pay once; the placement runs to the end of the
+Nth day after the day of payment (Kyiv time) and stops. Nothing recurs, nothing to
+cancel.
 
-| Tier | 7 days | 30 days |
-|---|---|---|
-| Verified+ | ₴100 | ₴250 |
-| Featured | ₴200 | ₴600 |
-| Spotlight | ₴400 | ₴1,200 |
+| Tier | 1 day | 7 days | 30 days |
+|---|---|---|---|
+| Verified+ | ₴50 | ₴100 | ₴250 |
+| Featured | ₴100 | ₴200 | ₴600 |
+| Spotlight | ₴200 | ₴400 | ₴1,200 |
 
 A 30-day run costs the same as one month of the subscription — the subscription's
 advantage is that it keeps running, not that it is cheaper. A 7-day run is a third of
 the month.
 
-These need **no new Stripe objects**: `/promote?…&cadence=run7|run30` builds a
-`mode=payment` session with an inline `price_data` against the tier's existing
-Product, so the rate card lives only in `PROMO_RUNS` (`worker/worker.js`). The webhook
-sets `until = today + days` and stores no `sub_id` or `cust_id`, so `invoice.paid`
-never extends a run and the "Manage billing" link correctly stays hidden.
+`/promote?…&cadence=run1|run7|run30` charges the amount in `PROMO_RUNS`
+(`worker/worker.js`) as a one-off payment. Fulfilment sets `until = today + days` and
+stores no `sub_id`, so no renewal can ever extend a run.
 
 **À la carte extras — owner-fulfilled.** Deal of the week ₴300, poster placement ₴150,
-sponsored push ₴400, using the one-time Prices already live in Stripe.
+sponsored push ₴400 (`ORDER_ITEMS` in `worker/worker.js`).
 
 > These are **orders, not placements.** The app has nothing to render them into — the
 > poster is physical, deal-of-week has no in-app surface, sponsored push is not built —
@@ -279,7 +211,7 @@ This needs the metrics Worker to have the **`BOT_TOKEN`** secret (the same repo 
 the bot Worker already uses — `deploy-worker.yml` pushes it) and the `OWNER_ID` var in
 `worker/wrangler.toml`. Without the token it silently does nothing and `/orders` is the
 only record. The ping is sent through `ctx.waitUntil`, so a slow or failed Telegram call
-can never delay or fail the Stripe webhook, and messages carry **no `parse_mode`** —
+can never delay or fail the payment callback, and messages carry **no `parse_mode`** —
 buyer-supplied text cannot be made to render as markup.
 
 ### Self-service purchase (in-app)
@@ -287,55 +219,22 @@ buyer-supplied text cannot be made to render as markup.
 A store owner does not need to be contacted first. In the app: open the store →
 bottom of the store page → **📣 Own this store? Promote it** → a sheet showing the
 full rate card. They pick monthly/annual, pick a tier, optionally type the offer
-line shoppers will see, and pay. The CTA only appears when `/status` reports
-`promoConfigured: true`, so it can never lead to a dead checkout.
+line shoppers will see and an email, and pay. The CTA only appears when `/status`
+reports `promoConfigured: true` (LiqPay on live keys), so it can never lead to a dead
+checkout.
 
-The sheet's prices are **display-only** — what is actually charged comes from the
-Stripe Price ids in `worker/worker.js`. A stale number in `PROMO_PLANS` (index.html)
-cannot charge the wrong amount, but it will misinform, so **change both together**.
+The sheet's prices are **display-only** — what is actually charged comes from
+`PROMO_AMOUNTS`, `PROMO_RUNS`, `FLASH_DEAL_TIERS` and `ORDER_ITEMS` in
+`worker/worker.js`. `scripts/check-payments.mjs` fails CI if the two disagree.
 
 **Offer line.** Typed by whoever pays, capped at 48 chars, angle brackets stripped
-and whitespace collapsed in the Worker (`cleanOffer`) on the way in *and* again in
-the webhook, then escaped on render. Leave it blank and the card simply omits it.
+and whitespace collapsed in the Worker (`cleanOffer`) on the way in *and* again at
+fulfilment, then escaped on render. The payer sees it on the confirmation page before
+paying. Leave it blank and the card simply omits it.
 
-**Self-service billing.** Once a subscription exists, the store page shows
-**⚙️ Manage billing** → `/billing?store=<id>` → the Stripe customer portal (change
-tier, update card, cancel). This needs the restricted key to *also* carry **Billing
-Portal Sessions: Write** and a saved portal configuration in Stripe; without either
-the route fails and the app just hides the link, so it is safe to skip.
-
-`/billing` looks up the store's `cust_id` first and returns **404 before touching
-Stripe** when there is no subscription — so it cannot tell you whether the portal is
-set up correctly. Ask Stripe directly instead:
-
-```
-curl -H "X-Admin-Key: $ADMIN_KEY" https://lviv-metrics.lshanalytic.workers.dev/billing-selftest
-```
-
-It attempts a portal session for a customer id that cannot exist — nothing is created
-— and reads the error back:
-
-| `state` | Meaning |
-|---|---|
-| `ready` | Key and portal config are both good ("No such customer" means it got that far) |
-| `key_missing_permission` | Add **Billing Portal Sessions: Write** at `dashboard.stripe.com/apikeys` |
-| `portal_not_configured` | Save a configuration at `dashboard.stripe.com/settings/billing/portal` |
-| `no_stripe_key` | `STRIPE_API_KEY` isn't set on the Worker |
-
-The response includes Stripe's own `stripeStatus`/`stripeMessage` for anything the
-classifier doesn't recognise. Gated on `ADMIN_KEY` — it reveals configuration state.
-
-The same verdict (without Stripe's raw message) also rides on `GET /status` as
-`portal`, so it can be checked from a phone with no key:
-
-```
-curl https://lviv-metrics.lshanalytic.workers.dev/status
-{"ok":true,...,"promoConfigured":true,"portal":"ready"}
-```
-
-`/status` never waits on Stripe — it serves the last known verdict and refreshes it in
-the background at most every 10 minutes. `"portal": null` just means this isolate has
-not probed yet; call it again in a moment.
+**Cancelling a subscription.** By email to hello@lvivsecondhand.com (offer §8.1);
+the owner cancels the order in the LiqPay dashboard. The placement keeps the time
+already paid for.
 
 > **Known limitation — no ownership check.** Anyone can promote any store, and the
 > offer line is free text. Paying for a store you do not own is self-punishing, but
@@ -350,13 +249,14 @@ pays more gets more, and Verified+ never quietly buys a placement.
 
 | | Verified+ | Featured | Spotlight |
 |---|---|---|---|
-| Badge on card | ✓ Verified (green) | ⭐ Sponsored (gold) | 🌟 Spotlight · Sponsored |
+| Badge on card | ✓ Verified · Sponsored (green) | ⭐ Sponsored (gold) | 🌟 Spotlight · Sponsored |
 | Offer line | ✓ | ✓ | ✓ |
 | List position | **unchanged** | boosted | boosted, above Featured |
 | Map pin | **unchanged** | gold ⭐, 44px | gold 🌟, 50px, above all |
 
 Verified+ is a trust badge, not an ad placement: it changes no ranking and no pin,
-which is what keeps the map honest and keeps the two ad tiers worth their price. A
+which is what keeps the map honest and keeps the two ad tiers worth their price. It
+is still paid, so it carries the advertising label like every paid placement. A
 legacy promo with no `tier` is treated as Featured.
 
 ## 8. Rollout sequence

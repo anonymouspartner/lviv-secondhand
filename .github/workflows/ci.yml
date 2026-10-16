@@ -50,6 +50,11 @@ jobs:
       - name: Check cross-system wiring
         run: node scripts/check-wiring.mjs
 
+      # Feeds signed payment events through the metrics Worker against a real
+      # SQLite database: every kind of sale must be fulfilled, exactly once.
+      - name: Check payment fulfilment
+        run: node --no-warnings scripts/check-payments.mjs
+
       # /route-map's initData verification (telegram-bot/worker.js) can't be
       # exercised against a real Telegram client here -- this is a
       # self-consistency check instead: build a synthetic initData string,

@@ -63,7 +63,7 @@ async function ensureSchema(env) {
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS push_subs (id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint TEXT UNIQUE NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL, stores TEXT NOT NULL DEFAULT '[]', created TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
-  // Paid in-app promotions, self-fulfilled from Stripe (see stripe-webhook).
+  // Paid in-app promotions, self-fulfilled from the payment callbacks.
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS promos (store_id TEXT PRIMARY KEY, tier TEXT NOT NULL, offer TEXT, until TEXT NOT NULL, sub_id TEXT, cadence TEXT, cust_id TEXT, status TEXT NOT NULL DEFAULT 'active', updated TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
@@ -211,6 +211,10 @@ async function ensureSchema(env) {
   // history. `checked` spaces out the polling and `alerted` keeps the drift
   // alarm to once a day; both are written even when a poll finds nothing, which
   // is why they live here rather than being derived from `updated`.
+  // The payments ledger — one row per payment, any provider. See claimPayment().
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, provider TEXT NOT NULL, kind TEXT NOT NULL, store_id TEXT NOT NULL, intent TEXT NOT NULL DEFAULT '{}', text TEXT, amount INTEGER, email TEXT, status TEXT NOT NULL DEFAULT 'created', created TEXT NOT NULL DEFAULT (datetime('now')), paid TEXT)"
+  ).run();
   await env.DB.prepare(
     "CREATE TABLE IF NOT EXISTS chain_feed (chain TEXT PRIMARY KEY, post_id INTEGER, day TEXT, prices TEXT, raw TEXT, checked TEXT, alerted TEXT, updated TEXT NOT NULL DEFAULT (datetime('now')))"
   ).run();
@@ -231,31 +235,22 @@ const LISTING_CATEGORIES = new Set(['women', 'men', 'shoes', 'kids', 'accessorie
 
 const isoDaysFromNow = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 
-// ── Store promotions ↔ Stripe ────────────────────────────────────────────────
-// The rate card (docs/ADVERTISING.md) as Stripe Price ids, keyed by tier+cadence.
-// A store-bound Checkout Session (GET /promote) carries the store id in metadata;
-// the signed webhook (POST /stripe-webhook) writes/expires the promo in D1; the
-// app reads the live set from GET /promos and renders the gold pin/badge/offer.
-const PROMO_PRICES = {
-  verified_monthly:  'price_1U1dvd7ZlQqI3gQVAk6edEci',
-  verified_annual:   'price_1U1dvn7ZlQqI3gQVH2XJobOD',
-  featured_monthly:  'price_1U1dvq7ZlQqI3gQV51PMcCVM',
-  featured_annual:   'price_1U1dvt7ZlQqI3gQVd8utdXLA',
-  spotlight_monthly: 'price_1U1dvv7ZlQqI3gQVR5qnNNHk',
-  spotlight_annual:  'price_1U1dw17ZlQqI3gQVuizcyhYi',
+// ── Store promotions ─────────────────────────────────────────────────────────
+// The rate card (docs/ADVERTISING.md) in kopiyky, keyed by tier+cadence. A
+// purchase (GET /promote → LiqPay) carries the store id in the prepared payment;
+// the signed callback writes/expires the promo in D1; the app reads the live set
+// from GET /promos and renders the gold pin/badge/offer. Must agree with
+// PROMO_PLANS in index.html — scripts/check-payments.mjs checks it.
+const PROMO_AMOUNTS = {
+  verified_monthly:   25000, verified_annual:   250000,
+  featured_monthly:   60000, featured_annual:   600000,
+  spotlight_monthly: 120000, spotlight_annual: 1200000,
 };
 const PROMO_TIERS = new Set(['verified', 'featured', 'spotlight']);
 const PROMO_CADENCES = new Set(['monthly', 'annual', 'run1', 'run7', 'run30']);
 
 // Ad-hoc runs: pay once for a fixed window, no subscription and nothing to cancel.
-// Priced inline against the existing tier Products (no new Price objects to create
-// or keep in sync) — a 30-day run costs the same as one month, a 7-day run a third.
-// `amount` is in kopiyky, as Stripe expects.
-const TIER_PRODUCTS = {
-  verified:  'prod_V1hJ671Gc5MJUt',
-  featured:  'prod_V1hKO1ma6cXUiE',
-  spotlight: 'prod_V1hKo6mVYDGRYn',
-};
+// A 30-day run costs the same as one month, a 7-day run a third. Kopiyky.
 const PROMO_RUNS = {
   verified_run1:   {  amount:  5000, days: 1  },
   verified_run7:   {  amount: 10000, days: 7  },
@@ -271,45 +266,21 @@ const isRun = (c) => c === 'run1' || c === 'run7' || c === 'run30';
 
 // À la carte one-offs. These are *orders*, not placements: the app has no surface to
 // render them into (the poster is physical, deal-of-week and sponsored push are not
-// built), so the purchase is recorded for the owner to fulfil by hand. Prices are the
-// ones already live in Stripe — see docs/ADVERTISING.md §7.
+// built), so the purchase is recorded for the owner to fulfil by hand. Kopiyky.
 const ORDER_ITEMS = {
-  deal:   { price: 'price_1U1dwY7ZlQqI3gQVMZEzRBQT', label: 'Deal of the week' },
-  poster: { price: 'price_1U1dwb7ZlQqI3gQVGSqqTa3x', label: 'Poster placement' },
-  push:   { price: 'price_1U1dwe7ZlQqI3gQV1yCPZoEc', label: 'Sponsored push' },
+  deal:   { amount: 30000, label: 'Deal of the week' },
+  poster: { amount: 15000, label: 'Poster placement' },
+  push:   { amount: 40000, label: 'Sponsored push' },
 };
 
-// The shopper-facing offer line ("-10% з застосунком"). It is collected as a Stripe
-// Checkout custom field rather than in the app, so it sits behind the paywall: only
-// someone who reaches the payment page can write it, and only a completed payment
-// makes it public. Still cleaned on the way out of Stripe — angle brackets stripped,
-// whitespace collapsed, length capped — and escaped again on render.
+// The shopper-facing offer line ("-10% з застосунком"). It is typed in the app
+// and held with the prepared payment, so only a completed payment makes it
+// public. Cleaned on the way in — angle brackets stripped, whitespace
+// collapsed, length capped — and escaped again on render.
 const OFFER_MAX = 48;
-// Labels for that field. Stripe caps a custom-field label at 50 characters.
-const OFFER_FIELD = {
-  key: 'offer',
-  ua: 'Пропозиція для покупців (необовʼязково)',
-  en: 'Offer shown to shoppers (optional)',
-};
-const NOTE_FIELD = {
-  key: 'note',
-  ua: 'Що саме просуваємо? (необовʼязково)',
-  en: 'What should we promote? (optional)',
-};
-// Attach a free-text field to a Checkout Session. `opts.required` (default
-// false, matching every existing caller) and `opts.max` (default OFFER_MAX)
-// let a caller ask for something like the flash-deal text, which must not be
-// empty and runs longer than the 48-char offer line.
-function addCustomField(form, field, locale, opts) {
-  opts = opts || {};
-  form.set('custom_fields[0][key]', field.key);
-  form.set('custom_fields[0][label][type]', 'custom');
-  form.set('custom_fields[0][label][custom]', locale === 'en' ? field.en : field.ua);
-  form.set('custom_fields[0][type]', 'text');
-  form.set('custom_fields[0][optional]', opts.required ? 'false' : 'true');
-  form.set('custom_fields[0][text][maximum_length]', String(opts.max || OFFER_MAX));
-}
-// Read it back off the completed session.
+// Read a free-text field off a completed Stripe Checkout Session. Kept for the
+// webhook, which still processes events for purchases made through Stripe
+// (none are sold through it any more — see docs/STRIPE_RETIREMENT.md).
 function readCustomField(o, key) {
   const list = (o && o.custom_fields) || [];
   for (const f of list) if (f && f.key === key) return (f.text && f.text.value) || '';
@@ -320,25 +291,23 @@ function cleanText(raw, max) {
   return s.slice(0, max || OFFER_MAX);
 }
 function cleanOffer(raw) { return cleanText(raw, OFFER_MAX); }
+// A contact address, shape-checked only. Anything else is dropped rather than
+// stored, since it is shown to the owner as the way to reach the buyer.
+function cleanEmail(raw) {
+  const s = String(raw || '').trim().slice(0, 120);
+  return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(s) ? s : '';
+}
 
 // ── Flash deals (Feature 4) ──────────────────────────────────────────────────
 // A short-lived sale, not a placement tier: pay once for a 3h/24h window, the
 // deal text goes live immediately, and it self-expires (the app hides it
-// client-side once `expires_at` passes — see index.html). No pre-created
-// Stripe object needed: price_data[product_data][name] builds an ad-hoc
-// product+price inline, same as the ad-hoc promo runs above but without even
-// an existing Product id to reference.
+// client-side once `expires_at` passes — see index.html).
 const FLASH_DEAL_TIERS = {
   '3h':        { amount: 3000,  hours: 3,  alert: false, label: 'Flash deal — 3 hours' },
   '24h':       { amount: 6000,  hours: 24, alert: false, label: 'Flash deal — 24 hours' },
   '24h_alert': { amount: 12000, hours: 24, alert: true,  label: 'Flash deal — 24 hours + Telegram alert' },
 };
 const DEAL_MAX = 120;
-const DEAL_TEXT_FIELD = {
-  key: 'dealText',
-  ua: 'Текст спалах-знижки (обовʼязково)',
-  en: 'Flash-deal text (required)',
-};
 
 // Mirrors scripts/patch-store.js's dispatchMapPatch() — see that file's
 // comment for why this is reimplemented rather than imported (node:fs isn't
@@ -581,21 +550,6 @@ async function probePortal(env) {
     return { state, status: res.status, msg };
   } catch { return { state: 'fetch_failed', status: 0, msg: '' }; }
 }
-// /status is hit on every app load, so it must never wait on Stripe: it serves the
-// last known verdict and refreshes it in the background at most every 10 minutes.
-// null simply means "not probed yet on this isolate" — ask again in a moment.
-let _portal = { at: 0, state: null };
-const PORTAL_TTL = 10 * 60 * 1000;
-function portalReadyCached(env, ctx) {
-  const now = Date.now();
-  if (env.STRIPE_API_KEY && now - _portal.at > PORTAL_TTL) {
-    _portal.at = now; // claim the slot first so concurrent requests don't all probe
-    const p = probePortal(env).then(r => { _portal.state = r.state; }).catch(() => {});
-    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
-  }
-  return _portal.state;
-}
-
 // Verify Stripe's `Stripe-Signature` header (HMAC-SHA256 over `${t}.${payload}`).
 async function verifyStripeSig(payload, header, secret) {
   const parts = {};
@@ -636,114 +590,228 @@ async function signBountyToken(env, storeId) {
   return `${storeId}.${expB36}.${mac}`;
 }
 
-// Apply a verified Stripe event to the promos table (activate / extend / cancel).
-async function applyPromoEvent(env, ev, ctx) {
-  const o = (ev && ev.data && ev.data.object) || {};
-  const type = ev && ev.type;
-  const graceDays = (cad) => (cad === 'annual' ? 372 : 34); // period + a few days' grace
-  if (type === 'checkout.session.completed') {
-    const storeId = o.client_reference_id || (o.metadata && o.metadata.storeId);
-    const md = o.metadata || {};
-    // À la carte purchases are orders for the owner to fulfil, not placements.
-    if (md.item && ORDER_ITEMS[md.item]) {
-      if (!storeId) return;
-      await env.DB.prepare(
-        "INSERT INTO orders (id, store_id, item, amount, currency, email, note, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', datetime('now')) " +
-        'ON CONFLICT(id) DO NOTHING'
-      ).bind(
-        o.id, storeId, md.item, o.amount_total || null, o.currency || null,
-        (o.customer_details && o.customer_details.email) || null,
-        cleanOffer(readCustomField(o, 'note') || md.note) || null
-      ).run();
-      const email = (o.customer_details && o.customer_details.email) || '—';
-      const note = cleanOffer(readCustomField(o, 'note') || md.note);
-      tgNotify(env, ctx,
-        `🧾 NEW ORDER — you need to fulfil this\n\n` +
-        `Item:  ${ORDER_ITEMS[md.item].label}\n` +
-        `Store: ${storeId}\n` +
-        `Paid:  ${uah(o.amount_total)}\n` +
-        `Email: ${email}\n` +
-        (note ? `Note:  ${note}\n` : '') +
-        `\n${storeLink(storeId)}`);
-      return;
-    }
-    const tier = md.tier;
-    const rawCadence = md.cadence;
-    const cadence = PROMO_CADENCES.has(rawCadence) ? rawCadence : 'monthly';
-    if (!storeId || !PROMO_TIERS.has(tier)) return;
-    // Re-clean rather than trusting the round-trip: metadata could have been set
-    // by any caller holding the key, not just our own /promote.
-    const offer = cleanOffer(readCustomField(o, 'offer') || md.offer) || null;
-    // A run ends exactly when it was bought to end; a subscription runs to the next
-    // invoice plus a few days' grace. A run has no subscription, so no portal either.
-    const run = PROMO_RUNS[`${tier}_${cadence}`];
-    const until = addDaysStr(kyivDateStr(), run ? run.days : graceDays(cadence));
-    await env.DB.prepare(
-      "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
-      "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
-    ).bind(storeId, tier, offer, until, o.subscription || null, cadence, run ? null : (o.customer || null)).run();
-    // A paid tier also queues an Instagram advertisement — on PURCHASE only.
-    //
-    // Deliberately not on renewal (invoice.paid, below). A subscription bills
-    // every month, so queueing there would hand you one approval per paying
-    // store per month, forever, each showing the same offer the last one did.
-    // That is a chore rather than a feature, and recurring presence is what the
-    // weekly deals post already provides.
-    //
-    // And only when the store supplied an offer line. It is optional at
-    // checkout, and inventing copy for someone else's paid advertisement is not
-    // ours to do — so a tier bought without one gets the on-map placement it
-    // paid for, and the notification below says why no ad appeared.
-    if (offer) {
-      ctx.waitUntil(
-        queueInstagramAd(env, { storeId, text: offer, tier })
-          .catch((e) => tgNotify(env, ctx, `⚠️ Could not queue the Instagram ad for ${storeId}: ${e.message}`))
-      );
-    }
-    // A promotion fulfils itself, so this is information rather than a task.
-    tgNotify(env, ctx,
-      `💸 PROMOTION PAID — already live, nothing to do\n\n` +
-      `Store: ${storeId}\n` +
-      `Plan:  ${tier} · ${run ? run.days + '-day run' : cadence}\n` +
-      `Paid:  ${uah(o.amount_total)}\n` +
-      (offer ? `Offer: ${offer}\n` : '') +
-      `Until: ${until}\n` +
-      (offer
-        ? `\n📣 An Instagram ad is being prepared — you'll get it here to approve.`
-        : `\n📣 No Instagram ad: this purchase carried no offer line. Ask the store for one and queue it by hand (Actions → Queue an Instagram ad).`) +
-      `\n\n${storeLink(storeId)}`);
-  } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
-    // Renewal: extends the placement, queues no advertisement. See the comment
-    // at the purchase branch above for why.
-    const subId = o.subscription;
-    if (!subId) return;
-    const row = await env.DB.prepare('SELECT cadence FROM promos WHERE sub_id = ?').bind(subId).first();
-    const until = addDaysStr(kyivDateStr(), graceDays(row && row.cadence));
-    await env.DB.prepare("UPDATE promos SET until = ?, status = 'active', updated = datetime('now') WHERE sub_id = ?").bind(until, subId).run();
-  } else if (type === 'customer.subscription.deleted' ||
-             (type === 'customer.subscription.updated' && ['canceled', 'unpaid', 'incomplete_expired'].includes(o.status))) {
-    await env.DB.prepare("UPDATE promos SET status = 'canceled', updated = datetime('now') WHERE sub_id = ?").bind(o.id).run();
+// ── Payments: one fulfilment path for every provider ─────────────────────────
+// Each payment provider has its own event shape. An adapter (stripePayment()
+// below; LiqPay's in docs/FOP.md §3) turns one into a normalised payment:
+//
+//   { id, provider, kind: 'promo' | 'order' | 'flashDeal', storeId,
+//     tier, cadence, item, pin, text, amount (kopiyky), currency, email,
+//     subRef, custRef }
+//
+// and from there every provider takes the same road: claimPayment() records
+// it exactly once, fulfil() delivers it. Renewals and cancellations of a
+// subscription go through renewPromo()/cancelPromo() by the provider's
+// subscription reference. So promotions, orders, flash deals, the owner's
+// Telegram pings and the Instagram queue behave identically whichever provider
+// took the money.
+
+// The payments table is the ledger: one row per payment, keyed by the
+// provider's own id for it. A provider that cannot carry free text through its
+// checkout (LiqPay) writes the row as 'created' — with the offer line or deal
+// text — before redirecting, and the paid event flips it; Stripe carries the
+// text itself, so its row is first written already 'paid'. Either way the
+// row's existence in 'paid' is what makes fulfilment happen once: providers
+// redeliver events, and without this a redelivered purchase pinged the owner
+// again and queued a second Instagram ad.
+const changed = (r) => !!(r && r.meta && r.meta.changes > 0);
+const INTENT_KEYS = ['tier', 'cadence', 'item', 'pin', 'subRef', 'custRef', 'currency'];
+
+// Returns the payment to fulfil, or null when it was already fulfilled.
+//
+// A row can be claimed from three states: 'created' (prepared before checkout,
+// waiting for money), 'failed' (an earlier attempt on the same checkout was
+// declined, and the buyer then paid with another card), and 'fulfil_failed'
+// (the money arrived but delivery threw — see fulfilOnce(); the provider's
+// redelivery, or a second /paid, retries it). Only 'paid' is final.
+async function claimPayment(env, pay) {
+  const flipped = await env.DB.prepare(
+    "UPDATE payments SET status = 'paid', paid = datetime('now') WHERE id = ? AND status IN ('created', 'failed', 'fulfil_failed')"
+  ).bind(pay.id).run();
+  if (changed(flipped)) {
+    // Prepared before checkout: what the buyer chose and wrote lives in the
+    // row; the provider's event adds only what it alone knows.
+    const row = await env.DB.prepare('SELECT * FROM payments WHERE id = ?').bind(pay.id).first();
+    let intent = {};
+    try { intent = JSON.parse((row && row.intent) || '{}'); } catch {}
+    const stored = { kind: row.kind, storeId: row.store_id, text: row.text, amount: row.amount, email: row.email, ...intent };
+    const fresh = Object.fromEntries(Object.entries(pay).filter(([, v]) => v != null && v !== ''));
+    return { ...stored, ...fresh };
   }
+  // Already recorded and already paid: a redelivery, or a second /paid. Nothing
+  // to fulfil, and only a payment never seen before may be written below.
+  const seen = await env.DB.prepare('SELECT status FROM payments WHERE id = ?').bind(pay.id).first();
+  if (seen) return null;
+  const intent = {};
+  for (const k of INTENT_KEYS) if (pay[k] != null) intent[k] = pay[k];
+  const inserted = await env.DB.prepare(
+    "INSERT INTO payments (id, provider, kind, store_id, intent, text, amount, email, status, created, paid) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'paid', datetime('now'), datetime('now')) ON CONFLICT(id) DO NOTHING"
+  ).bind(pay.id, pay.provider, pay.kind, pay.storeId, JSON.stringify(intent), pay.text || null,
+    pay.amount == null ? null : pay.amount, pay.email || null).run();
+  return changed(inserted) ? pay : null;
+}
+
+// Deliver a claimed payment, and if delivery throws, put the row where a retry
+// can claim it again ('fulfil_failed') and tell the owner — then rethrow, so
+// the webhook answers 5xx and the provider redelivers. Without this, a payment
+// marked 'paid' whose delivery failed was paid-for and silently undelivered,
+// with nothing left that could retry it.
+async function fulfilOnce(env, ctx, pay) {
+  try {
+    await fulfil(env, ctx, pay);
+  } catch (e) {
+    try { await env.DB.prepare("UPDATE payments SET status = 'fulfil_failed' WHERE id = ?").bind(pay.id).run(); } catch {}
+    tgNotify(env, ctx,
+      `⚠️ PAID BUT NOT DELIVERED — will retry\n\n` +
+      `Payment: ${pay.id} (${pay.provider})\nStore: ${pay.storeId}\nWhat:  ${pay.kind}${pay.tier ? ' · ' + pay.tier : ''}${pay.item ? ' · ' + pay.item : ''}\n` +
+      `Error: ${String((e && e.message) || e).slice(0, 200)}\n\n` +
+      (pay.provider === 'invoice'
+        ? 'Send /paid again to retry.'
+        : 'The payment provider will redeliver the event and it will be retried. If this repeats, deliver it by hand.'));
+    throw e;
+  }
+}
+
+// Deliver a paid, claimed payment.
+async function fulfil(env, ctx, pay) {
+  if (pay.kind === 'order') return fulfilOrder(env, ctx, pay);
+  if (pay.kind === 'flashDeal') return fulfilFlashDeal(env, ctx, pay);
+  if (pay.kind === 'promo') return fulfilPromo(env, ctx, pay);
+}
+
+// À la carte purchases are orders for the owner to fulfil, not placements.
+async function fulfilOrder(env, ctx, pay) {
+  const note = cleanOffer(pay.text) || null;
+  await env.DB.prepare(
+    "INSERT INTO orders (id, store_id, item, amount, currency, email, note, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid', datetime('now')) " +
+    'ON CONFLICT(id) DO NOTHING'
+  ).bind(pay.id, pay.storeId, pay.item, pay.amount == null ? null : pay.amount, pay.currency || null, pay.email || null, note).run();
+  tgNotify(env, ctx,
+    `🧾 NEW ORDER — you need to fulfil this\n\n` +
+    `Item:  ${ORDER_ITEMS[pay.item].label}\n` +
+    `Store: ${pay.storeId}\n` +
+    `Paid:  ${uah(pay.amount)}\n` +
+    `Email: ${pay.email || '—'}\n` +
+    (note ? `Note:  ${note}\n` : '') +
+    `\n${storeLink(pay.storeId)}`);
+}
+
+const PROMO_GRACE_DAYS = (cad) => (cad === 'annual' ? 372 : 34); // period + a few days' grace
+
+async function fulfilPromo(env, ctx, pay) {
+  const { storeId, tier } = pay;
+  const cadence = PROMO_CADENCES.has(pay.cadence) ? pay.cadence : 'monthly';
+  // Re-clean rather than trusting the round-trip: the text came back from a
+  // provider, and could have been set by any caller holding the key.
+  const offer = cleanOffer(pay.text) || null;
+  // A run ends exactly when it was bought to end; a subscription runs to the next
+  // invoice plus a few days' grace. A run has no subscription, so no portal either.
+  const run = PROMO_RUNS[`${tier}_${cadence}`];
+  const until = addDaysStr(kyivDateStr(), run ? run.days : PROMO_GRACE_DAYS(cadence));
+  // A store has one placement row. If it still carries a live subscription that
+  // this purchase is not, overwriting the row would leave that subscription
+  // charging with nothing left to renew — the store would pay twice. Say so.
+  const prev = await env.DB.prepare("SELECT sub_id, until FROM promos WHERE store_id = ? AND status = 'active'").bind(storeId).first();
+  if (prev && prev.sub_id && prev.sub_id !== (pay.subRef || null) && prev.until >= kyivDateStr()) {
+    tgNotify(env, ctx,
+      `⚠️ ${storeId} still has a subscription (${prev.sub_id}) that this purchase replaces.\n\n` +
+      `Cancel it in ${prev.sub_id.startsWith('lp_') ? 'LiqPay (order ' + prev.sub_id + ')' : 'Stripe'}, or the store will be charged twice.`);
+  }
+  await env.DB.prepare(
+    "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
+    "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
+  ).bind(storeId, tier, offer, until, pay.subRef || null, cadence, run ? null : (pay.custRef || null)).run();
+  // A paid tier also queues an Instagram advertisement — on PURCHASE only.
+  //
+  // Deliberately not on renewal (renewPromo, below). A subscription bills
+  // every month, so queueing there would hand you one approval per paying
+  // store per month, forever, each showing the same offer the last one did.
+  // That is a chore rather than a feature, and recurring presence is what the
+  // weekly deals post already provides.
+  //
+  // And only when the store supplied an offer line. It is optional at
+  // checkout, and inventing copy for someone else's paid advertisement is not
+  // ours to do — so a tier bought without one gets the on-map placement it
+  // paid for, and the notification below says why no ad appeared.
+  if (offer) {
+    ctx.waitUntil(
+      queueInstagramAd(env, { storeId, text: offer, tier })
+        .catch((e) => tgNotify(env, ctx, `⚠️ Could not queue the Instagram ad for ${storeId}: ${e.message}`))
+    );
+  }
+  // A promotion fulfils itself on the map, so this is mostly information —
+  // except Spotlight, whose deal-of-the-week slot and Telegram mention are
+  // arranged by hand (offer §3.2, §6.6).
+  const handWork = tier === 'spotlight'
+    ? `\n🖐 Spotlight — to do by hand during the paid period: put the store in the deal-of-the-week post, and mention it in the Telegram bot/channel.\n`
+    : '';
+  tgNotify(env, ctx,
+    (handWork ? `💸 PROMOTION PAID — live on the map, plus work for you\n\n` : `💸 PROMOTION PAID — already live, nothing to do\n\n`) +
+    `Store: ${storeId}\n` +
+    `Plan:  ${tier} · ${run ? run.days + '-day run' : cadence}\n` +
+    `Paid:  ${uah(pay.amount)}\n` +
+    (offer ? `Offer: ${offer}\n` : '') +
+    `Until: ${until}\n` +
+    handWork +
+    (offer
+      ? `\n📣 An Instagram ad is being prepared — you'll get it here to approve.`
+      : `\n📣 No Instagram ad: this purchase carried no offer line. Ask the store for one and queue it by hand (Actions → Queue an Instagram ad).`) +
+    `\n\n${storeLink(storeId)}`);
+}
+
+// Renewal: extends the placement, queues no advertisement. See the comment in
+// fulfilPromo for why.
+//
+// A LiqPay charge that renews nothing means a store is being billed for a
+// placement that no longer exists — the subscription was replaced, refunded or
+// ended here but is still alive at LiqPay. That is money to give back, so the
+// owner is told rather than the charge being dropped. Not for Stripe: the Stripe
+// account is shared with another product (Capybara), whose subscription
+// invoices reach this webhook too and are rightly matched by nothing here.
+async function renewPromo(env, ctx, subRef) {
+  if (!subRef) return;
+  const row = await env.DB.prepare('SELECT cadence FROM promos WHERE sub_id = ?').bind(subRef).first();
+  const until = addDaysStr(kyivDateStr(), PROMO_GRACE_DAYS(row && row.cadence));
+  const res = await env.DB.prepare("UPDATE promos SET until = ?, status = 'active', updated = datetime('now') WHERE sub_id = ?").bind(until, subRef).run();
+  if (!changed(res) && String(subRef).startsWith('lp_')) {
+    tgNotify(env, ctx,
+      `⚠️ A subscription was charged but matches no placement\n\n` +
+      `Subscription: ${subRef}\n\n` +
+      `The store paid for nothing. Cancel the subscription at the provider and refund this charge.`);
+  }
+}
+
+// Take a placement down now — a Stripe subscription ending at period end, or a
+// refund/chargeback.
+async function cancelPromo(env, subRef) {
+  if (!subRef) return;
+  await env.DB.prepare("UPDATE promos SET status = 'canceled', updated = datetime('now') WHERE sub_id = ?").bind(subRef).run();
+}
+
+// The subscription stopped (the store or the owner cancelled it mid-period):
+// no more renewals, but the placement keeps the time already paid for, as the
+// public offer (§8.1) promises. Detaching sub_id is what stops a later stray
+// charge from silently extending it — renewPromo would report that instead.
+async function endSubscription(env, subRef) {
+  if (!subRef) return null;
+  const row = await env.DB.prepare('SELECT store_id, until FROM promos WHERE sub_id = ?').bind(subRef).first();
+  await env.DB.prepare("UPDATE promos SET sub_id = NULL, updated = datetime('now') WHERE sub_id = ?").bind(subRef).run();
+  return row;
 }
 
 // A flash deal (see GET /flash-deal). Unlike a promo tier, a flash deal isn't
 // self-fulfilling: it only reaches the map once approved — automatically if
 // the buyer supplied a PIN on file for that store, otherwise via the owner
 // tapping the link in their Telegram notification (GET /flash-deal/approve).
-async function applyFlashDealEvent(env, ev, ctx) {
-  if (ev.type !== 'checkout.session.completed') return;
-  const o = (ev && ev.data && ev.data.object) || {};
-  const md = o.metadata || {};
-  const storeId = o.client_reference_id || md.storeId;
-  const tier = FLASH_DEAL_TIERS[md.tier];
-  if (!storeId || !tier) return;
-  const text = cleanText(readCustomField(o, 'dealText'), DEAL_MAX);
-  if (!text) return; // required field on Checkout; nothing sane to publish without it
-  const id = o.id;
+async function fulfilFlashDeal(env, ctx, pay) {
+  const { storeId, id } = pay;
+  const tier = FLASH_DEAL_TIERS[pay.tier];
+  const text = cleanText(pay.text, DEAL_MAX);
+  if (!text) return; // required at checkout; nothing sane to publish without it
   const startsAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + tier.hours * 3600000).toISOString();
 
-  const pin = clean(md.pin, 4);
+  const pin = clean(pay.pin, 4);
   const pinRow = pin ? await env.DB.prepare('SELECT pin FROM store_pins WHERE store_id = ?').bind(storeId).first() : null;
   const pinOk = !!(pinRow && pinRow.pin === pin);
 
@@ -753,7 +821,7 @@ async function applyFlashDealEvent(env, ev, ctx) {
   await env.DB.prepare(
     "INSERT INTO flash_deals (id, store_id, tier, text, alert, starts_at, expires_at, token, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now')) " +
     'ON CONFLICT(id) DO NOTHING'
-  ).bind(id, storeId, md.tier, text, tier.alert ? 1 : 0, startsAt, expiresAt, dealToken, pinOk ? 'auto' : 'pending').run();
+  ).bind(id, storeId, pay.tier, text, tier.alert ? 1 : 0, startsAt, expiresAt, dealToken, pinOk ? 'auto' : 'pending').run();
 
   const updates = { flashDeal: { text, startsAt, expiresAt, alert: tier.alert } };
   if (pinOk) {
@@ -761,7 +829,7 @@ async function applyFlashDealEvent(env, ev, ctx) {
       await dispatchMapPatch(env, storeId, updates);
       tgNotify(env, ctx,
         `⚡ FLASH DEAL PAID — auto-published (PIN verified)\n\n` +
-        `Store: ${storeId}\nText:  ${text}\nUntil: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n${storeLink(storeId)}`);
+        `Store: ${storeId}\nText:  ${text}\nUntil: ${expiresAt}\nPaid:  ${uah(pay.amount)}\n\n${storeLink(storeId)}`);
       if (tier.alert) await broadcastFlashDeal(env, ctx, storeId, text, expiresAt);
     } catch (e) {
       tgNotify(env, ctx, `⚠️ Flash deal for ${storeId} was PIN-verified but failed to dispatch — check the map-update workflow logs.\n\n${storeLink(storeId)}`);
@@ -787,9 +855,454 @@ async function applyFlashDealEvent(env, ev, ctx) {
   const approveLink = `${WORKER_URL}/flash-deal/approve?id=${encodeURIComponent(id)}&t=${encodeURIComponent(dealToken)}`;
   tgNotify(env, ctx,
     `⚡ FLASH DEAL PAID — needs your review before it goes live\n\n` +
-    `Store: ${storeId}\nTier:  ${tier.label}\nText:  ${text}\nWould run until: ${expiresAt}\nPaid:  ${uah(o.amount_total)}\n\n` +
+    `Store: ${storeId}\nTier:  ${tier.label}\nText:  ${text}\nWould run until: ${expiresAt}\nPaid:  ${uah(pay.amount)}\n\n` +
     `Tap to approve & publish:\n${approveLink}\n\n` +
     `${storeLink(storeId)}`);
+}
+
+// ── Stripe adapter ───────────────────────────────────────────────────────────
+// A completed Checkout Session → a normalised payment, or null when it is not
+// one of ours. Metadata is validated here, once, because it could have been set
+// by any caller holding the key, not just our own /promote, /order and
+// /flash-deal.
+function stripePayment(o) {
+  const md = o.metadata || {};
+  const storeId = o.client_reference_id || md.storeId;
+  if (!storeId) return null;
+  const base = {
+    id: o.id, provider: 'stripe', storeId,
+    amount: o.amount_total == null ? null : o.amount_total,
+    currency: o.currency || null,
+    email: (o.customer_details && o.customer_details.email) || null,
+  };
+  if (md.kind === 'flashDeal') {
+    if (!FLASH_DEAL_TIERS[md.tier]) return null;
+    return { ...base, kind: 'flashDeal', tier: md.tier, pin: md.pin || null, text: readCustomField(o, 'dealText') };
+  }
+  if (md.item) {
+    if (!ORDER_ITEMS[md.item]) return null;
+    return { ...base, kind: 'order', item: md.item, text: readCustomField(o, 'note') || md.note || '' };
+  }
+  if (!PROMO_TIERS.has(md.tier)) return null;
+  return {
+    ...base, kind: 'promo', tier: md.tier, cadence: md.cadence,
+    text: readCustomField(o, 'offer') || md.offer || '',
+    subRef: o.subscription || null, custRef: o.customer || null,
+  };
+}
+
+// Apply a verified Stripe event: a purchase, a renewal, or a cancellation.
+async function applyStripeEvent(env, ev, ctx) {
+  const o = (ev && ev.data && ev.data.object) || {};
+  const type = ev && ev.type;
+  if (type === 'checkout.session.completed') {
+    const pay = stripePayment(o);
+    if (!pay) {
+      // Not one of the Worker's own checkouts. Most are the other product on
+      // this shared Stripe account (Capybara, charged in USD) and are none of
+      // our business. A paid one in hryvnias, though, can only be one of this
+      // site's old Payment Links, which are still live at Stripe but no longer
+      // offered anywhere: someone paid and nothing was delivered.
+      if (String(o.currency || '').toLowerCase() === 'uah' && o.payment_status === 'paid') {
+        tgNotify(env, ctx,
+          `⚠️ A STRIPE PAYMENT ARRIVED THROUGH AN OLD PAYMENT LINK\n\n` +
+          `Paid:  ${uah(o.amount_total)}\nEmail: ${(o.customer_details && o.customer_details.email) || '—'}\nSession: ${o.id}\n\n` +
+          `The site no longer sells through Stripe, so nothing was delivered. Arrange it by hand, or refund it in the Stripe dashboard.`);
+      }
+      return;
+    }
+    const claimed = await claimPayment(env, pay);
+    if (claimed) await fulfilOnce(env, ctx, claimed);
+  } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
+    // From API version 2025-03-31.basil the invoice no longer carries
+    // `subscription`; it moved to parent.subscription_details.subscription.
+    // Which shape arrives depends on the webhook endpoint's API version, so
+    // read both — reading only the old one renewed nothing on a newer endpoint.
+    const sd = o.parent && o.parent.subscription_details;
+    await renewPromo(env, ctx, o.subscription || (sd && sd.subscription));
+  } else if (type === 'customer.subscription.deleted' ||
+             (type === 'customer.subscription.updated' && ['canceled', 'unpaid', 'incomplete_expired'].includes(o.status))) {
+    await cancelPromo(env, o.id);
+  }
+}
+
+// ── LiqPay adapter (PrivatBank) ──────────────────────────────────────────────
+// The second provider behind fulfil(). Off until PAY_PROVIDER = "liqpay" and
+// both keys are set; until then every checkout goes to Stripe exactly as before.
+// See docs/FOP.md §3.
+//
+// LiqPay differs from Stripe in three ways that shape this code:
+//   · Its checkout cannot collect free text, so the offer line, flash-deal text
+//     and contact email are collected in the app and held in a 'created'
+//     payments row. Only the paid callback flips that row, so — as with Stripe
+//     — nothing the buyer wrote is published until money has moved.
+//   · Its checkout is a signed form POST, not a URL, so the routes answer with
+//     a tiny page that submits that form for the buyer.
+//   · Amounts are hryvnias, not kopiyky. Kopiyky stay the unit everywhere
+//     else; conversion happens only at the boundary, in this block.
+const LIQPAY_CHECKOUT_URL = 'https://www.liqpay.ua/api/3/checkout';
+const liqpayKeys = (env) => !!(env.LIQPAY_PUBLIC_KEY && env.LIQPAY_PRIVATE_KEY);
+// The site sells through LiqPay only. Stripe is no longer used for new
+// checkouts (docs/STRIPE_RETIREMENT.md): with PAY_PROVIDER unset, or the keys
+// missing, there is simply no card checkout ('none') and the app hides the buy
+// buttons — sales go by bank-transfer invoice. The Stripe webhook still runs.
+const payProvider = (env) => (env.PAY_PROVIDER === 'liqpay' && liqpayKeys(env) ? 'liqpay' : 'none');
+// Sandbox keys pay with LiqPay's public test cards. A sandbox payment proves the
+// signing, the callback and the ledger, and is announced to the owner as a test —
+// but it never publishes anything (see applyLiqpayCallback), because the test
+// card numbers are public: on a live site anyone could otherwise buy a real
+// placement with them. For the same reason the app is not offered checkout
+// while the keys are sandbox keys; the owner tests by opening the purchase
+// links directly (docs/FOP.md §3.8).
+const liqpaySandbox = (env) => String(env.LIQPAY_PUBLIC_KEY || '').startsWith('sandbox_');
+const checkoutReady = (env) => payProvider(env) === 'liqpay' && !liqpaySandbox(env);
+
+function b64Utf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+function utf8FromB64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+// LiqPay's signature: base64(sha1(private_key + data + private_key)).
+async function liqpaySign(privateKey, data) {
+  const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(privateKey + data + privateKey));
+  let bin = '';
+  for (const b of new Uint8Array(digest)) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+const liqpayLang = (v) => (v === 'en' ? 'en' : 'uk');
+// "YYYY-MM-DD HH:MM:SS" in UTC, the format subscribe_date_start takes.
+const liqpayNow = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+const TIER_LABEL = { verified: 'Verified+', featured: 'Featured', spotlight: 'Spotlight' };
+const CADENCE_LABEL = { monthly: 'місяць', annual: 'рік', run1: '1 день', run7: '7 днів', run30: '30 днів' };
+
+// Prepare the payment and answer with the page that hands the buyer to LiqPay.
+// `intent` is a normalised payment minus what only the provider can know.
+async function liqpayCheckout(env, intent, { lang, returnTo, description, subscribe }) {
+  await ensureSchema(env);
+  const id = 'lp_' + crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+  const meta = {};
+  for (const k of INTENT_KEYS) if (intent[k] != null) meta[k] = intent[k];
+  await env.DB.prepare(
+    "INSERT INTO payments (id, provider, kind, store_id, intent, text, amount, email, status) VALUES (?, 'liqpay', ?, ?, ?, ?, ?, ?, 'created')"
+  ).bind(id, intent.kind, intent.storeId, JSON.stringify(meta), intent.text || null, intent.amount, intent.email || null).run();
+
+  const params = {
+    version: 3,
+    public_key: env.LIQPAY_PUBLIC_KEY,
+    action: subscribe ? 'subscribe' : 'pay',
+    amount: intent.amount / 100,
+    currency: 'UAH',
+    description,
+    order_id: id,
+    language: liqpayLang(lang),
+    result_url: `${WORKER_URL}/liqpay-return?id=${encodeURIComponent(id)}&to=${encodeURIComponent(returnTo)}`,
+    server_url: `${WORKER_URL}/liqpay-callback`,
+  };
+  if (subscribe) {
+    params.subscribe_date_start = liqpayNow();
+    params.subscribe_periodicity = subscribe; // 'month' | 'year'
+  }
+  const data = b64Utf8(JSON.stringify(params));
+  const signature = await liqpaySign(env.LIQPAY_PRIVATE_KEY, data);
+  // data and signature are base64, so they are safe inside an attribute as-is.
+  //
+  // A confirmation step, not an auto-submit: the text and email ride on the
+  // checkout link, and LiqPay's own page shows neither, so this is the one
+  // place the payer sees what will be published under their store and where
+  // the receipt goes — before paying, whoever wrote the link.
+  const ua = liqpayLang(lang) === 'uk';
+  const line = (label, value) => `<div class="row"><span>${label}</span><b>${htmlEsc(value)}</b></div>`;
+  const html = `<!doctype html><html lang="${ua ? 'uk' : 'en'}"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">` +
+    `<title>${ua ? 'Перевірте замовлення' : 'Check your order'}</title>` +
+    `<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f2f4f6;color:#1a1a2e;margin:0;padding:24px 16px}` +
+    `main{max-width:460px;margin:0 auto;background:#fff;border-radius:16px;padding:20px;border:1px solid #e5e7eb}` +
+    `h1{font-size:19px;margin:0 0 14px}.row{display:flex;flex-direction:column;gap:2px;margin:0 0 12px}.row span{color:#6b7280;font-size:13px}` +
+    `.row b{overflow-wrap:anywhere}.note{color:#6b7280;font-size:13px;margin:14px 0}` +
+    `button{width:100%;background:#1b5e38;color:#fff;border:0;border-radius:12px;padding:14px 22px;font-size:16px;font-weight:700;cursor:pointer}</style></head><body><main>` +
+    `<h1>${ua ? 'Перевірте замовлення' : 'Check your order'}</h1>` +
+    line(ua ? 'Послуга' : 'Service', description) +
+    line(ua ? 'До сплати' : 'Amount', `₴${(intent.amount / 100).toLocaleString('uk-UA')}${subscribe ? (ua ? (subscribe === 'year' ? ' / рік' : ' / місяць') : (subscribe === 'year' ? ' / year' : ' / month')) : ''}`) +
+    (intent.text ? line(ua ? 'Текст, який побачать покупці після оплати' : 'Text shoppers will see once paid', intent.text) : '') +
+    (intent.email ? line(ua ? 'Email для чека і звʼязку' : 'Email for the receipt and contact', intent.email) : '') +
+    `<p class="note">${ua ? 'Якщо щось не так — закрийте цю сторінку і змініть дані в застосунку. ' : 'If anything is wrong, close this page and change it in the app. '}` +
+    `<a href="${APP_URL}offer.html">${ua ? 'Умови (публічна оферта)' : 'Terms of sale'}</a></p>` +
+    `<form method="POST" action="${LIQPAY_CHECKOUT_URL}" accept-charset="utf-8">` +
+    `<input type="hidden" name="data" value="${data}"><input type="hidden" name="signature" value="${signature}">` +
+    `<button type="submit">${ua ? 'Оплатити через LiqPay' : 'Pay with LiqPay'}</button></form></main></body></html>`;
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+}
+
+// A verified LiqPay callback. Every successful charge — the first one and each
+// later subscription charge — carries its own payment_id, and each is recorded
+// in the ledger under it, so a redelivered callback does nothing twice. The
+// first charge fulfils the prepared payment; any later charge on a paid
+// subscription renews it.
+async function applyLiqpayCallback(env, ctx, d) {
+  const id = String(d.order_id || '');
+  if (!id) return;
+  const row = await env.DB.prepare("SELECT * FROM payments WHERE id = ? AND provider = 'liqpay'").bind(id).first();
+  if (!row) return; // not a checkout we prepared
+  let intent = {};
+  try { intent = JSON.parse(row.intent || '{}'); } catch {}
+  const status = String(d.status || '');
+  const isSub = row.kind === 'promo' && (intent.cadence === 'monthly' || intent.cadence === 'annual');
+
+  const what = `${row.kind}${intent.tier ? ' · ' + intent.tier : ''}${intent.cadence ? ' · ' + intent.cadence : ''}${intent.item ? ' · ' + intent.item : ''}`;
+
+  if (status === 'failure' || status === 'error') {
+    // Declined. Recoverable: the buyer may try again on the same checkout, and
+    // a later success on this order still fulfils (claimPayment takes 'failed').
+    // Once a subscription is already paid, a failed charge is a failed renewal:
+    // tell the owner, since the placement will lapse at `until` if none follows.
+    if (row.status === 'paid' && isSub) {
+      tgNotify(env, ctx, `⚠️ A LiqPay subscription renewal failed\n\nStore: ${row.store_id}\nWhat:  ${what}\nOrder: ${id}\n\nThe placement lapses at its current end date unless a later charge succeeds.\n\n${storeLink(row.store_id)}`);
+    } else {
+      await env.DB.prepare("UPDATE payments SET status = 'failed' WHERE id = ? AND status = 'created'").bind(id).run();
+    }
+    return;
+  }
+  if (status === 'unsubscribed') {
+    // Cancelled mid-period — by the store or in the LiqPay dashboard. It keeps
+    // the time already paid for (offer §8.1); it just stops renewing.
+    if (isSub) {
+      const p = await endSubscription(env, id);
+      tgNotify(env, ctx, `🛑 LiqPay subscription cancelled\n\nStore: ${row.store_id}\nWhat:  ${what}\nOrder: ${id}\n\n` +
+        (p ? `No more renewals. The placement stays until ${p.until}, as already paid for.` : 'No placement was attached to it.') + `\n\n${storeLink(row.store_id)}`);
+    }
+    return;
+  }
+  if (status === 'reversed') {
+    // A refund or chargeback. A subscription's placement comes down and is
+    // detached, so a later charge cannot silently re-activate it — but the
+    // subscription itself is still alive at LiqPay until it is cancelled
+    // there, and that is the owner's to do.
+    if (isSub) { await cancelPromo(env, id); await endSubscription(env, id); }
+    tgNotify(env, ctx,
+      `↩️ PAYMENT REVERSED (refund or chargeback)\n\n` +
+      `Store: ${row.store_id}\nWhat:  ${what}\nOrder: ${id}\n\n` +
+      (isSub
+        ? `The placement has been taken down. The subscription is still active at LiqPay — cancel order ${id} in the LiqPay dashboard, or the store will be charged again.`
+        : 'Check whether the placement or deal should be taken down.') +
+      `\n\n${storeLink(row.store_id)}`);
+    return;
+  }
+  if (status === 'wait_accept') {
+    // The buyer's money is held but the shop is not activated yet; LiqPay
+    // returns it if the shop is not activated in time. Nothing to deliver
+    // until it settles — but the owner needs to know a buyer is waiting.
+    tgNotify(env, ctx, `⏳ LiqPay is holding a payment: the shop is not activated yet\n\nStore: ${row.store_id}\nWhat:  ${what}\nOrder: ${id}\n\nFinish the shop activation in LiqPay; the purchase is delivered when the payment settles.`);
+    return;
+  }
+  // 'wait_compensation' is a successful payment that LiqPay pays out in its
+  // daily settlement rather than at once — paid, from the buyer's side.
+  const sandbox = liqpaySandbox(env);
+  const paid = sandbox
+    ? status === 'sandbox' || status === 'success' || status === 'subscribed'
+    : status === 'success' || status === 'subscribed' || status === 'wait_compensation';
+  if (!paid) return; // processing, 3-D Secure and the like: a final status follows
+
+  const amount = d.amount == null ? null : Math.round(Number(d.amount) * 100);
+  // Every successful charge is recorded under its own payment_id. This is what
+  // makes a redelivered callback, or LiqPay's second notice for the same
+  // charge, do nothing twice.
+  const chargeId = `lp_pay_${d.payment_id || id}`;
+  const charge = await claimPayment(env, {
+    id: chargeId, provider: 'liqpay', kind: 'charge', storeId: row.store_id, amount,
+  });
+
+  if (row.status !== 'paid') {
+    // The first successful charge on this checkout — or a retry after a
+    // decline or a failed delivery, which is why the charge record above is
+    // not consulted here: claimPayment's own transition is the guard.
+    const claimed = await claimPayment(env, { id, provider: 'liqpay', amount, subRef: isSub ? id : null });
+    if (!claimed) return;
+    if (sandbox) {
+      tgNotify(env, ctx, `🧪 LiqPay SANDBOX payment received — nothing was published\n\nStore: ${row.store_id}\nWhat:  ${what}\nPaid:  ${uah(amount)} (test)\nOrder: ${id}\n\nSigning, callback and ledger work. Switch to the live keys to sell.`);
+      return;
+    }
+    await fulfilOnce(env, ctx, claimed);
+  } else if (charge && isSub && !sandbox) {
+    // The charge is already recorded as handled, so if the renewal throws it
+    // must be put back where the redelivery can claim it again — otherwise the
+    // retry finds it handled, renews nothing, and the store has paid for a
+    // month the placement never gets.
+    try {
+      await renewPromo(env, ctx, id);
+    } catch (e) {
+      try { await env.DB.prepare("UPDATE payments SET status = 'fulfil_failed' WHERE id = ?").bind(chargeId).run(); } catch {}
+      tgNotify(env, ctx,
+        `⚠️ A LiqPay renewal was paid but not applied — will retry\n\nStore: ${row.store_id}\nOrder: ${id}\n` +
+        `Error: ${String((e && e.message) || e).slice(0, 200)}\n\nLiqPay will redeliver it. If this repeats, extend the placement by hand.`);
+      throw e;
+    }
+  }
+}
+
+// ── Invoices: payment by bank transfer (рахунок + акт) ───────────────────────
+// For a store that would rather pay as a business than by card — most are a
+// ФОП themselves and expense the placement. See docs/FOP.md §5.
+//
+// The owner creates an invoice from the bot (/invoice), sends the store the
+// link, and marks it paid (/paid) once the transfer shows in the bank. Marking
+// it paid goes through the same claimPayment() → fulfil() as a card payment,
+// so the placement, the owner's ping and the Instagram queue behave the same.
+// The invoice is a 'created' payments row with provider 'invoice'; the page is
+// rendered from that row and the seller details in [vars], and opened by a
+// per-invoice token, like the flash-deal approval link.
+const SELLER_FIELDS = ['SELLER_NAME', 'SELLER_TAX_ID', 'SELLER_ADDRESS', 'SELLER_IBAN', 'SELLER_TAX_STATUS'];
+const missingSeller = (env) => SELLER_FIELDS.filter((k) => !String(env[k] || '').trim());
+
+// What an invoice is for, priced from the same constants the checkouts use.
+function invoiceLine(tier, cadence, item) {
+  if (item) {
+    const it = ORDER_ITEMS[item];
+    return it ? { kind: 'order', item, amount: it.amount, title: INVOICE_ITEM_TITLES[item] } : null;
+  }
+  if (!PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) return null;
+  const run = PROMO_RUNS[`${tier}_${cadence}`];
+  const amount = run ? run.amount : PROMO_AMOUNTS[`${tier}_${cadence}`];
+  if (!amount) return null;
+  return { kind: 'promo', tier, cadence, amount, title: `Рекламне розміщення «${TIER_LABEL[tier]}» у застосунку Lviv Second Hand, ${CADENCE_LABEL[cadence]}` };
+}
+const INVOICE_ITEM_TITLES = {
+  deal: 'Рекламна послуга «Пропозиція тижня» у застосунку Lviv Second Hand',
+  poster: 'Виготовлення та розміщення QR-плаката в магазині',
+  push: 'Спонсороване сповіщення в застосунку Lviv Second Hand',
+};
+
+// Hryvnias in words, as a Ukrainian invoice states the total. Covers up to
+// 999 999 ₴, far above any price on the rate card.
+function uahWords(kop) {
+  const n = Math.floor(kop / 100), k = kop % 100;
+  const ones = ['', 'один', 'два', 'три', 'чотири', 'пʼять', 'шість', 'сім', 'вісім', 'девʼять'];
+  const onesF = ['', 'одна', 'дві', 'три', 'чотири', 'пʼять', 'шість', 'сім', 'вісім', 'девʼять'];
+  const teens = ['десять', 'одинадцять', 'дванадцять', 'тринадцять', 'чотирнадцять', 'пʼятнадцять', 'шістнадцять', 'сімнадцять', 'вісімнадцять', 'девʼятнадцять'];
+  const tens = ['', '', 'двадцять', 'тридцять', 'сорок', 'пʼятдесят', 'шістдесят', 'сімдесят', 'вісімдесят', 'девʼяносто'];
+  const hundreds = ['', 'сто', 'двісті', 'триста', 'чотириста', 'пʼятсот', 'шістсот', 'сімсот', 'вісімсот', 'девʼятсот'];
+  const form = (x, f1, f2, f5) => { const t = x % 100, o = x % 10; if (t >= 11 && t <= 14) return f5; if (o === 1) return f1; if (o >= 2 && o <= 4) return f2; return f5; };
+  const triad = (x, fem) => {
+    const w = [hundreds[Math.floor(x / 100)]];
+    const t = x % 100;
+    if (t >= 10 && t < 20) w.push(teens[t - 10]);
+    else { w.push(tens[Math.floor(t / 10)]); w.push((fem ? onesF : ones)[t % 10]); }
+    return w.filter(Boolean).join(' ');
+  };
+  const parts = [];
+  const th = Math.floor(n / 1000), rest = n % 1000;
+  if (th) parts.push(triad(th, true), form(th, 'тисяча', 'тисячі', 'тисяч'));
+  if (rest || !th) parts.push(rest ? triad(rest, true) : 'нуль');
+  parts.push(form(n, 'гривня', 'гривні', 'гривень'));
+  const words = parts.filter(Boolean).join(' ');
+  return words.charAt(0).toUpperCase() + words.slice(1) + ` ${String(k).padStart(2, '0')} ${form(k, 'копійка', 'копійки', 'копійок')}`;
+}
+
+const htmlEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const kyivDateOf = (utc) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Kyiv' }).format(new Date(String(utc).replace(' ', 'T') + 'Z'));
+const uaDate = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}.${m}.${y}`; };
+const uahPlain = (kop) => (kop / 100).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function createInvoice(env, { storeId, tier, cadence, item, buyer }) {
+  const line = invoiceLine(tier, cadence, item);
+  if (!line) return { ok: false, reason: 'unknown_plan' };
+  const missing = missingSeller(env);
+  if (missing.length) return { ok: false, reason: 'seller_not_configured', missing };
+  await ensureSchema(env);
+  const year = kyivDateStr().slice(0, 4);
+  const token = newToken();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM payments WHERE provider = 'invoice' AND id LIKE ?").bind(`inv-${year}-%`).first();
+    // Re-read on every attempt: a row that won a race is already in the count,
+    // so adding the attempt number too would skip a number.
+    const number = `${year}-${String(((c && c.n) || 0) + 1).padStart(3, '0')}`;
+    const id = `inv-${number}`;
+    const intent = { tier: line.tier, cadence: line.cadence, item: line.item, number, token, title: line.title, buyer: cleanText(buyer, 160) || `Магазин ${storeId}`, issued: kyivDateStr() };
+    const res = await env.DB.prepare(
+      "INSERT INTO payments (id, provider, kind, store_id, intent, amount, status) VALUES (?, 'invoice', ?, ?, ?, ?, 'created') ON CONFLICT(id) DO NOTHING"
+    ).bind(id, line.kind, storeId, JSON.stringify(intent), line.amount).run();
+    if (changed(res)) {
+      const url = `${WORKER_URL}/invoice?id=${encodeURIComponent(id)}&t=${token}`;
+      return { ok: true, id, number, amount: line.amount, title: line.title, url, actUrl: url + '&doc=act', purpose: invoicePurpose(number, intent.issued) };
+    }
+  }
+  return { ok: false, reason: 'number_clash' };
+}
+const invoicePurpose = (number, issued) => `Оплата за рекламні послуги згідно з рахунком № ${number} від ${uaDate(issued)}, без ПДВ`;
+
+// The bot's /paid. Accepts the number as printed ("2026-001") or the id.
+async function markInvoicePaid(env, ctx, ref) {
+  const id = String(ref || '').startsWith('inv-') ? String(ref) : `inv-${ref}`;
+  await ensureSchema(env);
+  const row = await env.DB.prepare("SELECT status FROM payments WHERE id = ? AND provider = 'invoice'").bind(id).first();
+  if (!row) return { ok: false, reason: 'unknown_invoice' };
+  const claimed = await claimPayment(env, { id, provider: 'invoice' });
+  if (!claimed) return { ok: true, state: 'already_paid', id };
+  try {
+    await fulfilOnce(env, ctx, claimed);
+  } catch {
+    return { ok: false, reason: 'fulfil_failed', id };
+  }
+  return { ok: true, state: 'fulfilled', id };
+}
+
+function renderInvoice(env, row, doc) {
+  let it = {};
+  try { it = JSON.parse(row.intent || '{}'); } catch {}
+  const act = doc === 'act';
+  // payments.paid is UTC (datetime('now')); the invoice is dated in Kyiv time,
+  // so the act is too — otherwise an invoice paid just after Kyiv midnight
+  // would get an act dated the day before.
+  const date = act ? (row.paid ? kyivDateOf(row.paid) : kyivDateStr()) : it.issued;
+  const title = act ? `Акт надання послуг № ${it.number}` : `Рахунок на оплату № ${it.number}`;
+  const amount = row.amount;
+  const seller = [
+    `<b>${htmlEsc(env.SELLER_NAME)}</b>`,
+    `РНОКПП ${htmlEsc(env.SELLER_TAX_ID)}`,
+    htmlEsc(env.SELLER_ADDRESS),
+    `IBAN ${htmlEsc(env.SELLER_IBAN)}, ${htmlEsc(env.SELLER_BANK || 'АТ КБ «ПриватБанк»')}`,
+    htmlEsc(env.SELLER_TAX_STATUS),
+  ].join('<br>');
+  const body = act
+    ? `<p>Ми, що нижче підписалися, Виконавець і Замовник, склали цей акт про те, що Виконавець надав, а Замовник прийняв такі послуги:</p>`
+    : '';
+  const tail = act
+    ? `<p>Послуги надано в повному обсязі та в строк. Сторони претензій одна до одної не мають.</p>
+       <div class="sign"><div>Виконавець<br><br>_______________ ${htmlEsc(env.SELLER_NAME)}</div><div>Замовник<br><br>_______________</div></div>`
+    : `<p><b>Призначення платежу:</b> ${htmlEsc(invoicePurpose(it.number, it.issued))}</p>
+       <p class="muted">Рахунок дійсний протягом 5 банківських днів. Оплата цього рахунку означає згоду з умовами <a href="${APP_URL}offer.html">публічної оферти</a>. Послуга починає надаватися після зарахування коштів.</p>
+       <div class="sign"><div>Виконавець<br><br>_______________ ${htmlEsc(env.SELLER_NAME)}</div></div>`;
+  return `<!doctype html><html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>${htmlEsc(title)} — Lviv Second Hand</title>
+<style>
+ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a2e;background:#fff;margin:0;padding:24px 16px;font-size:15px;line-height:1.5}
+ main{max-width:760px;margin:0 auto} h1{font-size:20px;margin:0 0 4px} .muted{color:#6b7280;font-size:13px}
+ .parties{display:grid;grid-template-columns:max-content 1fr;gap:10px 16px;margin:18px 0}
+ .parties dt{font-weight:700} .parties dd{margin:0;overflow-wrap:anywhere}
+ table{border-collapse:collapse;width:100%;margin:12px 0} th,td{border:1px solid #d1d5db;padding:6px 8px;text-align:left;vertical-align:top}
+ td.n{text-align:right;white-space:nowrap} th{background:#f3f4f6}
+ .total{text-align:right;margin:6px 0 14px} .sign{display:flex;gap:40px;flex-wrap:wrap;margin-top:28px}
+ .print{margin:18px 0;background:#1b5e38;color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:700}
+ @media (max-width:520px){.parties{grid-template-columns:1fr;gap:2px}.parties dd{margin-bottom:8px}}
+ @media print{.print{display:none} body{padding:0}}
+</style></head><body><main>
+<h1>${htmlEsc(title)}</h1><div class="muted">від ${uaDate(date)}</div>
+${body}
+<dl class="parties"><dt>${act ? 'Виконавець' : 'Постачальник'}</dt><dd>${seller}</dd><dt>${act ? 'Замовник' : 'Покупець'}</dt><dd>${htmlEsc(it.buyer)}</dd></dl>
+<table><thead><tr><th>№</th><th>Найменування послуги</th><th>К-сть</th><th>Ціна, ₴</th><th>Сума, ₴</th></tr></thead>
+<tbody><tr><td>1</td><td>${htmlEsc(it.title)}</td><td class="n">1</td><td class="n">${uahPlain(amount)}</td><td class="n">${uahPlain(amount)}</td></tr></tbody></table>
+<div class="total"><b>Разом: ${uahPlain(amount)} ₴</b>, без ПДВ</div>
+<p>Всього на суму: <b>${htmlEsc(uahWords(amount))}</b>, без ПДВ.</p>
+${tail}
+<button class="print" onclick="print()">Друкувати / зберегти PDF</button>
+</main></body></html>`;
 }
 
 // Pings every Telegram chat following this store (store_subs — see /api/sub)
@@ -1086,7 +1599,7 @@ async function createGithubIssue(env, title, body, labels) {
 }
 
 // A store's PIN lets its owner's future flash-deal purchase publish without
-// waiting on manual review (see applyFlashDealEvent). Four digits, uniform —
+// waiting on manual review (see fulfilFlashDeal). Four digits, uniform —
 // crypto.getRandomValues modulo 10000 is fine here because 2^32 is not a
 // multiple of 10000 only by a negligible bias at this size, and the PIN is a
 // convenience gate, not a credential protecting money.
@@ -1403,11 +1916,45 @@ export default {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin') || '';
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
+    // ── LiqPay: where the buyer lands after paying ──
+    // Before the method split because LiqPay may send the buyer back with either
+    // a GET or a form POST. It only chooses which "thanks" screen the app shows:
+    // the callback below is what fulfils, and it often arrives a moment after
+    // the buyer does, so an unfinished payment still gets the thanks screen
+    // (which already says it may take a moment) — only a known failure doesn't.
+    if (url.pathname === '/liqpay-return') {
+      const id = url.searchParams.get('id') || '';
+      const to = url.searchParams.get('to') || '';
+      const m = /^(promoted|flashdeal|ordered)=([a-z0-9_]{1,16})$/.exec(to);
+      if (!m) return Response.redirect(APP_URL, 302);
+      let failed = false;
+      try {
+        await ensureSchema(env);
+        const row = await env.DB.prepare("SELECT status FROM payments WHERE id = ? AND provider = 'liqpay'").bind(id).first();
+        failed = !row || row.status === 'failed';
+      } catch {}
+      return Response.redirect(`${APP_URL}?${m[1]}=${failed ? 'cancel' : m[2]}`, 302);
+    }
     if (request.method === 'GET') {
+      // A bank-transfer invoice, or its act once paid (?doc=act). Opened by the
+      // invoice's own token; a wrong token and an unknown id are the same 404.
+      if (url.pathname === '/invoice') {
+        const id = url.searchParams.get('id') || '';
+        const t = url.searchParams.get('t') || '';
+        const doc = url.searchParams.get('doc') === 'act' ? 'act' : 'invoice';
+        if (!id || !t) return new Response('not found', { status: 404 });
+        await ensureSchema(env);
+        const row = await env.DB.prepare("SELECT * FROM payments WHERE id = ? AND provider = 'invoice'").bind(id).first();
+        let tok = '';
+        try { tok = JSON.parse((row && row.intent) || '{}').token || ''; } catch {}
+        if (!row || !tok || !safeEqual(t, tok)) return new Response('not found', { status: 404 });
+        if (doc === 'act' && row.status !== 'paid') return new Response('Акт буде доступний після оплати рахунку. · The act is available once the invoice is paid.', { status: 409, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+        return new Response(renderInvoice(env, row, doc), { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+      }
       if (url.pathname === '/status') {
         let subs = null;
         try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
-        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: !!env.STRIPE_API_KEY, portal: portalReadyCached(env, ctx) }, 200, origin);
+        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: checkoutReady(env), provider: payProvider(env) }, 200, origin);
       }
       // Live paid promotions: { storeId: {tier, offer?, until} }. The app merges
       // these onto STORES so the gold pin/badge/offer render automatically.
@@ -1419,7 +1966,9 @@ export default {
           for (const r of (res && res.results) || []) {
             const p = { tier: r.tier, until: r.until };
             if (r.offer) p.offer = r.offer;
-            if (r.cust_id) p.manage = true; // app shows "Manage billing" only when a portal is reachable
+            // "Manage billing" opens Stripe's portal, which needs the Stripe key;
+            // without it the link would only reach a 503.
+            if (r.cust_id && env.STRIPE_API_KEY) p.manage = true;
             out[r.store_id] = p;
           }
           return json(out, 200, origin);
@@ -1462,95 +2011,42 @@ export default {
         const store = url.searchParams.get('store') || '';
         const tier = url.searchParams.get('tier') || 'featured';
         const cadence = url.searchParams.get('cadence') || 'monthly';
-        const loc = stripeLocale(url.searchParams.get('lang'));
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
         const run = isRun(cadence) ? PROMO_RUNS[`${tier}_${cadence}`] : null;
-        const price = run ? null : PROMO_PRICES[`${tier}_${cadence}`];
-        if (!run && !price) return new Response('unknown tier', { status: 400, headers: cors(origin) });
-        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
-        const form = new URLSearchParams();
-        form.set('mode', run ? 'payment' : 'subscription');
-        if (run) {
-          // Inline price against the tier's existing Product — one-off, nothing recurring.
-          form.set('line_items[0][price_data][currency]', 'uah');
-          form.set('line_items[0][price_data][product]', TIER_PRODUCTS[tier]);
-          form.set('line_items[0][price_data][unit_amount]', String(run.amount));
-        } else {
-          form.set('line_items[0][price]', price);
-        }
-        form.set('line_items[0][quantity]', '1');
-        form.set('allow_promotion_codes', 'true');
-        form.set('locale', loc);
-        // The offer line is asked for on the payment page itself, so only a buyer
-        // who got that far can write one, and only a completed payment publishes it.
-        addCustomField(form, OFFER_FIELD, loc);
-        form.set('client_reference_id', store);
-        form.set('metadata[storeId]', store);
-        form.set('metadata[tier]', tier);
-        form.set('metadata[cadence]', cadence);
-        if (!run) {
-          form.set('subscription_data[metadata][storeId]', store);
-          form.set('subscription_data[metadata][tier]', tier);
-          form.set('subscription_data[metadata][cadence]', cadence);
-        }
-        form.set('success_url', APP_URL + '?promoted=' + encodeURIComponent(tier));
-        form.set('cancel_url', APP_URL + '?promoted=cancel');
-        let data;
-        try {
-          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form,
-          });
-          data = await res.json();
-          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
-        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
-        return Response.redirect(data.url, 302);
+        const amount = run ? run.amount : PROMO_AMOUNTS[`${tier}_${cadence}`];
+        if (!amount) return new Response('unknown tier', { status: 400, headers: cors(origin) });
+        if (payProvider(env) !== 'liqpay') return new Response('checkout not available', { status: 503, headers: cors(origin) });
+        return liqpayCheckout(env, {
+          kind: 'promo', storeId: store, tier, cadence, amount,
+          text: cleanOffer(url.searchParams.get('text')), email: cleanEmail(url.searchParams.get('email')),
+        }, {
+          lang: url.searchParams.get('lang'), returnTo: 'promoted=' + tier,
+          description: `Lviv Second Hand — ${TIER_LABEL[tier]}, ${CADENCE_LABEL[cadence]} — магазин ${store}`,
+          subscribe: run ? null : (cadence === 'annual' ? 'year' : 'month'),
+        });
       }
-      // Flash deal: /flash-deal?store=<id>&tier=3h|24h|24h_alert&pin=<optional 4-digit>.
-      // A one-off, short-lived sale — no pre-created Stripe object at all (unlike
-      // /promote's runs, which still reference an existing Product): the deal
-      // text is required at checkout (the paywall — never collected in the app
-      // itself), and a matching PIN publishes it immediately instead of waiting
-      // on the owner. See applyFlashDealEvent().
+      // Flash deal: /flash-deal?store=<id>&tier=3h|24h|24h_alert&pin=<optional 4-digit>&text=…
+      // A one-off, short-lived sale. The deal text is required up front and held
+      // with the prepared payment, so only a completed payment publishes it; a
+      // matching PIN publishes it immediately instead of waiting on the owner.
+      // See fulfilFlashDeal().
       if (url.pathname === '/flash-deal') {
         const store = url.searchParams.get('store') || '';
         const tierKey = url.searchParams.get('tier') || '';
         const pin = clean(url.searchParams.get('pin'), 4);
-        const loc = stripeLocale(url.searchParams.get('lang'));
         const tier = FLASH_DEAL_TIERS[tierKey];
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !tier) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
-        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
-        const form = new URLSearchParams();
-        form.set('mode', 'payment');
-        form.set('line_items[0][price_data][currency]', 'uah');
-        form.set('line_items[0][price_data][unit_amount]', String(tier.amount));
-        form.set('line_items[0][price_data][product_data][name]', tier.label);
-        form.set('line_items[0][quantity]', '1');
-        form.set('locale', loc);
-        addCustomField(form, DEAL_TEXT_FIELD, loc, { required: true, max: DEAL_MAX });
-        form.set('client_reference_id', store);
-        form.set('metadata[kind]', 'flashDeal');
-        form.set('metadata[storeId]', store);
-        form.set('metadata[tier]', tierKey);
-        if (pin) form.set('metadata[pin]', pin);
-        form.set('success_url', APP_URL + '?flashdeal=' + encodeURIComponent(tierKey));
-        form.set('cancel_url', APP_URL + '?flashdeal=cancel');
-        let data;
-        try {
-          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form,
-          });
-          data = await res.json();
-          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
-        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
-        return Response.redirect(data.url, 302);
+        if (payProvider(env) !== 'liqpay') return new Response('checkout not available', { status: 503, headers: cors(origin) });
+        const text = cleanText(url.searchParams.get('text'), DEAL_MAX);
+        if (!text) return new Response('deal text required', { status: 400, headers: cors(origin) });
+        return liqpayCheckout(env, {
+          kind: 'flashDeal', storeId: store, tier: tierKey, pin: pin || null, amount: tier.amount, text,
+          email: cleanEmail(url.searchParams.get('email')),
+        }, { lang: url.searchParams.get('lang'), returnTo: 'flashdeal=' + tierKey, description: `Lviv Second Hand — ${tier.label} — магазин ${store}` });
       }
       // Owner taps this from the Telegram notification to approve & publish a
       // flash deal that didn't have a matching PIN. GET (not POST) so it works
@@ -1744,39 +2240,23 @@ export default {
           return new Response('dispatch failed — check GH_PAT and the map-update workflow logs', { status: 502 });
         }
       }
-      // À la carte one-off: /order?store=<id>&item=deal|poster|push. Unlike /promote
-      // this buys a service the owner delivers by hand, so the webhook records an order
-      // rather than a placement. Nothing in the app changes when one is bought.
+      // À la carte one-off: /order?store=<id>&item=deal|poster|push&email=…. Unlike
+      // /promote this buys a service the owner delivers by hand, so the payment
+      // records an order rather than a placement. Nothing in the app changes.
       if (url.pathname === '/order') {
         const store = url.searchParams.get('store') || '';
         const item = url.searchParams.get('item') || '';
-        const loc = stripeLocale(url.searchParams.get('lang'));
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !ORDER_ITEMS[item]) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
-        if (!env.STRIPE_API_KEY) return new Response('checkout not configured', { status: 503, headers: cors(origin) });
-        const form = new URLSearchParams();
-        form.set('mode', 'payment');
-        form.set('line_items[0][price]', ORDER_ITEMS[item].price);
-        form.set('line_items[0][quantity]', '1');
-        form.set('allow_promotion_codes', 'true');
-        form.set('locale', loc);
-        addCustomField(form, NOTE_FIELD, loc);
-        form.set('client_reference_id', store);
-        form.set('metadata[storeId]', store);
-        form.set('metadata[item]', item);
-        form.set('success_url', APP_URL + '?ordered=' + encodeURIComponent(item));
-        form.set('cancel_url', APP_URL + '?ordered=cancel');
-        try {
-          const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${env.STRIPE_API_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: form,
-          });
-          const data = await res.json();
-          if (!res.ok || !data.url) return new Response('checkout error', { status: 502, headers: cors(origin) });
-          return Response.redirect(data.url, 302);
-        } catch { return new Response('checkout error', { status: 502, headers: cors(origin) }); }
+        if (payProvider(env) !== 'liqpay') return new Response('checkout not available', { status: 503, headers: cors(origin) });
+        // Arranged by hand, so we must be able to reach the buyer.
+        const email = cleanEmail(url.searchParams.get('email'));
+        if (!email) return new Response('email required', { status: 400, headers: cors(origin) });
+        return liqpayCheckout(env, {
+          kind: 'order', storeId: store, item, amount: ORDER_ITEMS[item].amount, currency: 'uah',
+          text: cleanOffer(url.searchParams.get('text')), email,
+        }, { lang: url.searchParams.get('lang'), returnTo: 'ordered=' + item, description: `Lviv Second Hand — ${ORDER_ITEMS[item].label} — магазин ${store}` });
       }
       // Owner's queue of à la carte orders to fulfil. Private: these carry buyer
       // emails, so it is gated on the same ADMIN_KEY as the broadcast test.
@@ -1895,9 +2375,39 @@ export default {
     }
     if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: cors(origin) });
 
-    // ── Stripe webhook: self-fulfil paid promotions ──
-    // Handled before rate-limiting/JSON-parse because the raw body is needed for
-    // signature verification. Inert (503) until STRIPE_WEBHOOK_SECRET is set.
+    // ── LiqPay callback: the paid (or failed, refunded, cancelled) event ──
+    // Form-encoded data + signature, verified with the private key before
+    // anything is read. Before rate limiting, like the Stripe webhook below.
+    // Inert (503) until the LiqPay keys are set.
+    if (url.pathname === '/liqpay-callback') {
+      // Gated on the keys, not on PAY_PROVIDER: switching new checkouts back to
+      // Stripe must not stop renewals, cancellations and refunds of LiqPay
+      // subscriptions already sold — the Stripe webhook is treated the same way.
+      if (!liqpayKeys(env)) return new Response('not configured', { status: 503 });
+      let form;
+      try { form = await request.formData(); } catch { return new Response('bad request', { status: 400 }); }
+      const data = String(form.get('data') || '');
+      const sig = String(form.get('signature') || '');
+      if (!data || !safeEqual(sig, await liqpaySign(env.LIQPAY_PRIVATE_KEY, data))) return new Response('bad signature', { status: 400 });
+      let d; try { d = JSON.parse(utf8FromB64(data)); } catch { return new Response('bad data', { status: 400 }); }
+      try {
+        await ensureSchema(env);
+        await applyLiqpayCallback(env, ctx, d);
+      } catch {
+        // Every step is idempotent (the payments ledger), so a retry is safe —
+        // and a failed delivery is only retried if LiqPay is told it failed.
+        return new Response('error', { status: 500 });
+      }
+      return new Response('ok', { status: 200 });
+    }
+
+    // ── Stripe webhook ──
+    // The site no longer sells through Stripe, but the account stays and is
+    // shared with another business, so its events keep arriving: verify them,
+    // apply any that are ours (renewals/cancellations of an old subscription),
+    // answer 200 to the rest. Handled before rate-limiting/JSON-parse because
+    // the raw body is needed for signature verification. Inert (503) until
+    // STRIPE_WEBHOOK_SECRET is set.
     if (url.pathname === '/stripe-webhook') {
       if (!env.STRIPE_WEBHOOK_SECRET) return new Response('not configured', { status: 503 });
       const payload = await request.text();
@@ -1906,11 +2416,14 @@ export default {
       let ev; try { ev = JSON.parse(payload); } catch { return new Response('bad json', { status: 400 }); }
       try {
         await ensureSchema(env);
-        const md = (ev.data && ev.data.object && ev.data.object.metadata) || {};
-        if (md.kind === 'flashDeal') await applyFlashDealEvent(env, ev, ctx);
-        else await applyPromoEvent(env, ev, ctx);
-      } catch {}
-      return new Response('ok', { status: 200 }); // 2xx so Stripe stops retrying
+        await applyStripeEvent(env, ev, ctx);
+      } catch {
+        // A delivery that threw is answered 5xx so Stripe redelivers it. Safe:
+        // the payments ledger makes every step idempotent, and fulfilOnce() has
+        // already left the payment claimable and told the owner.
+        return new Response('error', { status: 500 });
+      }
+      return new Response('ok', { status: 200 });
     }
 
     // Per-IP rate limit (guarded — skip if binding absent).
@@ -1985,6 +2498,22 @@ export default {
         storeId, text: text.slice(0, 120), tier: (body && body.tier) || '',
       });
       return json({ ok: true, ...made }, 200, origin);
+    }
+    // Bank-transfer invoices — the bot's /invoice and /paid. Owner-only through
+    // the bot, so gated on ADMIN_KEY like the other bot-only routes.
+    if (url.pathname === '/api/invoice/create' || url.pathname === '/api/invoice/paid') {
+      if (!env.ADMIN_KEY || !safeEqual(request.headers.get('X-Admin-Key') || '', env.ADMIN_KEY)) {
+        return json({ ok: false, reason: 'unauthorized' }, 401, origin);
+      }
+      if (url.pathname === '/api/invoice/paid') {
+        const ref = body && body.id;
+        if (typeof ref !== 'string' || !/^(inv-)?\d{4}-\d{3,}$/.test(ref)) return json({ ok: false, reason: 'bad_request' }, 400, origin);
+        return json(await markInvoicePaid(env, ctx, ref), 200, origin);
+      }
+      const storeId = body && body.storeId;
+      if (typeof storeId !== 'string' || !/^[a-z0-9]{1,12}$/i.test(storeId)) return json({ ok: false, reason: 'bad_request' }, 400, origin);
+      const r = await createInvoice(env, { storeId, tier: body.tier, cadence: body.cadence, item: body.item, buyer: body.buyer });
+      return json(r, r.ok ? 200 : (r.reason === 'seller_not_configured' ? 503 : 400), origin);
     }
     if (url.pathname === '/api/sub') {
       // Bot-only: the Telegram Worker is the sole caller, over a service
