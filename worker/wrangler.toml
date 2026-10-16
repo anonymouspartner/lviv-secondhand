@@ -87,11 +87,14 @@ TG_CHANNEL = "@Lviv_Secondhand"
 #   LIQPAY_PRIVATE_KEY — the shop's private key. Signs checkouts and verifies
 #                        POST /liqpay-callback. NEVER commit it.
 #   PAY_PROVIDER       — "liqpay" to switch checkout over; anything else (or
-#                        unset) keeps Stripe. Stripe's webhook keeps working
-#                        either way, so live Stripe subscriptions still renew.
+#                        unset) keeps Stripe. Both webhooks keep working either
+#                        way: Stripe's while its secret is set, LiqPay's while its
+#                        keys are set, so subscriptions already sold on either
+#                        side keep renewing after a switch.
 # LiqPay needs no webhook set up on its side: every checkout names
 # https://lviv-metrics.lshanalytic.workers.dev/liqpay-callback as its server_url.
-# Sandbox keys accept test cards and are never fulfilled once live keys are set.
+# Sandbox keys (sandbox_…) never publish anything: test payments are announced to
+# the owner as tests, and the app hides checkout while they are set.
 #
 # ── Field-scout deep link (POST /api/bounty/stash) — optional ──
 # Signs a short-lived token identifying a store, for the app's

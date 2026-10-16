@@ -681,9 +681,15 @@ const changed = (r) => !!(r && r.meta && r.meta.changes > 0);
 const INTENT_KEYS = ['tier', 'cadence', 'item', 'pin', 'subRef', 'custRef', 'currency'];
 
 // Returns the payment to fulfil, or null when it was already fulfilled.
+//
+// A row can be claimed from three states: 'created' (prepared before checkout,
+// waiting for money), 'failed' (an earlier attempt on the same checkout was
+// declined, and the buyer then paid with another card), and 'fulfil_failed'
+// (the money arrived but delivery threw — see fulfilOnce(); the provider's
+// redelivery, or a second /paid, retries it). Only 'paid' is final.
 async function claimPayment(env, pay) {
   const flipped = await env.DB.prepare(
-    "UPDATE payments SET status = 'paid', paid = datetime('now') WHERE id = ? AND status = 'created'"
+    "UPDATE payments SET status = 'paid', paid = datetime('now') WHERE id = ? AND status IN ('created', 'failed', 'fulfil_failed')"
   ).bind(pay.id).run();
   if (changed(flipped)) {
     // Prepared before checkout: what the buyer chose and wrote lives in the
@@ -695,9 +701,8 @@ async function claimPayment(env, pay) {
     const fresh = Object.fromEntries(Object.entries(pay).filter(([, v]) => v != null && v !== ''));
     return { ...stored, ...fresh };
   }
-  // Already recorded and not waiting for payment: paid (a redelivery, or a
-  // second /paid) or failed. Either way there is nothing to fulfil, and only a
-  // payment never seen before may be written below.
+  // Already recorded and already paid: a redelivery, or a second /paid. Nothing
+  // to fulfil, and only a payment never seen before may be written below.
   const seen = await env.DB.prepare('SELECT status FROM payments WHERE id = ?').bind(pay.id).first();
   if (seen) return null;
   const intent = {};
@@ -708,6 +713,27 @@ async function claimPayment(env, pay) {
   ).bind(pay.id, pay.provider, pay.kind, pay.storeId, JSON.stringify(intent), pay.text || null,
     pay.amount == null ? null : pay.amount, pay.email || null).run();
   return changed(inserted) ? pay : null;
+}
+
+// Deliver a claimed payment, and if delivery throws, put the row where a retry
+// can claim it again ('fulfil_failed') and tell the owner — then rethrow, so
+// the webhook answers 5xx and the provider redelivers. Without this, a payment
+// marked 'paid' whose delivery failed was paid-for and silently undelivered,
+// with nothing left that could retry it.
+async function fulfilOnce(env, ctx, pay) {
+  try {
+    await fulfil(env, ctx, pay);
+  } catch (e) {
+    try { await env.DB.prepare("UPDATE payments SET status = 'fulfil_failed' WHERE id = ?").bind(pay.id).run(); } catch {}
+    tgNotify(env, ctx,
+      `⚠️ PAID BUT NOT DELIVERED — will retry\n\n` +
+      `Payment: ${pay.id} (${pay.provider})\nStore: ${pay.storeId}\nWhat:  ${pay.kind}${pay.tier ? ' · ' + pay.tier : ''}${pay.item ? ' · ' + pay.item : ''}\n` +
+      `Error: ${String((e && e.message) || e).slice(0, 200)}\n\n` +
+      (pay.provider === 'invoice'
+        ? 'Send /paid again to retry.'
+        : 'The payment provider will redeliver the event and it will be retried. If this repeats, deliver it by hand.'));
+    throw e;
+  }
 }
 
 // Deliver a paid, claimed payment.
@@ -746,6 +772,15 @@ async function fulfilPromo(env, ctx, pay) {
   // invoice plus a few days' grace. A run has no subscription, so no portal either.
   const run = PROMO_RUNS[`${tier}_${cadence}`];
   const until = addDaysStr(kyivDateStr(), run ? run.days : PROMO_GRACE_DAYS(cadence));
+  // A store has one placement row. If it still carries a live subscription that
+  // this purchase is not, overwriting the row would leave that subscription
+  // charging with nothing left to renew — the store would pay twice. Say so.
+  const prev = await env.DB.prepare("SELECT sub_id, until FROM promos WHERE store_id = ? AND status = 'active'").bind(storeId).first();
+  if (prev && prev.sub_id && prev.sub_id !== (pay.subRef || null) && prev.until >= kyivDateStr()) {
+    tgNotify(env, ctx,
+      `⚠️ ${storeId} still has a subscription (${prev.sub_id}) that this purchase replaces.\n\n` +
+      `Cancel it in ${prev.sub_id.startsWith('lp_') ? 'LiqPay (order ' + prev.sub_id + ')' : 'Stripe'}, or the store will be charged twice.`);
+  }
   await env.DB.prepare(
     "INSERT INTO promos (store_id, tier, offer, until, sub_id, cadence, cust_id, status, updated) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', datetime('now')) " +
     "ON CONFLICT(store_id) DO UPDATE SET tier=excluded.tier, offer=excluded.offer, until=excluded.until, sub_id=excluded.sub_id, cadence=excluded.cadence, cust_id=excluded.cust_id, status='active', updated=datetime('now')"
@@ -784,16 +819,40 @@ async function fulfilPromo(env, ctx, pay) {
 
 // Renewal: extends the placement, queues no advertisement. See the comment in
 // fulfilPromo for why.
-async function renewPromo(env, subRef) {
+//
+// A charge that renews nothing means a store is being billed for a placement
+// that no longer exists — the subscription was replaced, refunded or ended here
+// but is still alive at the provider. That is money to give back, so the owner
+// is told rather than the charge being dropped.
+async function renewPromo(env, ctx, subRef) {
   if (!subRef) return;
   const row = await env.DB.prepare('SELECT cadence FROM promos WHERE sub_id = ?').bind(subRef).first();
   const until = addDaysStr(kyivDateStr(), PROMO_GRACE_DAYS(row && row.cadence));
-  await env.DB.prepare("UPDATE promos SET until = ?, status = 'active', updated = datetime('now') WHERE sub_id = ?").bind(until, subRef).run();
+  const res = await env.DB.prepare("UPDATE promos SET until = ?, status = 'active', updated = datetime('now') WHERE sub_id = ?").bind(until, subRef).run();
+  if (!changed(res)) {
+    tgNotify(env, ctx,
+      `⚠️ A subscription was charged but matches no placement\n\n` +
+      `Subscription: ${subRef}\n\n` +
+      `The store paid for nothing. Cancel the subscription at the provider and refund this charge.`);
+  }
 }
 
+// Take a placement down now — a Stripe subscription ending at period end, or a
+// refund/chargeback.
 async function cancelPromo(env, subRef) {
   if (!subRef) return;
   await env.DB.prepare("UPDATE promos SET status = 'canceled', updated = datetime('now') WHERE sub_id = ?").bind(subRef).run();
+}
+
+// The subscription stopped (the store or the owner cancelled it mid-period):
+// no more renewals, but the placement keeps the time already paid for, as the
+// public offer (§8.1) promises. Detaching sub_id is what stops a later stray
+// charge from silently extending it — renewPromo would report that instead.
+async function endSubscription(env, subRef) {
+  if (!subRef) return null;
+  const row = await env.DB.prepare('SELECT store_id, until FROM promos WHERE sub_id = ?').bind(subRef).first();
+  await env.DB.prepare("UPDATE promos SET sub_id = NULL, updated = datetime('now') WHERE sub_id = ?").bind(subRef).run();
+  return row;
 }
 
 // A flash deal (see GET /flash-deal). Unlike a promo tier, a flash deal isn't
@@ -896,9 +955,14 @@ async function applyStripeEvent(env, ev, ctx) {
     const pay = stripePayment(o);
     if (!pay) return;
     const claimed = await claimPayment(env, pay);
-    if (claimed) await fulfil(env, ctx, claimed);
+    if (claimed) await fulfilOnce(env, ctx, claimed);
   } else if (type === 'invoice.paid' || type === 'invoice.payment_succeeded') {
-    await renewPromo(env, o.subscription);
+    // From API version 2025-03-31.basil the invoice no longer carries
+    // `subscription`; it moved to parent.subscription_details.subscription.
+    // Which shape arrives depends on the webhook endpoint's API version, so
+    // read both — reading only the old one renewed nothing on a newer endpoint.
+    const sd = o.parent && o.parent.subscription_details;
+    await renewPromo(env, ctx, o.subscription || (sd && sd.subscription));
   } else if (type === 'customer.subscription.deleted' ||
              (type === 'customer.subscription.updated' && ['canceled', 'unpaid', 'incomplete_expired'].includes(o.status))) {
     await cancelPromo(env, o.id);
@@ -920,13 +984,17 @@ async function applyStripeEvent(env, ev, ctx) {
 //   · Amounts are hryvnias, not kopiyky. Kopiyky stay the unit everywhere
 //     else; conversion happens only at the boundary, in this block.
 const LIQPAY_CHECKOUT_URL = 'https://www.liqpay.ua/api/3/checkout';
-const payProvider = (env) =>
-  (env.PAY_PROVIDER === 'liqpay' && env.LIQPAY_PUBLIC_KEY && env.LIQPAY_PRIVATE_KEY ? 'liqpay' : 'stripe');
-const checkoutReady = (env) => (payProvider(env) === 'liqpay' || !!env.STRIPE_API_KEY);
-// Sandbox keys pay with test cards and report status "sandbox" instead of
-// "success". Accepted only while the keys themselves are sandbox keys, so a
-// live shop can never be fulfilled by a test payment.
+const liqpayKeys = (env) => !!(env.LIQPAY_PUBLIC_KEY && env.LIQPAY_PRIVATE_KEY);
+const payProvider = (env) => (env.PAY_PROVIDER === 'liqpay' && liqpayKeys(env) ? 'liqpay' : 'stripe');
+// Sandbox keys pay with LiqPay's public test cards. A sandbox payment proves the
+// signing, the callback and the ledger, and is announced to the owner as a test —
+// but it never publishes anything (see applyLiqpayCallback), because the test
+// card numbers are public: on a live site anyone could otherwise buy a real
+// placement with them. For the same reason the app is not offered checkout
+// while the keys are sandbox keys; the owner tests by opening the purchase
+// links directly (docs/FOP.md §3.8).
 const liqpaySandbox = (env) => String(env.LIQPAY_PUBLIC_KEY || '').startsWith('sandbox_');
+const checkoutReady = (env) => (payProvider(env) === 'liqpay' ? !liqpaySandbox(env) : !!env.STRIPE_API_KEY);
 
 function b64Utf8(str) {
   const bytes = new TextEncoder().encode(str);
@@ -1014,41 +1082,81 @@ async function applyLiqpayCallback(env, ctx, d) {
   const status = String(d.status || '');
   const isSub = row.kind === 'promo' && (intent.cadence === 'monthly' || intent.cadence === 'annual');
 
+  const what = `${row.kind}${intent.tier ? ' · ' + intent.tier : ''}${intent.cadence ? ' · ' + intent.cadence : ''}${intent.item ? ' · ' + intent.item : ''}`;
+
   if (status === 'failure' || status === 'error') {
-    await env.DB.prepare("UPDATE payments SET status = 'failed' WHERE id = ? AND status = 'created'").bind(id).run();
+    // Declined. Recoverable: the buyer may try again on the same checkout, and
+    // a later success on this order still fulfils (claimPayment takes 'failed').
+    // Once a subscription is already paid, a failed charge is a failed renewal:
+    // tell the owner, since the placement will lapse at `until` if none follows.
+    if (row.status === 'paid' && isSub) {
+      tgNotify(env, ctx, `⚠️ A LiqPay subscription renewal failed\n\nStore: ${row.store_id}\nWhat:  ${what}\nOrder: ${id}\n\nThe placement lapses at its current end date unless a later charge succeeds.\n\n${storeLink(row.store_id)}`);
+    } else {
+      await env.DB.prepare("UPDATE payments SET status = 'failed' WHERE id = ? AND status = 'created'").bind(id).run();
+    }
     return;
   }
   if (status === 'unsubscribed') {
-    if (isSub) await cancelPromo(env, id);
+    // Cancelled mid-period — by the store or in the LiqPay dashboard. It keeps
+    // the time already paid for (offer §8.1); it just stops renewing.
+    if (isSub) {
+      const p = await endSubscription(env, id);
+      tgNotify(env, ctx, `🛑 LiqPay subscription cancelled\n\nStore: ${row.store_id}\nWhat:  ${what}\nOrder: ${id}\n\n` +
+        (p ? `No more renewals. The placement stays until ${p.until}, as already paid for.` : 'No placement was attached to it.') + `\n\n${storeLink(row.store_id)}`);
+    }
     return;
   }
   if (status === 'reversed') {
-    // A refund or chargeback. A subscription is ended outright; anything else
-    // is left for the owner to look at, because a later purchase for the same
-    // store may already have replaced what this payment bought.
-    if (isSub) await cancelPromo(env, id);
+    // A refund or chargeback. A subscription's placement comes down and is
+    // detached, so a later charge cannot silently re-activate it — but the
+    // subscription itself is still alive at LiqPay until it is cancelled
+    // there, and that is the owner's to do.
+    if (isSub) { await cancelPromo(env, id); await endSubscription(env, id); }
     tgNotify(env, ctx,
       `↩️ PAYMENT REVERSED (refund or chargeback)\n\n` +
-      `Store: ${row.store_id}\nWhat:  ${row.kind}${intent.tier ? ' · ' + intent.tier : ''}${intent.cadence ? ' · ' + intent.cadence : ''}\n` +
-      `Order: ${id}\n\n` +
-      (isSub ? 'The subscription has been ended.' : 'Check whether the placement or deal should be taken down.') +
+      `Store: ${row.store_id}\nWhat:  ${what}\nOrder: ${id}\n\n` +
+      (isSub
+        ? `The placement has been taken down. The subscription is still active at LiqPay — cancel order ${id} in the LiqPay dashboard, or the store will be charged again.`
+        : 'Check whether the placement or deal should be taken down.') +
       `\n\n${storeLink(row.store_id)}`);
     return;
   }
-  const paid = status === 'success' || status === 'subscribed' || (status === 'sandbox' && liqpaySandbox(env));
+  if (status === 'wait_accept') {
+    // The buyer's money is held but the shop is not activated yet; LiqPay
+    // returns it if the shop is not activated in time. Nothing to deliver
+    // until it settles — but the owner needs to know a buyer is waiting.
+    tgNotify(env, ctx, `⏳ LiqPay is holding a payment: the shop is not activated yet\n\nStore: ${row.store_id}\nWhat:  ${what}\nOrder: ${id}\n\nFinish the shop activation in LiqPay; the purchase is delivered when the payment settles.`);
+    return;
+  }
+  // 'wait_compensation' is a successful payment that LiqPay pays out in its
+  // daily settlement rather than at once — paid, from the buyer's side.
+  const sandbox = liqpaySandbox(env);
+  const paid = sandbox
+    ? status === 'sandbox' || status === 'success' || status === 'subscribed'
+    : status === 'success' || status === 'subscribed' || status === 'wait_compensation';
   if (!paid) return; // processing, 3-D Secure and the like: a final status follows
 
   const amount = d.amount == null ? null : Math.round(Number(d.amount) * 100);
+  // Every successful charge is recorded under its own payment_id. This is what
+  // makes a redelivered callback, or LiqPay's second notice for the same
+  // charge, do nothing twice.
   const charge = await claimPayment(env, {
     id: `lp_pay_${d.payment_id || id}`, provider: 'liqpay', kind: 'charge', storeId: row.store_id, amount,
   });
-  if (!charge) return; // this charge was already handled
 
-  if (row.status === 'created') {
+  if (row.status !== 'paid') {
+    // The first successful charge on this checkout — or a retry after a
+    // decline or a failed delivery, which is why the charge record above is
+    // not consulted here: claimPayment's own transition is the guard.
     const claimed = await claimPayment(env, { id, provider: 'liqpay', amount, subRef: isSub ? id : null });
-    if (claimed) await fulfil(env, ctx, claimed);
-  } else if (row.status === 'paid' && isSub) {
-    await renewPromo(env, id);
+    if (!claimed) return;
+    if (sandbox) {
+      tgNotify(env, ctx, `🧪 LiqPay SANDBOX payment received — nothing was published\n\nStore: ${row.store_id}\nWhat:  ${what}\nPaid:  ${uah(amount)} (test)\nOrder: ${id}\n\nSigning, callback and ledger work. Switch to the live keys to sell.`);
+      return;
+    }
+    await fulfilOnce(env, ctx, claimed);
+  } else if (charge && isSub && !sandbox) {
+    await renewPromo(env, ctx, id);
   }
 }
 
@@ -1147,7 +1255,11 @@ async function markInvoicePaid(env, ctx, ref) {
   if (!row) return { ok: false, reason: 'unknown_invoice' };
   const claimed = await claimPayment(env, { id, provider: 'invoice' });
   if (!claimed) return { ok: true, state: 'already_paid', id };
-  await fulfil(env, ctx, claimed);
+  try {
+    await fulfilOnce(env, ctx, claimed);
+  } catch {
+    return { ok: false, reason: 'fulfil_failed', id };
+  }
   return { ok: true, state: 'fulfilled', id };
 }
 
@@ -1861,7 +1973,9 @@ export default {
           for (const r of (res && res.results) || []) {
             const p = { tier: r.tier, until: r.until };
             if (r.offer) p.offer = r.offer;
-            if (r.cust_id) p.manage = true; // app shows "Manage billing" only when a portal is reachable
+            // "Manage billing" opens Stripe's portal, which needs the Stripe key;
+            // without it the link would only reach a 503.
+            if (r.cust_id && env.STRIPE_API_KEY) p.manage = true;
             out[r.store_id] = p;
           }
           return json(out, 200, origin);
@@ -2369,9 +2483,12 @@ export default {
     // ── LiqPay callback: the paid (or failed, refunded, cancelled) event ──
     // Form-encoded data + signature, verified with the private key before
     // anything is read. Before rate limiting, like the Stripe webhook below.
-    // Inert (503) until LiqPay is the active provider.
+    // Inert (503) until the LiqPay keys are set.
     if (url.pathname === '/liqpay-callback') {
-      if (payProvider(env) !== 'liqpay') return new Response('not configured', { status: 503 });
+      // Gated on the keys, not on PAY_PROVIDER: switching new checkouts back to
+      // Stripe must not stop renewals, cancellations and refunds of LiqPay
+      // subscriptions already sold — the Stripe webhook is treated the same way.
+      if (!liqpayKeys(env)) return new Response('not configured', { status: 503 });
       let form;
       try { form = await request.formData(); } catch { return new Response('bad request', { status: 400 }); }
       const data = String(form.get('data') || '');
@@ -2381,7 +2498,11 @@ export default {
       try {
         await ensureSchema(env);
         await applyLiqpayCallback(env, ctx, d);
-      } catch {}
+      } catch {
+        // Every step is idempotent (the payments ledger), so a retry is safe —
+        // and a failed delivery is only retried if LiqPay is told it failed.
+        return new Response('error', { status: 500 });
+      }
       return new Response('ok', { status: 200 });
     }
 
@@ -2397,8 +2518,13 @@ export default {
       try {
         await ensureSchema(env);
         await applyStripeEvent(env, ev, ctx);
-      } catch {}
-      return new Response('ok', { status: 200 }); // 2xx so Stripe stops retrying
+      } catch {
+        // A delivery that threw is answered 5xx so Stripe redelivers it. Safe:
+        // the payments ledger makes every step idempotent, and fulfilOnce() has
+        // already left the payment claimable and told the owner.
+        return new Response('error', { status: 500 });
+      }
+      return new Response('ok', { status: 200 });
     }
 
     // Per-IP rate limit (guarded — skip if binding absent).

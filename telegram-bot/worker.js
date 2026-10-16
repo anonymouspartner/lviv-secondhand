@@ -2003,6 +2003,7 @@ async function cmdInvoicePaid(env, chatId, text) {
   const d = r.data || {};
   if (d.reason === 'unknown_invoice') { await say(env, chatId, `⚠️ Немає рахунку № ${esc(ref)}. · No such invoice.`); return; }
   if (d.state === 'already_paid') { await say(env, chatId, `ℹ️ Рахунок № ${esc(ref)} уже позначено оплаченим. · Already marked paid — nothing changed.`); return; }
+  if (d.reason === 'fulfil_failed') { await say(env, chatId, `⚠️ Оплату № ${esc(ref)} записано, але розміщення не вдалося опублікувати. Надішліть <code>/paid ${esc(ref)}</code> ще раз. · Payment recorded but the placement could not be published — send /paid again to retry.`); return; }
   await say(env, chatId, `✅ Рахунок № ${esc(ref)} оплачено — розміщення опубліковано. · Marked paid and published.\nПідтвердження прийде окремим повідомленням. · The usual "paid" notice follows.`);
 }
 

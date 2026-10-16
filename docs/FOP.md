@@ -160,9 +160,19 @@ payments (id TEXT PRIMARY KEY, provider, kind, store_id, intent JSON, text,
   `subscribe_periodicity: "month" | "year"`. The first charge fulfils; any later
   charge (a new `payment_id` on an already-paid subscription order) renews.
   `promos.sub_id` holds the LiqPay `order_id`.
-- `unsubscribed` → `cancelPromo()`. `reversed` (refund or chargeback) ends a
-  subscription and tells the owner; for anything else the owner decides, because a
-  newer purchase may already have replaced it.
+- `unsubscribed` (the store or the owner cancelled mid-period) → no more renewals,
+  but the placement **keeps the time already paid for**, as offer §8.1 promises
+  (`endSubscription()` detaches `sub_id`). The owner is told until when it runs.
+- `reversed` (refund or chargeback) → the placement comes down and is detached,
+  and the owner is told to **cancel the order in the LiqPay dashboard** — a refund
+  does not stop LiqPay's schedule. For a one-off purchase the owner decides,
+  because a newer purchase may already have replaced it.
+- A failed charge on a paid subscription is a failed renewal: the owner is told,
+  and the placement lapses at `until` unless a later charge succeeds.
+- **A charge that renews nothing** — after a cancellation, a refund or a
+  replacement — is flagged to the owner to refund, never silently dropped.
+- **Buying again while a subscription is live** (a tier change, or moving from
+  Stripe) warns the owner to cancel the old subscription, or the store pays twice.
 - **Cancelling** a LiqPay subscription: by email to the address on the offer page
   (§8.1 there); the owner cancels it in the LiqPay dashboard. The in-app "Manage
   billing" link stays Stripe-only, and is hidden for LiqPay placements.
@@ -181,11 +191,25 @@ payments (id TEXT PRIMARY KEY, provider, kind, store_id, intent JSON, text,
   with a small self-submitting page (with a button as a fallback) instead of a
   redirect. The page carries only the signed `data`, never the private key.
 - **Callback** `POST /liqpay-callback` — signature verified in constant time before
-  anything is read; handled before rate limiting; `503` while LiqPay is off.
-- **Statuses** — `success` / `subscribed` fulfil; `sandbox` counts as paid **only
-  while the keys are sandbox keys**, so a test card can never fulfil on the live
-  shop; `failure` / `error` mark the row failed; `processing` and 3-D Secure waits
-  are ignored until a final status arrives.
+  anything is read; handled before rate limiting; `503` only while the LiqPay keys
+  are absent. It is gated on the **keys, not on `PAY_PROVIDER`**, so switching new
+  checkouts back to Stripe never stops renewals, cancellations or refund notices
+  for LiqPay subscriptions already sold.
+- **Statuses** — `success`, `subscribed` and `wait_compensation` (paid, settled in
+  LiqPay's daily payout) deliver; `wait_accept` (money held, shop not yet
+  activated) tells the owner and delivers nothing yet; `failure` / `error` mark the
+  checkout failed but **recoverable** — a later success on the same checkout (the
+  buyer tried another card) still delivers; `processing` and 3-D Secure waits are
+  ignored until a final status arrives.
+- **Sandbox keys never publish anything.** LiqPay's test cards are public, so while
+  the keys are `sandbox_…` a test payment is recorded and announced to the owner as
+  `🧪 SANDBOX`, but no placement, deal, order, Instagram ad or map change is made,
+  and the app does not offer checkout (`/status` says `promoConfigured: false`).
+  A `sandbox` status on live keys does nothing at all.
+- **A delivery that fails after the money arrived** (a D1 hiccup, a GitHub
+  outage) leaves the payment `fulfil_failed`, tells the owner, and answers the
+  webhook `5xx` so the provider redelivers — the retry delivers it. For an
+  invoice, a second `/paid` retries.
 - **Return** — `result_url` is `/liqpay-return`, which sends the buyer to the app's
   existing thanks screen (`?promoted=` / `?flashdeal=` / `?ordered=`), or to the
   "cancelled" one if the payment is known to have failed. It only accepts those
@@ -212,7 +236,13 @@ and feeds it signed events: Stripe purchase, redelivery, renewal, cancellation,
 one-off run, order, both flash-deal paths; LiqPay checkout params and signature,
 forged / processing / failed / sandbox-on-live callbacks, subscription, repeated
 callbacks, renewal and its redelivery, cancellation, the return redirect; and that
-every price the app shows equals what the Worker charges.
+every price the app shows equals what the Worker charges. Also everything that can
+go wrong around a payment: `wait_compensation` / `wait_accept`, a success after a
+decline, renewals after switching checkout back to Stripe, a failed renewal, a
+refunded subscription and a charge after it, double-billing on replacement, a
+delivery that fails and is retried (Stripe and invoices), Stripe's newer invoice
+shape, the Manage-billing link without a Stripe key, and that sandbox keys never
+publish. Each of these was checked to fail against the code before the fix.
 
 ### 3.8 Switching LiqPay on
 
@@ -220,11 +250,19 @@ every price the app shows equals what the Worker charges.
    `LIQPAY_PUBLIC_KEY` and `LIQPAY_PRIVATE_KEY` (the **sandbox** keys first) and
    `PAY_PROVIDER` = `liqpay`.
 2. Re-run the "Deploy metrics Worker" workflow (Actions tab) so it pushes them.
-3. Make one sandbox purchase of each kind with LiqPay's test card: a 1-day run, a
-   monthly plan, a flash deal, an extra. Each should ping you on Telegram.
+3. Make one sandbox purchase of each kind with LiqPay's test card. The app hides
+   the buy buttons while the keys are sandbox keys, so open the links directly
+   (replace `c21` with any store id, and use your own email):
+   - 1-day run: `https://lviv-metrics.lshanalytic.workers.dev/promote?store=c21&tier=verified&cadence=run1&lang=ua&text=test`
+   - monthly plan: `…/promote?store=c21&tier=featured&cadence=monthly&lang=ua`
+   - flash deal: `…/flash-deal?store=c21&tier=3h&lang=ua&text=test`
+   - extra: `…/order?store=c21&item=poster&lang=ua&email=you@example.com`
+
+   Each should ping you on Telegram with **🧪 SANDBOX — nothing was published**.
 4. Once the shop is approved, replace the two keys with the live ones and re-run the
-   deploy. To go back to Stripe at any point, set `PAY_PROVIDER` to `stripe` and
-   re-run.
+   deploy. The buttons appear, and payments deliver for real.
+5. To send new checkouts back to Stripe at any point, set `PAY_PROVIDER` to `stripe`
+   and re-run. LiqPay subscriptions already sold keep renewing and cancelling.
 
 ---
 
@@ -300,10 +338,10 @@ with the accountant.
 
 ## 8. Stripe & donations — what happens to them
 
-- **Stripe stays configured** as `PAY_PROVIDER` fallback and for its live
-  subscriptions until they lapse. After a month of clean LiqPay traffic, stop
-  creating new Stripe sessions; leave `/stripe-webhook` running until the last
-  subscription ends.
+- **Stripe is being retired** — out of the purchase path now, out of the code once
+  its pipes are shut, and the account closed after the dispute window. The full
+  plan, with what was found in production (no live Stripe subscriptions), is in
+  [STRIPE_RETIREMENT.md](STRIPE_RETIREMENT.md).
 - **Donations** (`DONATE_URL` in `index.html`): ⚖️ money paid to the ФОП is generally
   business income and taxed as such. Either keep the Stripe donation link outside the
   ФОП, or move donations to a LiqPay `paydonate` link on the ФОП and declare them as
