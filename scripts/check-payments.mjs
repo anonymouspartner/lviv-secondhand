@@ -47,12 +47,18 @@ function d1() {
 // Every fetch the Worker makes is recorded and answered locally: Telegram
 // (owner pings, broadcasts) and GitHub (map patches, Instagram ad renders).
 let calls = [];
+let lpStatusReply = { result: 'error', status: 'error', err_code: 'payment_not_found' };
 globalThis.fetch = async (url, init) => {
   const u = String(url);
   let body = null;
   try { body = init && init.body ? JSON.parse(init.body) : null; } catch { body = init && init.body; }
   calls.push({ url: u, body });
   if (u.includes('api.github.com')) return new Response(null, { status: 204 });
+  // LiqPay's status API, asked by the return page when no callback has come yet.
+  if (u.includes('liqpay.ua/api/request')) {
+    if (lpStatusReply instanceof Error) throw lpStatusReply;
+    return new Response(JSON.stringify(lpStatusReply), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
   return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
 const tgPings = () => calls.filter((c) => c.url.includes('api.telegram.org') && c.body && c.body.chat_id === OWNER);
@@ -349,6 +355,29 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   check(evil.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=featured', 'the return redirect took its target from the URL');
   const unknown = await lpGet('/liqpay-return/lp_nosuchorder');
   check(unknown.headers.get('Location') === 'https://www.lvivsecondhand.com/', 'an unknown order did not return to the home page');
+
+  // Back before any callback: the return asks LiqPay instead of assuming a
+  // success. In the sandbox an AntiFraud decline sent no callback at all, and
+  // the buyer was thanked for a payment that never happened.
+  const early = await lpCheckout('/flash-deal?store=s20c&tier=3h&text=x');
+  const backTo = async () => (await lpGet(`/liqpay-return/${early.params.order_id}`)).headers.get('Location');
+  calls = []; lpStatusReply = { result: 'ok', status: 'failure' };
+  check(await backTo() === 'https://www.lvivsecondhand.com/?flashdeal=cancel', 'a declined payment with no callback returned to the thanks screen');
+  const ask = calls.find((c) => c.url.includes('liqpay.ua/api/request'));
+  const asked = ask && new URLSearchParams(ask.body);
+  const askData = asked && JSON.parse(Buffer.from(asked.get('data'), 'base64').toString('utf8'));
+  check(askData && askData.action === 'status' && askData.order_id === early.params.order_id && asked.get('signature') === lpSign(asked.get('data')),
+    `the status lookup was not a signed status request for the order: ${JSON.stringify(askData)}`);
+  lpStatusReply = { result: 'error', status: 'error', err_code: 'payment_not_found' };
+  check(await backTo() === 'https://www.lvivsecondhand.com/?flashdeal=cancel', 'a checkout left unpaid returned to the thanks screen');
+  lpStatusReply = { result: 'ok', status: 'processing' };
+  check(await backTo() === 'https://www.lvivsecondhand.com/?flashdeal=pending', 'a payment still processing was not shown as pending');
+  lpStatusReply = new Error('network down');
+  check(await backTo() === 'https://www.lvivsecondhand.com/?flashdeal=pending', 'a failed status lookup was not shown as pending');
+  lpStatusReply = { result: 'ok', status: 'success' };
+  check(await backTo() === 'https://www.lvivsecondhand.com/?flashdeal=3h', 'a payment LiqPay reports paid did not return to the thanks screen');
+  check(row('SELECT status FROM payments WHERE id = ?', early.params.order_id).status === 'created', 'the return page changed the payment; only the signed callback may');
+  lpStatusReply = { result: 'error', status: 'error', err_code: 'payment_not_found' };
 }
 
 {
@@ -550,6 +579,20 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
       `a sandbox payment published something for ${store}`);
     check(tgPings().length === 1 && /SANDBOX/.test(tgPings()[0].body.text), `the owner was not told a sandbox payment arrived (${store})`);
   }
+
+  // A sandbox payment returns to a test message, not "your promotion is live".
+  const sbp = await lpCheckout('/promote?store=s53&tier=featured&cadence=monthly', sbEnv);
+  await lpCallback({ order_id: sbp.params.order_id, status: 'subscribed', payment_id: 'sb_s53', amount: 600 }, { e: sbEnv });
+  const sbBack = await lpGet(`/liqpay-return/${sbp.params.order_id}`, sbEnv);
+  check(sbBack.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=test', `a sandbox payment returned to ${sbBack.headers.get('Location')}`);
+  // A sandbox renewal is announced (so the owner sees renewals work) and renews nothing.
+  calls = [];
+  await lpCallback({ order_id: sbp.params.order_id, status: 'success', payment_id: 'sb_s53_r1', amount: 600 }, { e: sbEnv });
+  check(tgPings().length === 1 && /SANDBOX renewal/.test(tgPings()[0].body.text) && !row('SELECT * FROM promos WHERE store_id = ?', 's53'),
+    'a sandbox renewal was not announced, or published something');
+  calls = [];
+  await lpCallback({ order_id: sbp.params.order_id, status: 'success', payment_id: 'sb_s53_r1', amount: 600 }, { e: sbEnv });
+  check(tgPings().length === 0, 'a redelivered sandbox renewal was announced twice');
 }
 
 {

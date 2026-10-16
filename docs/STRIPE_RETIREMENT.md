@@ -86,9 +86,7 @@ because the callback depends on the keys, not on `PAY_PROVIDER`.
 2. How are chargebacks notified, and how is evidence submitted?
 3. Can the merchant cancel a customer's subscription in the dashboard, and is the
    server-to-server `unsubscribe` available?
-4. Do recurring-charge callbacks carry the subscription's original `order_id`?
-   (Renewal depends on it.)
-5. Are callbacks for `version: 3` requests signed with SHA-1? (The newer docs
+4. Are callbacks for `version: 3` requests signed with SHA-1? (The newer docs
    describe SHA3-256.)
 
 ### Questions for the accountant ⚖️
