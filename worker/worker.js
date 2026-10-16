@@ -985,7 +985,7 @@ const CADENCE_LABEL = { monthly: 'місяць', annual: 'рік', run1: '1 де
 
 // Prepare the payment and answer with the page that hands the buyer to LiqPay.
 // `intent` is a normalised payment minus what only the provider can know.
-async function liqpayCheckout(env, intent, { lang, returnTo, description, subscribe }) {
+async function liqpayCheckout(env, intent, { lang, description, subscribe }) {
   await ensureSchema(env);
   const id = 'lp_' + crypto.randomUUID().replace(/-/g, '').slice(0, 20);
   const meta = {};
@@ -1003,7 +1003,11 @@ async function liqpayCheckout(env, intent, { lang, returnTo, description, subscr
     description,
     order_id: id,
     language: liqpayLang(lang),
-    result_url: `${WORKER_URL}/liqpay-return?id=${encodeURIComponent(id)}&to=${encodeURIComponent(returnTo)}`,
+    // The order id rides in the path, not the query: the buyer came back from
+    // the sandbox test with nothing after the domain, so anything in the query
+    // string cannot be relied on to survive LiqPay's return. The thanks screen
+    // to show is read back from the prepared payment.
+    result_url: `${WORKER_URL}/liqpay-return/${id}`,
     server_url: `${WORKER_URL}/liqpay-callback`,
   };
   if (subscribe) {
@@ -1922,18 +1926,31 @@ export default {
     // the callback below is what fulfils, and it often arrives a moment after
     // the buyer does, so an unfinished payment still gets the thanks screen
     // (which already says it may take a moment) — only a known failure doesn't.
-    if (url.pathname === '/liqpay-return') {
-      const id = url.searchParams.get('id') || '';
-      const to = url.searchParams.get('to') || '';
-      const m = /^(promoted|flashdeal|ordered)=([a-z0-9_]{1,16})$/.exec(to);
-      if (!m) return Response.redirect(APP_URL, 302);
-      let failed = false;
+    const lpReturn = /^\/liqpay-return(?:\/([A-Za-z0-9_]{1,40}))?\/?$/.exec(url.pathname);
+    if (lpReturn) {
+      // The order id: in the path (current checkouts), in the query (checkouts
+      // opened before that change), or in the `data` LiqPay may post back.
+      let id = lpReturn[1] || url.searchParams.get('id') || '';
+      if (!id && request.method === 'POST') {
+        try {
+          const form = await request.formData();
+          id = String(JSON.parse(utf8FromB64(String(form.get('data') || ''))).order_id || '');
+        } catch {}
+      }
+      // Which thanks screen: read back from the prepared payment, so nothing
+      // the URL says can steer the redirect.
+      let row = null;
       try {
         await ensureSchema(env);
-        const row = await env.DB.prepare("SELECT status FROM payments WHERE id = ? AND provider = 'liqpay'").bind(id).first();
-        failed = !row || row.status === 'failed';
+        if (id) row = await env.DB.prepare("SELECT kind, intent, status FROM payments WHERE id = ? AND provider = 'liqpay'").bind(id).first();
       } catch {}
-      return Response.redirect(`${APP_URL}?${m[1]}=${failed ? 'cancel' : m[2]}`, 302);
+      if (!row) return Response.redirect(APP_URL, 302);
+      let intent = {};
+      try { intent = JSON.parse(row.intent || '{}'); } catch {}
+      const key = row.kind === 'promo' ? 'promoted' : row.kind === 'flashDeal' ? 'flashdeal' : row.kind === 'order' ? 'ordered' : '';
+      const val = String((row.kind === 'order' ? intent.item : intent.tier) || '');
+      if (!key || !/^[a-z0-9_]{1,16}$/.test(val)) return Response.redirect(APP_URL, 302);
+      return Response.redirect(`${APP_URL}?${key}=${row.status === 'failed' ? 'cancel' : val}`, 302);
     }
     if (request.method === 'GET') {
       // A bank-transfer invoice, or its act once paid (?doc=act). Opened by the
@@ -2022,7 +2039,7 @@ export default {
           kind: 'promo', storeId: store, tier, cadence, amount,
           text: cleanOffer(url.searchParams.get('text')), email: cleanEmail(url.searchParams.get('email')),
         }, {
-          lang: url.searchParams.get('lang'), returnTo: 'promoted=' + tier,
+          lang: url.searchParams.get('lang'),
           description: `Lviv Second Hand — ${TIER_LABEL[tier]}, ${CADENCE_LABEL[cadence]} — магазин ${store}`,
           subscribe: run ? null : (cadence === 'annual' ? 'year' : 'month'),
         });
@@ -2046,7 +2063,7 @@ export default {
         return liqpayCheckout(env, {
           kind: 'flashDeal', storeId: store, tier: tierKey, pin: pin || null, amount: tier.amount, text,
           email: cleanEmail(url.searchParams.get('email')),
-        }, { lang: url.searchParams.get('lang'), returnTo: 'flashdeal=' + tierKey, description: `Lviv Second Hand — ${tier.label} — магазин ${store}` });
+        }, { lang: url.searchParams.get('lang'), description: `Lviv Second Hand — ${tier.label} — магазин ${store}` });
       }
       // Owner taps this from the Telegram notification to approve & publish a
       // flash deal that didn't have a matching PIN. GET (not POST) so it works
@@ -2256,7 +2273,7 @@ export default {
         return liqpayCheckout(env, {
           kind: 'order', storeId: store, item, amount: ORDER_ITEMS[item].amount, currency: 'uah',
           text: cleanOffer(url.searchParams.get('text')), email,
-        }, { lang: url.searchParams.get('lang'), returnTo: 'ordered=' + item, description: `Lviv Second Hand — ${ORDER_ITEMS[item].label} — магазин ${store}` });
+        }, { lang: url.searchParams.get('lang'), description: `Lviv Second Hand — ${ORDER_ITEMS[item].label} — магазин ${store}` });
       }
       // Owner's queue of à la carte orders to fulfil. Private: these carry buyer
       // emails, so it is gated on the same ADMIN_KEY as the broadcast test.

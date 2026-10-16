@@ -329,10 +329,26 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   check(tgPings().length === 1 && /matches no placement/.test(tgPings()[0].body.text), 'a charge after cancellation was not flagged to the owner for a refund');
 
   // The return page sends the buyer to the app's thanks screen.
-  const back = await lpGet(`/liqpay-return?id=${orderId}&to=promoted%3Dfeatured`);
+  // The order id rides in the path: a query string did not survive LiqPay's
+  // return in the sandbox test, which left the buyer on the bare home page.
+  const sub = await lpCheckout('/promote?store=s20b&tier=featured&cadence=run1');
+  check(sub.params.result_url === `https://lviv-metrics.lshanalytic.workers.dev/liqpay-return/${sub.params.order_id}`, `result_url should carry the order id in its path, got ${sub.params.result_url}`);
+  const back = await lpGet(`/liqpay-return/${orderId}`);
   check(back.status === 302 && back.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=featured', `return redirect wrong: ${back.status} ${back.headers.get('Location')}`);
+  // Checkouts opened before the change still carry ?id=.
+  const old = await lpGet(`/liqpay-return?id=${orderId}&to=promoted%3Dfeatured`);
+  check(old.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=featured', `an old-style return redirect went to ${old.headers.get('Location')}`);
+  // LiqPay may post the result back instead; the order id is then in its data.
+  const posted = await mod.default.fetch(new Request('https://x/liqpay-return', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ data: b64json({ order_id: orderId, status: 'success' }), signature: 'x' }).toString(),
+  }), lpEnv, { waitUntil() {} });
+  check(posted.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=featured', `a posted return went to ${posted.headers.get('Location')}`);
+  // The screen comes from the stored payment, never from the URL.
   const evil = await lpGet(`/liqpay-return?id=${orderId}&to=${encodeURIComponent('x=1&y=<script>')}`);
-  check(evil.headers.get('Location') === 'https://www.lvivsecondhand.com/', 'the return redirect passes through an arbitrary query');
+  check(evil.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=featured', 'the return redirect took its target from the URL');
+  const unknown = await lpGet('/liqpay-return/lp_nosuchorder');
+  check(unknown.headers.get('Location') === 'https://www.lvivsecondhand.com/', 'an unknown order did not return to the home page');
 }
 
 {
@@ -344,7 +360,7 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   await lpCallback({ order_id: c.params.order_id, status: 'failure', payment_id: 7, amount: 400 });
   check(row('SELECT status FROM payments WHERE id = ?', c.params.order_id).status === 'failed' && !row('SELECT * FROM promos WHERE store_id = ?', 's21') && tgPings().length === 0,
     'a failed LiqPay payment was fulfilled or announced');
-  const back = await lpGet(`/liqpay-return?id=${c.params.order_id}&to=promoted%3Dspotlight`);
+  const back = await lpGet(`/liqpay-return/${c.params.order_id}`);
   check(back.headers.get('Location') === 'https://www.lvivsecondhand.com/?promoted=cancel', 'a failed payment returned to the thanks screen');
 }
 

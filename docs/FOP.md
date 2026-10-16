@@ -213,10 +213,12 @@ payments (id TEXT PRIMARY KEY, provider, kind, store_id, intent JSON, text,
   webhook `5xx` so the provider redelivers — the retry delivers it. A renewal
   charge that fails to apply is retried the same way. For an invoice, a second
   `/paid` retries.
-- **Return** — `result_url` is `/liqpay-return`, which sends the buyer to the app's
-  existing thanks screen (`?promoted=` / `?flashdeal=` / `?ordered=`), or to the
-  "cancelled" one if the payment is known to have failed. It only accepts those
-  three return shapes.
+- **Return** — `result_url` is `/liqpay-return/<order_id>`, which sends the buyer to
+  the app's thanks screen (`?promoted=` / `?flashdeal=` / `?ordered=`), or to the
+  "cancelled" one if the payment is known to have failed. The order id is in the
+  path because the first sandbox test came back with no query string; the screen is
+  read from the stored payment, never from the URL. LiqPay's success page doesn't
+  redirect by itself — the buyer taps «Повернутися на сайт».
 - **Promotion codes** (`FEATURED50`) were a Stripe feature; LiqPay's checkout has
   nowhere to enter one, so the coupon line is gone from the app. If the intro offer
   should continue, it needs a price of its own (or a one-off invoice).
