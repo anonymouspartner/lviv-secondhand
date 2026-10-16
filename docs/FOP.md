@@ -178,8 +178,9 @@ payments (id TEXT PRIMARY KEY, provider, kind, store_id, intent JSON, text,
 - **Cancelling** a subscription: by email to the address on the offer page
   (§8.1 there); the owner cancels it in the LiqPay dashboard. The in-app "Manage
   billing" link only ever appears for an old Stripe subscription (none are active).
-- 🧪 Confirm in the sandbox that a recurring charge's callback carries the
-  subscription's original `order_id` — renewal depends on it.
+- ✅ Confirmed in the sandbox (16 Oct 2026, payment 2942083250): a recurring
+  charge's callback carries the subscription's original `order_id`, and the Worker
+  recorded it against that subscription. Sandbox renewals now ping the owner.
 - **Bank-transfer stores** (§5) can't be auto-charged; for them the daily cron sends
   a renewal invoice 5 days before `until` (not built yet — part of §5).
 - There were no live Stripe subscriptions at the switch. Should an old one still
@@ -218,7 +219,11 @@ payments (id TEXT PRIMARY KEY, provider, kind, store_id, intent JSON, text,
   "cancelled" one if the payment is known to have failed. The order id is in the
   path because the first sandbox test came back with no query string; the screen is
   read from the stored payment, never from the URL. LiqPay's success page doesn't
-  redirect by itself — the buyer taps «Повернутися на сайт».
+  redirect by itself — the buyer taps «Повернутися на сайт». If the callback hasn't
+  arrived yet, the return asks LiqPay's status API (`action: "status"`) instead of
+  assuming success: the sandbox's AntiFraud decline sent no callback at all. A
+  decline shows "payment not completed", an unsettled payment "being processed",
+  and a sandbox payment "test payment — nothing published".
 - **Promotion codes** (`FEATURED50`) were a Stripe feature; LiqPay's checkout has
   nowhere to enter one, so the coupon line is gone from the app. If the intro offer
   should continue, it needs a price of its own (or a one-off invoice).

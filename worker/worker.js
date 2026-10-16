@@ -969,6 +969,30 @@ function utf8FromB64(b64) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return new TextDecoder().decode(bytes);
 }
+// Ask LiqPay how a checkout ended — for the return page only, which must not
+// guess. A decline can come back with no callback at all (the sandbox's
+// AntiFraud rejection sent none), leaving the payment 'created', and the buyer
+// must not be told it was paid. 'paid' | 'failed' | 'pending'.
+const LIQPAY_API_URL = 'https://www.liqpay.ua/api/request';
+async function liqpayOrderStatus(env, orderId) {
+  if (!liqpayKeys(env)) return 'pending';
+  try {
+    const data = b64Utf8(JSON.stringify({ action: 'status', version: 3, public_key: env.LIQPAY_PUBLIC_KEY, order_id: orderId }));
+    const signature = await liqpaySign(env.LIQPAY_PRIVATE_KEY, data);
+    const res = await fetch(LIQPAY_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ data, signature }).toString(),
+      signal: AbortSignal.timeout(5000),
+    });
+    const r = await res.json();
+    const st = String((r && r.status) || '');
+    if (['success', 'subscribed', 'wait_compensation', 'sandbox'].includes(st)) return 'paid';
+    // 'error' also covers payment_not_found: the buyer left without paying.
+    if (['failure', 'error', 'reversed'].includes(st) || (r && r.result === 'error')) return 'failed';
+  } catch {}
+  return 'pending';
+}
 // LiqPay's signature: base64(sha1(private_key + data + private_key)).
 async function liqpaySign(privateKey, data) {
   const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(privateKey + data + privateKey));
@@ -1134,6 +1158,10 @@ async function applyLiqpayCallback(env, ctx, d) {
       return;
     }
     await fulfilOnce(env, ctx, claimed);
+  } else if (charge && isSub && sandbox) {
+    // A sandbox renewal proves the recurring callback arrives on the
+    // subscription's own order id; it renews nothing, like every test payment.
+    tgNotify(env, ctx, `🧪 LiqPay SANDBOX renewal received — nothing was published\n\nStore: ${row.store_id}\nWhat:  ${what}\nPaid:  ${uah(amount)} (test)\nOrder: ${id}\n\nRenewals reach the right subscription. Live, this would extend the placement.`);
   } else if (charge && isSub && !sandbox) {
     // The charge is already recorded as handled, so if the renewal throws it
     // must be put back where the redelivery can claim it again — otherwise the
@@ -1950,7 +1978,12 @@ export default {
       const key = row.kind === 'promo' ? 'promoted' : row.kind === 'flashDeal' ? 'flashdeal' : row.kind === 'order' ? 'ordered' : '';
       const val = String((row.kind === 'order' ? intent.item : intent.tier) || '');
       if (!key || !/^[a-z0-9_]{1,16}$/.test(val)) return Response.redirect(APP_URL, 302);
-      return Response.redirect(`${APP_URL}?${key}=${row.status === 'failed' ? 'cancel' : val}`, 302);
+      // The callback usually beats the buyer back; when it hasn't, ask LiqPay
+      // rather than assume. Sandbox payments get their own screen, since
+      // nothing they buy is published.
+      const outcome = row.status === 'failed' ? 'failed' : row.status === 'created' ? await liqpayOrderStatus(env, id) : 'paid';
+      const screen = outcome === 'failed' ? 'cancel' : outcome === 'pending' ? 'pending' : liqpaySandbox(env) ? 'test' : val;
+      return Response.redirect(`${APP_URL}?${key}=${screen}`, 302);
     }
     if (request.method === 'GET') {
       // A bank-transfer invoice, or its act once paid (?doc=act). Opened by the
