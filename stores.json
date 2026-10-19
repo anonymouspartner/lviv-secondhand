@@ -3102,5 +3102,25 @@
     "dailyDrop": true,
     "brand": "Independent",
     "type": "other"
+  },
+  {
+    "id": "c130",
+    "name": "Євро секонд-хенд",
+    "lat": 49.835621,
+    "lng": 24.000229,
+    "cycle": 7,
+    "pricing": "kg",
+    "hours": {
+      "fri": "07:30–17:30",
+      "mon": "07:30–17:30",
+      "sat": "07:30–17:30",
+      "sun": "07:30–17:30",
+      "thu": "07:30–17:30",
+      "tue": "07:30–17:30",
+      "wed": "07:30–17:30"
+    },
+    "restockDay": "wed",
+    "brand": "Independent",
+    "type": "other"
   }
 ]
