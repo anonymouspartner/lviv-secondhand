@@ -281,9 +281,9 @@ const job = {
           <div class="t body">${t}<i>${i}</i></div>
         </div>`).join('')}</div>
       <p class="note body">Не потрібен досвід — потрібне вміння зайти й запитати.
-        <b>Пишіть у Telegram: @Secondhandlvivbot → 💬 Залишити відгук.</b></p>
+        <b>Подати заявку: @Secondhandlvivbot у Telegram → /apply</b></p>
     </div>
-    <div class="foot"><span class="url display">${SITE}</span>
+    <div class="foot"><span class="url display">${SITE}/jobs</span>
       <span class="cta body">${N} ${plural(N, 'магазин', 'магазини', 'магазинів')} вже на карті</span></div>
   </div>`,
 };
