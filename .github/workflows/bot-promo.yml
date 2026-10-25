@@ -1,0 +1,88 @@
+name: Random bot ad in the channel
+
+# Now and then, posts an ad for @Secondhandlvivbot to the Telegram channel —
+# the channel-side twin of the site's random Telegram promo (index.html,
+# TELEGRAM PROMO).
+#
+# WHY DAILY CRON FOR A ~WEEKLY POST
+# GitHub cron cannot pick a random day. So this runs every day and
+# tools/social/bot-promo.mjs rolls the die: most days it prints nothing and
+# nothing is posted, about one day in seven it prints one of several pitches.
+# The ad lands on an unpredictable day with unpredictable wording, which is the
+# point — a fixed weekly ad is the first thing a reader learns to scroll past.
+#
+# WHY 09:00 UTC
+# Clear of the daily restock line (14:00 UTC, restock-tomorrow.yml), so an ad
+# never lands stuck to it. GitHub's multi-hour schedule lag (measured in
+# restock-tomorrow.yml) still puts it within Kyiv daytime.
+#
+# TEXT ONLY, through the shared channel poster, with no parse_mode — same
+# reasons as every other channel post here.
+#
+# To stop it, comment out the `schedule:` block. Nothing else depends on it.
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # Daily 09:00 UTC; posts on roughly 1 run in 7
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Skip the random roll and post an ad now"
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: "Compose the ad and check config, but post nothing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    outputs:
+      text: ${{ steps.ad.outputs.text }}
+      has: ${{ steps.ad.outputs.has }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Roll for an ad
+        id: ad
+        env:
+          BOT_PROMO_CHANCE: ${{ inputs.force == true && '1' || '' }}
+        run: |
+          TEXT=$(cd tools/social && node bot-promo.mjs)
+          if [ -z "$TEXT" ]; then
+            echo "::notice::Not today — no bot ad posted."
+            echo "has=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has=true" >> "$GITHUB_OUTPUT"
+          {
+            echo 'text<<BOT_PROMO_EOF'
+            echo "$TEXT"
+            echo 'BOT_PROMO_EOF'
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Bot ad"
+            echo ""
+            echo '```'
+            echo "$TEXT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  post:
+    needs: compose
+    if: needs.compose.outputs.has == 'true'
+    uses: ./.github/workflows/telegram-channel-post.yml
+    secrets: inherit
+    with:
+      caption: ${{ needs.compose.outputs.text }}
+      dry_run: ${{ inputs.dry_run == true }}
