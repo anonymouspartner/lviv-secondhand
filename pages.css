@@ -1,0 +1,42 @@
+/* Shared look for the plain information pages (services, contacts, returns).
+   Same palette and header as offer.html / privacy.html. Static HTML only —
+   these pages must read in full with JavaScript off (LiqPay's merchant review). */
+:root{
+  --green:#1b5e38; --green2:#2d8653; --orange:#e86c2a;
+  --bg:#f2f4f6; --card:#ffffff; --text:#1a1a2e; --muted:#6b7280; --border:#e5e7eb;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:16px;line-height:1.6;}
+header.page{background:var(--green);color:#fff;padding:20px 20px 18px;}
+header.page .wrap{max-width:760px;margin:0 auto;display:flex;align-items:center;gap:12px;}
+header.page img{width:40px;height:40px;border-radius:10px;}
+header.page h1{font-size:21px;font-weight:800;line-height:1.2;}
+header.page a.back{color:#fff;opacity:.85;text-decoration:none;font-size:13px;font-weight:600;display:inline-block;margin:2px 12px 0 0;}
+header.page a.back:hover{opacity:1;text-decoration:underline;}
+main{max-width:760px;margin:0 auto;padding:24px 18px 48px;}
+h2{font-size:20px;font-weight:800;color:var(--green);margin:28px 0 10px;}
+h2:first-child{margin-top:4px;}
+h3{font-size:18px;font-weight:800;margin:0 0 4px;}
+p{margin:0 0 12px;}
+ul{margin:0 0 12px 22px;}
+li{margin-bottom:6px;}
+a{color:var(--orange);font-weight:600;}
+.lead{font-size:17px;}
+.meta{color:var(--muted);font-size:13px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin:0 0 16px;}
+.svc{display:grid;grid-template-columns:240px 1fr;gap:18px;align-items:start;}
+.svc img{width:100%;height:auto;border-radius:12px;border:1px solid var(--border);display:block;background:#fff;}
+.svc .cap{font-size:12px;color:var(--muted);margin-top:4px;}
+.price{font-size:20px;font-weight:800;color:var(--green);margin:2px 0 8px;}
+.table-wrap{overflow-x:auto;margin:0 0 12px;}
+table{border-collapse:collapse;width:100%;font-size:15px;}
+th,td{border:1px solid var(--border);padding:6px 9px;text-align:left;}
+th{background:var(--bg);font-weight:700;}
+td.num{white-space:nowrap;}
+.pay{display:inline-block;background:var(--green);color:#fff;text-decoration:none;font-weight:800;border-radius:12px;padding:11px 20px;margin-top:4px;}
+.pay:hover{background:var(--green2);}
+.note{background:#fff7d6;border:1px solid #f0d77a;color:#5a4300;border-radius:12px;padding:10px 14px;font-size:14px;}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0 0 12px;}
+dt{font-weight:700;}
+dd{margin:0;overflow-wrap:anywhere;}
+@media (max-width:600px){ .svc{grid-template-columns:1fr;} dl{grid-template-columns:1fr;gap:2px 0;} dd{margin-bottom:8px;} }
