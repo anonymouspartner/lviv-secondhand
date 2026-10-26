@@ -30,6 +30,21 @@
     <priority>0.1</priority>
   </url>
   <url>
+    <loc>https://www.lvivsecondhand.com/services.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/contacts.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://www.lvivsecondhand.com/returns.html</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
     <loc>https://www.lvivsecondhand.com/chain/economclass/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>

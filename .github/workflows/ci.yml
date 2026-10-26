@@ -90,6 +90,12 @@ jobs:
       - name: Check workflow files parse
         run: node scripts/check-workflows.mjs
 
+      # LiqPay's merchant review reads the site as served: seller details,
+      # prices, contacts and refund terms must be in static HTML, the same on
+      # every page, and agree with offer.html §12 / §4.
+      - name: Check site information pages
+        run: node scripts/check-site-pages.mjs
+
       # The per-store pages and sitemap are generated from stores.json but
       # committed (GitHub Pages serves the repo root, so the files ARE the
       # deploy). Regenerate and fail if the committed output differs — that

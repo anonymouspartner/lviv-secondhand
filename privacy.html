@@ -36,7 +36,6 @@
   .tldr p{margin-bottom:0;opacity:.95;}
   .meta{color:var(--muted);font-size:13px;margin-bottom:20px;}
   .lang-divider{text-align:center;color:var(--muted);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin:38px 0 8px;}
-  mark.todo{background:#fde68a;color:#78350f;border-radius:4px;padding:0 4px;font-weight:700;}
   footer{max-width:760px;margin:0 auto;padding:0 20px 50px;color:var(--muted);font-size:13px;text-align:center;}
 </style>
 </head>
@@ -207,5 +206,42 @@
 <footer>
   🧥 Lviv Second Hand — © 2026. All rights reserved · Усі права застережено.
 </footer>
+<!-- SITE FOOTER — identical on every page; scripts/check-site-pages.mjs enforces
+     it and checks the seller details against offer.html §12 (which must match the
+     LiqPay cabinet). Edit all copies together. -->
+<footer class="site-footer" id="site-footer" lang="uk">
+<style>
+  .site-footer{background:#12321f;color:#e8efe9;font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:26px 18px 30px;}
+  .site-footer .sf-wrap{max-width:760px;margin:0 auto;}
+  .site-footer nav{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 14px;padding:0;}
+  .site-footer a{color:#ffd166;font-weight:600;text-decoration:none;}
+  .site-footer a:hover{text-decoration:underline;}
+  .site-footer p{margin:0 0 6px;}
+  .site-footer .sf-logos{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 10px;}
+  .site-footer .sf-logos span{display:inline-flex;align-items:center;background:#fff;border-radius:6px;padding:5px 8px;height:30px;}
+  .site-footer .sf-logos img{display:block;height:18px;width:auto;}
+  .site-footer .sf-logos img.sf-card{height:30px;}
+  .site-footer .sf-copy{opacity:.7;font-size:12px;margin-top:8px;}
+</style>
+<div class="sf-wrap">
+  <nav aria-label="Інформація для покупців">
+    <a href="services.html">Послуги і ціни</a>
+    <a href="contacts.html">Контакти</a>
+    <a href="returns.html">Обмін і повернення</a>
+    <a href="offer.html">Публічна оферта</a>
+    <a href="privacy.html">Політика конфіденційності</a>
+  </nav>
+  <p><strong>ФОП Хейген Тімоті Рендалл</strong> · РНОКПП 3537413536</p>
+  <p>Юридична адреса: 79008, Львівська обл., м. Львів, вул. Театральна, буд. 7, кв. 6</p>
+  <p>Ел. пошта <a href="mailto:hello@lvivsecondhand.com">hello@lvivsecondhand.com</a> · Telegram <a href="https://t.me/Secondhandlvivbot" target="_blank" rel="noopener">@Secondhandlvivbot</a></p>
+  <div class="sf-logos" aria-label="Способи оплати">
+    <span><img src="liqpay-logo.svg" alt="LiqPay" width="87" height="18"></span>
+    <img class="sf-card" src="visa-logo.svg" alt="Visa" width="50" height="30">
+    <img class="sf-card" src="mastercard-logo.svg" alt="Mastercard" width="50" height="30">
+  </div>
+  <p class="sf-copy">Оплата карткою через LiqPay (АТ КБ «ПриватБанк») або переказом за рахунком. © 2026 Lviv Second Hand</p>
+</div>
+</footer>
+<!-- /SITE FOOTER -->
 </body>
 </html>

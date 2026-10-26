@@ -53,7 +53,6 @@
   @media (max-width:520px){ dl{grid-template-columns:1fr;gap:2px 0;} dd{margin-bottom:8px;} th,td{padding:6px 8px;} }
   .lp-badge{display:inline-flex;align-items:center;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:5px 9px;}
   .lp-badge img{height:16px;width:auto;display:block;}
-  mark.todo{background:#fde68a;color:#78350f;border-radius:4px;padding:0 4px;font-weight:700;}
 </style>
 </head>
 <body>
@@ -161,7 +160,7 @@
     <p>7.2. Виконавець не редагує рекламний текст, але може відмовити в публікації чи зняти текст, що порушує п. 7.1. Розміщення магазину при цьому зберігається; якщо порушення робить неможливим надання самої послуги (наприклад, спалах-знижки), Виконавець повертає кошти за невикористаний час.</p>
     <p>7.3. Відповідальність за зміст рекламного тексту несе Замовник.</p>
 
-    <h2>8. Скасування та повернення коштів</h2>
+    <h2 id="refunds">8. Скасування та повернення коштів</h2>
     <p>8.1. Підписку можна скасувати будь-коли — листом на адресу, вказану в розділі 12. Скасування діє з кінця вже оплаченого періоду; розміщення залишається до його завершення, наступних списань не буде.</p>
     <p>8.2. Кошти повертаються в повному обсязі, якщо:</p>
     <ul>
@@ -297,5 +296,42 @@
     </dl>
   </div>
 </main>
+<!-- SITE FOOTER — identical on every page; scripts/check-site-pages.mjs enforces
+     it and checks the seller details against offer.html §12 (which must match the
+     LiqPay cabinet). Edit all copies together. -->
+<footer class="site-footer" id="site-footer" lang="uk">
+<style>
+  .site-footer{background:#12321f;color:#e8efe9;font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:26px 18px 30px;}
+  .site-footer .sf-wrap{max-width:760px;margin:0 auto;}
+  .site-footer nav{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0 0 14px;padding:0;}
+  .site-footer a{color:#ffd166;font-weight:600;text-decoration:none;}
+  .site-footer a:hover{text-decoration:underline;}
+  .site-footer p{margin:0 0 6px;}
+  .site-footer .sf-logos{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 10px;}
+  .site-footer .sf-logos span{display:inline-flex;align-items:center;background:#fff;border-radius:6px;padding:5px 8px;height:30px;}
+  .site-footer .sf-logos img{display:block;height:18px;width:auto;}
+  .site-footer .sf-logos img.sf-card{height:30px;}
+  .site-footer .sf-copy{opacity:.7;font-size:12px;margin-top:8px;}
+</style>
+<div class="sf-wrap">
+  <nav aria-label="Інформація для покупців">
+    <a href="services.html">Послуги і ціни</a>
+    <a href="contacts.html">Контакти</a>
+    <a href="returns.html">Обмін і повернення</a>
+    <a href="offer.html">Публічна оферта</a>
+    <a href="privacy.html">Політика конфіденційності</a>
+  </nav>
+  <p><strong>ФОП Хейген Тімоті Рендалл</strong> · РНОКПП 3537413536</p>
+  <p>Юридична адреса: 79008, Львівська обл., м. Львів, вул. Театральна, буд. 7, кв. 6</p>
+  <p>Ел. пошта <a href="mailto:hello@lvivsecondhand.com">hello@lvivsecondhand.com</a> · Telegram <a href="https://t.me/Secondhandlvivbot" target="_blank" rel="noopener">@Secondhandlvivbot</a></p>
+  <div class="sf-logos" aria-label="Способи оплати">
+    <span><img src="liqpay-logo.svg" alt="LiqPay" width="87" height="18"></span>
+    <img class="sf-card" src="visa-logo.svg" alt="Visa" width="50" height="30">
+    <img class="sf-card" src="mastercard-logo.svg" alt="Mastercard" width="50" height="30">
+  </div>
+  <p class="sf-copy">Оплата карткою через LiqPay (АТ КБ «ПриватБанк») або переказом за рахунком. © 2026 Lviv Second Hand</p>
+</div>
+</footer>
+<!-- /SITE FOOTER -->
 </body>
 </html>

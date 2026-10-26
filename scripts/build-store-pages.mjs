@@ -594,6 +594,9 @@ function sitemap(stores, chains) {
     { loc: `${ORIGIN}/jobs/`, freq: 'monthly', pri: '0.3' },
     { loc: `${ORIGIN}/privacy.html`, freq: 'yearly', pri: '0.1' },
     { loc: `${ORIGIN}/offer.html`, freq: 'yearly', pri: '0.1' },
+    { loc: `${ORIGIN}/services.html`, freq: 'monthly', pri: '0.5' },
+    { loc: `${ORIGIN}/contacts.html`, freq: 'yearly', pri: '0.3' },
+    { loc: `${ORIGIN}/returns.html`, freq: 'yearly', pri: '0.3' },
   ];
   const entries = [
     ...staticUrls,
@@ -654,4 +657,4 @@ for (const c of chains) {
 writeFileSync(join(OUT_DIR, 'index.html'), indexPage(stores, chains));
 writeFileSync(join(ROOT, 'sitemap.xml'), sitemap(stores, chains));
 
-console.log(`Generated ${stores.length} store pages + ${chains.length} chain pages + /store/ index + sitemap.xml (${stores.length + chains.length + 4} URLs).`);
+console.log(`Generated ${stores.length} store pages + ${chains.length} chain pages + /store/ index + sitemap.xml (${stores.length + chains.length + 8} URLs).`);
