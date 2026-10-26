@@ -44,6 +44,12 @@ SELLER_TAX_ID = "3537413536"
 SELLER_ADDRESS = "79008, Львівська обл., м. Львів, вул. Театральна, буд. 7, кв. 6"
 SELLER_IBAN = "UA503052990000026008031043785"
 SELLER_TAX_STATUS = "Платник єдиного податку 3 групи, не є платником ПДВ"
+# Show the buy buttons while the LiqPay keys are still sandbox_… keys, so
+# LiqPay's merchant review can find a way to pay on the site. "1" = on, anything
+# else = off. Test payments charge nothing and publish nothing, and the app
+# marks the buttons "Test mode". Has no effect on live keys (the buttons show
+# then anyway) — set it to "" once the live keys are in, and redeploy.
+SHOW_BUY_IN_SANDBOX = "1"
 # The Барахолка channel, so the listings sweep can delete an expired post.
 # Not a secret — a public channel handle is public by definition, same
 # reasoning as OWNER_ID above and as the TG_CHANNEL repository *variable* the

@@ -273,6 +273,11 @@ the owner, and that sandbox keys never publish. Each of these was checked to fai
    - extra: `…/order?store=c21&item=poster&lang=ua&email=you@example.com`
 
    Each should ping you on Telegram with **🧪 SANDBOX — nothing was published**.
+   **For LiqPay's merchant review** the buy buttons are shown on sandbox keys too,
+   while `SHOW_BUY_IN_SANDBOX = "1"` in `worker/wrangler.toml` (each sheet says
+   "🧪 Test mode — no money is charged"; nothing is published). The reviewer's link
+   is `https://www.lvivsecondhand.com/?advertise` — the price list, logos, terms,
+   contacts and «Оплатити» buttons. Set it to `""` once the live keys are in.
 4. Once the shop is approved, replace the two keys with the live ones and re-run the
    deploy. The buttons appear, and payments deliver for real.
 5. To switch card checkout off again at any point, set `PAY_PROVIDER` to `off` and

@@ -562,6 +562,24 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   const sbEnv = { ...env, PAY_PROVIDER: 'liqpay', LIQPAY_PUBLIC_KEY: 'sandbox_i000000', LIQPAY_PRIVATE_KEY: 'sandbox_check_payments_private' };
   const st = await (await lpGet('/status', sbEnv)).json();
   check(st.provider === 'liqpay' && st.promoConfigured === false, `/status offers checkout to the public on sandbox keys: ${JSON.stringify(st)}`);
+
+  // SHOW_BUY_IN_SANDBOX = "1" shows checkout on sandbox keys, for LiqPay's
+  // merchant review — flagged as test mode so the app can say so.
+  const review = { ...sbEnv, SHOW_BUY_IN_SANDBOX: '1' };
+  const rst = await (await lpGet('/status', review)).json();
+  check(rst.promoConfigured === true && rst.testMode === true, `with SHOW_BUY_IN_SANDBOX the app is not offered test checkout: ${JSON.stringify(rst)}`);
+  check(st.testMode === true, 'sandbox keys are not reported as test mode');
+  for (const off of ['', '0', 'true', undefined]) {
+    const o = await (await lpGet('/status', { ...sbEnv, SHOW_BUY_IN_SANDBOX: off })).json();
+    check(o.promoConfigured === false, `SHOW_BUY_IN_SANDBOX=${JSON.stringify(off)} showed sandbox checkout`);
+  }
+  const live = await (await lpGet('/status', { ...lpEnv, SHOW_BUY_IN_SANDBOX: '1' })).json();
+  check(live.promoConfigured === true && live.testMode === false, `on live keys the switch changed what /status says: ${JSON.stringify(live)}`);
+  const none = await (await lpGet('/status', { ...env, SHOW_BUY_IN_SANDBOX: '1' })).json();
+  check(none.promoConfigured === false && none.testMode === false, `with LiqPay off the switch alone offered checkout: ${JSON.stringify(none)}`);
+  // Every sandbox payment below runs with the review switch on: showing the
+  // buttons must not make a test card publish anything.
+  Object.assign(sbEnv, { SHOW_BUY_IN_SANDBOX: '1' });
   for (const [path, store] of [
     ['/promote?store=s50&tier=spotlight&cadence=annual&text=x', 's50'],
     ['/flash-deal?store=s51&tier=24h&pin=4321&text=' + encodeURIComponent('Все по 1 ₴'), 's51'],
@@ -683,6 +701,16 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
     const h = (await page(r.j.url)).html;
     check(h.includes(want), `${plan}: amount in words is not "${want}"`);
   }
+}
+
+// ── 12b · the site shows no Stripe ──────────────────────────────────────────
+{
+  const fs = await import('node:fs');
+  for (const f of ['index.html', 'offer.html', 'privacy.html']) {
+    const html = fs.readFileSync(f, 'utf8');
+    check(!/buy\.stripe\.com|checkout\.stripe\.com|js\.stripe\.com/.test(html), `${f} links to a Stripe payment page`);
+  }
+  check(/const DONATE_URL = '';/.test(fs.readFileSync('index.html', 'utf8')), 'the donate button (a Stripe link) is back');
 }
 
 // ── 13 · the Worker charges what the app shows ───────────────────────────────

@@ -955,7 +955,13 @@ const payProvider = (env) => (env.PAY_PROVIDER === 'liqpay' && liqpayKeys(env) ?
 // while the keys are sandbox keys; the owner tests by opening the purchase
 // links directly (docs/FOP.md §3.8).
 const liqpaySandbox = (env) => String(env.LIQPAY_PUBLIC_KEY || '').startsWith('sandbox_');
-const checkoutReady = (env) => payProvider(env) === 'liqpay' && !liqpaySandbox(env);
+// SHOW_BUY_IN_SANDBOX = "1" shows checkout on sandbox keys too — for LiqPay's
+// merchant review, whose reviewer must find a way to pay on the site before
+// the shop gets its live keys. Safe: a sandbox payment is a test card, charges
+// nothing and publishes nothing (applyLiqpayCallback), and the app labels the
+// buttons as test mode. Once live keys are in, the flag no longer matters.
+const showBuyInSandbox = (env) => String(env.SHOW_BUY_IN_SANDBOX || '').trim() === '1';
+const checkoutReady = (env) => payProvider(env) === 'liqpay' && (!liqpaySandbox(env) || showBuyInSandbox(env));
 
 function b64Utf8(str) {
   const bytes = new TextEncoder().encode(str);
@@ -2004,7 +2010,7 @@ export default {
       if (url.pathname === '/status') {
         let subs = null;
         try { await ensureSchema(env); const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM push_subs').first(); subs = c ? c.n : 0; } catch {}
-        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: checkoutReady(env), provider: payProvider(env) }, 200, origin);
+        return json({ ok: true, push: true, vapidConfigured: !!env.VAPID_PRIVATE, subs, promoConfigured: checkoutReady(env), provider: payProvider(env), testMode: payProvider(env) === 'liqpay' && liqpaySandbox(env) }, 200, origin);
       }
       // Live paid promotions: { storeId: {tier, offer?, until} }. The app merges
       // these onto STORES so the gold pin/badge/offer render automatically.
