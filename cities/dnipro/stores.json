@@ -126,12 +126,12 @@
       "sun": "?"
     },
     "cycle": 35,
-    "lat": 48.4647,
-    "lng": 35.0462,
+    "lat": 48.41557,
+    "lng": 35.133012,
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "approx"
+    "geocode_status": "ok"
   },
   {
     "id": "dn6",
@@ -339,12 +339,12 @@
       "sun": "?"
     },
     "cycle": 35,
-    "lat": 48.4647,
-    "lng": 35.0462,
+    "lat": 48.520314,
+    "lng": 35.036639,
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "approx"
+    "geocode_status": "ok"
   },
   {
     "id": "dn14",
@@ -816,12 +816,12 @@
       "sun": "?"
     },
     "cycle": 35,
-    "lat": 48.4647,
-    "lng": 35.0462,
+    "lat": 48.449968,
+    "lng": 35.06046,
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "approx"
+    "geocode_status": "ok"
   },
   {
     "id": "dn32",
@@ -842,12 +842,12 @@
       "sun": "?"
     },
     "cycle": 35,
-    "lat": 48.4647,
-    "lng": 35.0462,
+    "lat": 48.408653,
+    "lng": 35.077247,
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "approx"
+    "geocode_status": "ok"
   },
   {
     "id": "dn33",

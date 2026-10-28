@@ -232,12 +232,12 @@
       "sun": "?"
     },
     "cycle": 35,
-    "lat": 49.9935,
-    "lng": 36.2304,
+    "lat": 50.027539,
+    "lng": 36.223785,
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "approx"
+    "geocode_status": "ok"
   },
   {
     "id": "kh10",
@@ -1296,12 +1296,12 @@
       "sun": "?"
     },
     "cycle": 35,
-    "lat": 49.9935,
-    "lng": 36.2304,
+    "lat": 49.991582,
+    "lng": 36.360155,
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "approx"
+    "geocode_status": "ok"
   },
   {
     "id": "kh50",
