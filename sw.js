@@ -11,7 +11,11 @@ const SHELL = [
   'favicon.svg', 'favicon-32.png', 'apple-touch-icon.png',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
   'vendor/leaflet.css', 'vendor/leaflet.js', 'vendor/qrcode.js', 'app-env.js',
-  'stores.json'
+  // cities.json tells the app which stores file this origin serves. The
+  // stores file itself is NOT precached: each city subdomain loads its own
+  // (stores.json for Lviv, cities/<slug>/stores.json elsewhere) and the
+  // network-first rule below caches whichever one this origin actually uses.
+  'cities.json'
 ];
 
 self.addEventListener('install', (e) => {
@@ -135,7 +139,16 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // stores.json: also network-first (store data changes without an app redeploy),
+  // cities.json: network-first, cached for offline.
+  if (url.pathname.endsWith('/cities.json')) {
+    e.respondWith(fetch(e.request).then((res) => {
+      if (res.ok) caches.open(SHELL_CACHE).then((c) => c.put('cities.json', res.clone()));
+      return res;
+    }).catch(() => caches.match('cities.json')));
+    return;
+  }
+  // stores file (stores.json or cities/<slug>/stores.json): also network-first
+  // (store data changes without an app redeploy),
   // but the app appends a cache-busting ?v= so every request has a unique URL —
   // cache and match it under a normalized key instead, or offline lookups would
   // always miss.

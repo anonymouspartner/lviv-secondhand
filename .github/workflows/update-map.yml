@@ -51,7 +51,7 @@ jobs:
       # a missing required field, an out-of-range coordinate, a duplicate id,
       # or a non-ISO date.
       - name: Validate schema
-        run: node scripts/validate-stores.mjs
+        run: node scripts/validate-stores.mjs && node scripts/validate-cities.mjs
 
       # Step 2b — regenerate the static per-store pages and the sitemap from
       # the patched data. These are committed files served straight to search
@@ -75,7 +75,7 @@ jobs:
         run: |
           git config user.name "lviv-secondhand-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add stores.json store chain sitemap.xml qr
+          git add stores.json cities store chain sitemap.xml qr
           if git diff --cached --quiet; then
             echo "No changes after patch — nothing to commit."
             exit 0

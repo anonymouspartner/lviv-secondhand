@@ -742,6 +742,31 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   }
 }
 
+// ── 14 · cities: CORS lets every city subdomain in; checkout refuses them ──────
+// The city subdomains call the same Worker (promos, metrics, push), so the
+// CORS allow-list must echo them back. Paid placements are Lviv-only for now:
+// the app hides the buttons, and the Worker must refuse too, or a hand-built
+// /promote link would sell a placement on a map where nothing renders it.
+{
+  const cities = JSON.parse((await import('node:fs')).readFileSync(new URL('../cities.json', import.meta.url), 'utf8'));
+  const inline = /const CITIES = \[([\s\S]*?)\];/.exec((await import('node:fs')).readFileSync(new URL('../worker/worker.js', import.meta.url), 'utf8'));
+  for (const c of cities) {
+    check(inline && inline[1].includes(`'${c.slug}'`) && inline[1].includes(`'${c.host}'`), `worker.js CITIES is missing ${c.slug} (${c.host}) — copy it from cities.json`);
+  }
+  const allow = async (origin) => {
+    const r = await mod.default.fetch(new Request('https://x/promos', { method: 'OPTIONS', headers: { Origin: origin } }), env, { waitUntil() {} });
+    return r.headers.get('Access-Control-Allow-Origin');
+  };
+  check((await allow('https://kyiv.lvivsecondhand.com')) === 'https://kyiv.lvivsecondhand.com', 'CORS: kyiv subdomain not allowed');
+  check((await allow('https://evil.example')) === 'https://www.lvivsecondhand.com', 'CORS: unknown origin must fall back to www');
+  const env2 = { ...env, PAY_PROVIDER: 'liqpay', LIQPAY_PUBLIC_KEY: 'sandbox_x', LIQPAY_PRIVATE_KEY: 'sandbox_y' };
+  const promote = async (store) => (await mod.default.fetch(new Request(`https://x/promote?store=${store}&tier=featured&cadence=monthly`, { headers: { Origin: 'https://www.lvivsecondhand.com' } }), env2, { waitUntil() {} })).status;
+  check((await promote('kv1')) === 403, '/promote must refuse a Kyiv store id (promo:false city)');
+  check((await promote('c12')) !== 403, '/promote must still accept a Lviv store id');
+  const order = async (store) => (await mod.default.fetch(new Request(`https://x/order?store=${store}&item=poster`, { headers: { Origin: 'https://www.lvivsecondhand.com' } }), env2, { waitUntil() {} })).status;
+  check((await order('od3')) === 403, '/order must refuse an Odesa store id');
+}
+
 if (errors.length) {
   console.error('\nPayment check FAILED:');
   for (const e of errors) console.error('  ✗ ' + e);

@@ -8,7 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const storesPath = resolve(here, '..', 'stores.json');
+// STORES_PATH lets validate-cities.mjs run the same checks on each
+// cities/<slug>/stores.json file. Default stays the Lviv file.
+const storesPath = process.env.STORES_PATH
+  ? resolve(process.cwd(), process.env.STORES_PATH)
+  : resolve(here, '..', 'stores.json');
 
 const REQUIRED_FIELDS = ['id', 'name', 'lat', 'lng', 'cycle'];
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?Z)?$/;

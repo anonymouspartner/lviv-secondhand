@@ -1,0 +1,60 @@
+name: Geocode city stores
+
+# Fills lat/lng for stores in cities/<slug>/stores.json whose geocode_status is
+# "pending" (or "approx" with retry), using OpenStreetMap Nominatim at one
+# request per second. Run by hand from the Actions tab after importing a new
+# city's lead list; it commits the result straight to main. Nominatim's policy
+# forbids bulk runs more often than that, so this is manual-only on purpose.
+on:
+  workflow_dispatch:
+    inputs:
+      city:
+        description: "City slug from cities.json, or 'all'"
+        required: true
+        default: "all"
+      retry:
+        description: "Also retry stores already marked approx"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: geocode-city
+  cancel-in-progress: false
+
+jobs:
+  geocode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Geocode
+        run: |
+          ARGS="${{ inputs.city }}"
+          [ "$ARGS" = "all" ] && ARGS="--all"
+          [ "${{ inputs.retry }}" = "true" ] && ARGS="$ARGS --retry"
+          node scripts/geocode-city.mjs $ARGS
+
+      - name: Validate
+        run: node scripts/validate-cities.mjs
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "lviv-secondhand-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add cities
+          if git diff --cached --quiet; then
+            echo "Nothing to geocode."
+            exit 0
+          fi
+          git commit -m "Geocode ${{ inputs.city }} stores [skip ci]"
+          git push

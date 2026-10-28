@@ -6,6 +6,7 @@
   "appendUserAgent": "LvivSecondHandApp",
   "server": {
     "url": "https://www.lvivsecondhand.com",
+    "allowNavigation": ["*.lvivsecondhand.com"],
     "cleartext": false,
     "androidScheme": "https"
   },

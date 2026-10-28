@@ -1,0 +1,27 @@
+name: Deploy city router Worker
+
+# Deploys city-router/ (the *.lvivsecondhand.com proxy that serves each city
+# subdomain from the www GitHub Pages site) whenever it changes. Uses the same
+# two repository secrets as the metrics Worker:
+#   CLOUDFLARE_API_TOKEN   — "Edit Cloudflare Workers" (+ Zone: Workers Routes
+#                            Edit on lvivsecondhand.com, for the route)
+#   CLOUDFLARE_ACCOUNT_ID
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'city-router/**'
+      - '.github/workflows/deploy-city-router.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: city-router

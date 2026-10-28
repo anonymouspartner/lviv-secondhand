@@ -108,6 +108,32 @@ The letter inside a pin is the **chain**, so a shopper can spot a familiar brand
 
 **🎉 Fresh Today filter.** Isolates every store currently at day 0 — green, just restocked, whether that comes from a recorded delivery date or a published restock-day schedule. On the map it also draws a suggested walking route: a nearest-neighbour line connecting the fresh stores (starting from "Near me" if that's set), with each pin numbered to match. Not a shortest-path solver, just a quick, deterministic suggestion for a handful of same-day stores.
 
+## 🏙️ Cities
+
+One app shell, one city per subdomain. `www.lvivsecondhand.com` is Lviv; every
+other city lives at `<slug>.lvivsecondhand.com` (`kyiv.`, `kharkiv.`, `dnipro.`,
+`odesa.`, `zhytomyr.`, `ternopil.`, `lutsk.`, `rivne.`, `chernivtsi.`,
+`ivano-frankivsk.`). The 🏙 button in the header switches city; a first visit
+to www offers the list once.
+
+- **`cities.json`** is the registry: slug, host, id prefix, names (nominative,
+  genitive, locative), map centre/zoom, stores file, whether paid placements
+  are sold there, which chain filters to show.
+- **Data:** Lviv keeps `stores.json`; other cities use `cities/<slug>/stores.json`.
+  Store ids are globally unique and carry the city prefix (`kv12` = Kyiv), so
+  the shared Worker tables need no city column. `scripts/validate-cities.mjs`
+  enforces this in CI.
+- **Hosting:** GitHub Pages still serves only www. `city-router/worker.js` is a
+  Cloudflare Worker on `*.lvivsecondhand.com/*` that proxies each city host to
+  the same files; the app reads `location.hostname` to pick its city
+  (`?city=<slug>` overrides it for testing).
+- **Adding a city:** add it to `cities.json` and to the `CITIES` copies in
+  `worker/worker.js` and `city-router/worker.js`; import leads with
+  `scripts/import-competitor-city.mjs`; run the "Geocode city stores" workflow;
+  add a proxied DNS record for the subdomain (or rely on the `*` wildcard).
+- **Not yet per city:** paid placements (Lviv only), SEO store pages and
+  sitemaps, the Telegram bot, QR posters and social images.
+
 ## 🤝 Sharing & Contributing
 
 Stores you add or edit are saved only on your own device. The **🤝 button** (top-right) is where they leave it:
