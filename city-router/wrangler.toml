@@ -3,11 +3,13 @@ main = "worker.js"
 compatibility_date = "2026-08-01"
 
 # Serves the city subdomains from the www GitHub Pages site (see worker.js).
-# The route needs each city subdomain to exist as a PROXIED (orange-cloud) DNS
-# record on lvivsecondhand.com — any target works (e.g. AAAA 100:: or a CNAME
-# to www), because the Worker answers before the record is ever used. One
-# wildcard record `*` covers every city at once; unknown names 302 to www.
-# www itself must stay DNS-only (grey cloud) → GitHub Pages, as it is today.
+# Each city subdomain needs its own PROXIED (orange-cloud) DNS record on
+# lvivsecondhand.com — target AAAA 100:: (a documented "no origin" placeholder),
+# because the Worker answers before the record is ever used. Do NOT add a
+# wildcard `*` record: the Worker passes any non-city host through to its own
+# origin, and a wildcard would give unknown hosts none. www stays DNS-only
+# (grey cloud) → GitHub Pages, as it is today; other proxied hosts on the zone
+# (read.lvivsecondhand.com) are untouched because the Worker passes them through.
 routes = [
   { pattern = "*.lvivsecondhand.com/*", zone_name = "lvivsecondhand.com" },
 ]
