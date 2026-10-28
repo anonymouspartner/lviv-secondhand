@@ -3,6 +3,7 @@
   "appName": "Lviv Second Hand",
   "webDir": "www",
   "backgroundColor": "#14472aff",
+  "appendUserAgent": "LvivSecondHandApp",
   "server": {
     "url": "https://www.lvivsecondhand.com",
     "allowNavigation": ["*.lvivsecondhand.com"],

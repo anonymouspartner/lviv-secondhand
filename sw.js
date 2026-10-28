@@ -10,7 +10,7 @@ const SHELL = [
   './', 'index.html', 'privacy.html', 'manifest.webmanifest',
   'favicon.svg', 'favicon-32.png', 'apple-touch-icon.png',
   'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
-  'vendor/leaflet.css', 'vendor/leaflet.js', 'vendor/qrcode.js',
+  'vendor/leaflet.css', 'vendor/leaflet.js', 'vendor/qrcode.js', 'app-env.js',
   // cities.json tells the app which stores file this origin serves. The
   // stores file itself is NOT precached: each city subdomain loads its own
   // (stores.json for Lviv, cities/<slug>/stores.json elsewhere) and the
