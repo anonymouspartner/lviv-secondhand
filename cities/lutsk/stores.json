@@ -190,9 +190,9 @@
   },
   {
     "id": "lu8",
-    "name": "вул. Олени Пчілки, 29а",
+    "name": "просп. Відродження, 29а",
     "brand": "Independent",
-    "address": "вул. Олени Пчілки, 29а",
+    "address": "просп. Відродження, 29а",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -209,18 +209,17 @@
     "cycle": 7,
     "lat": 50.752805,
     "lng": 25.377984,
-    "note": "Оновлення: Пʼятниця · Стара назва вулиці: просп. Відродження",
+    "note": "Оновлення: Пʼятниця",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "fri",
-    "addressOld": "просп. Відродження, 29а"
+    "restockDay": "fri"
   },
   {
     "id": "lu9",
-    "name": "бульвар Старобульварна, 27",
+    "name": "просп. Волі, 27",
     "brand": "Independent",
-    "address": "бульвар Старобульварна, 27",
+    "address": "просп. Волі, 27",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -237,12 +236,11 @@
     "cycle": 7,
     "lat": 50.746208,
     "lng": 25.33854,
-    "note": "Оновлення: Пʼятниця · Стара назва вулиці: просп. Волі",
+    "note": "Оновлення: Пʼятниця",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "fri",
-    "addressOld": "просп. Волі, 27"
+    "restockDay": "fri"
   },
   {
     "id": "lu10",

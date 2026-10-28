@@ -425,9 +425,9 @@
   },
   {
     "id": "kv17",
-    "name": "вул. Академіка Шалімова, 36/1",
+    "name": "вул. Героїв Севастополя, 36/1",
     "brand": "Independent",
-    "address": "вул. Академіка Шалімова, 36/1",
+    "address": "вул. Героїв Севастополя, 36/1",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -444,12 +444,11 @@
     "cycle": 7,
     "lat": 50.431432,
     "lng": 30.422606,
-    "note": "Оновлення: Субота · Стара назва вулиці: вул. Героїв Севастополя",
+    "note": "Оновлення: Субота",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "sat",
-    "addressOld": "вул. Героїв Севастополя, 36/1"
+    "restockDay": "sat"
   },
   {
     "id": "kv18",

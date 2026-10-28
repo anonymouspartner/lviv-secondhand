@@ -163,9 +163,9 @@
   },
   {
     "id": "kh7",
-    "name": "вул. Слов’янська, 8/10В",
+    "name": "вул. Євгена Котляра, 8/10В",
     "brand": "Independent",
-    "address": "вул. Слов’янська, 8/10В",
+    "address": "вул. Євгена Котляра, 8/10В",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -182,11 +182,10 @@
     "cycle": 35,
     "lat": 49.989679,
     "lng": 36.207735,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: вул. Євгена Котляра",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
-    "addressOld": "вул. Євгена Котляра, 8/10В"
+    "geocode_status": "ok"
   },
   {
     "id": "kh8",
@@ -265,7 +264,7 @@
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "kh11",
