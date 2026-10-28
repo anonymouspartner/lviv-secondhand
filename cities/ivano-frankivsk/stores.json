@@ -50,7 +50,7 @@
     "note": "Оновлення: Четвер",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "street",
     "restockDay": "thu"
   },
   {
@@ -77,7 +77,7 @@
     "note": "Оновлення: Середа",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "street",
     "restockDay": "wed"
   },
   {

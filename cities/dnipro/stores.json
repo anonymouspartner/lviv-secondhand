@@ -23,7 +23,7 @@
     "note": "Оновлення: Субота",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "street",
     "restockDay": "sat"
   },
   {
@@ -104,7 +104,7 @@
     "note": "Оновлення: Понеділок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "street",
     "restockDay": "mon"
   },
   {
@@ -135,9 +135,9 @@
   },
   {
     "id": "dn6",
-    "name": "вул. Академіка Образцова, 26",
+    "name": "вул. Зразкова, 26",
     "brand": "Independent",
-    "address": "вул. Академіка Образцова, 26",
+    "address": "вул. Зразкова, 26",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -154,10 +154,11 @@
     "cycle": 7,
     "lat": 48.519314,
     "lng": 35.057791,
-    "note": "Оновлення: Оновлення невідомо коли",
+    "note": "Оновлення: Оновлення невідомо коли · Стара назва вулиці: вул. Академіка Образцова",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "вул. Академіка Образцова, 26"
   },
   {
     "id": "dn7",
@@ -204,12 +205,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.212815,
-    "lng": 34.87535,
+    "lat": 48.4647,
+    "lng": 35.0462,
     "note": "Оновлення: Понеділок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "approx",
     "restockDay": "mon"
   },
   {
@@ -295,9 +296,9 @@
   },
   {
     "id": "dn12",
-    "name": "вул. Комбрига Петрова, 3",
+    "name": "вул. Василя Барки, 3",
     "brand": "Independent",
-    "address": "вул. Комбрига Петрова, 3",
+    "address": "вул. Василя Барки, 3",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -314,11 +315,12 @@
     "cycle": 7,
     "lat": 48.40047,
     "lng": 35.032295,
-    "note": "Оновлення: Субота",
+    "note": "Оновлення: Субота · Стара назва вулиці: вул. Комбрига Петрова",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "sat"
+    "restockDay": "sat",
+    "addressOld": "вул. Комбрига Петрова, 3"
   },
   {
     "id": "dn13",
@@ -344,7 +346,7 @@
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "dn14",
@@ -505,9 +507,9 @@
   },
   {
     "id": "dn20",
-    "name": "вул. Тітова, 21",
+    "name": "вул. Незалежності, 21",
     "brand": "Independent",
-    "address": "вул. Тітова, 21",
+    "address": "вул. Незалежності, 21",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -524,17 +526,18 @@
     "cycle": 7,
     "lat": 48.430407,
     "lng": 35.006841,
-    "note": "Оновлення: Пʼятниця",
+    "note": "Оновлення: Пʼятниця · Стара назва вулиці: вул. Тітова",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "fri"
+    "restockDay": "fri",
+    "addressOld": "вул. Тітова, 21"
   },
   {
     "id": "dn21",
-    "name": "вул. Тітова, 31",
+    "name": "вул. Незалежності, 31",
     "brand": "Independent",
-    "address": "вул. Тітова, 31",
+    "address": "вул. Незалежності, 31",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -551,11 +554,12 @@
     "cycle": 7,
     "lat": 48.432231,
     "lng": 35.000183,
-    "note": "Оновлення: Середа",
+    "note": "Оновлення: Середа · Стара назва вулиці: вул. Тітова",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "wed"
+    "restockDay": "wed",
+    "addressOld": "вул. Тітова, 31"
   },
   {
     "id": "dn22",
@@ -603,18 +607,18 @@
       "sun": "?"
     },
     "cycle": 35,
-    "lat": 48.468553,
-    "lng": 35.022062,
+    "lat": 48.4647,
+    "lng": 35.0462,
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "approx"
   },
   {
     "id": "dn24",
-    "name": "вул. Шолохова, 7",
+    "name": "вул. Степана Рудницького, 7",
     "brand": "Independent",
-    "address": "вул. Шолохова, 7",
+    "address": "вул. Степана Рудницького, 7",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -631,10 +635,11 @@
     "cycle": 35,
     "lat": 48.507689,
     "lng": 34.987788,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: вул. Шолохова",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "вул. Шолохова, 7"
   },
   {
     "id": "dn25",
@@ -719,9 +724,9 @@
   },
   {
     "id": "dn28",
-    "name": "просп. Гагаріна, 120",
+    "name": "просп. Науки, 120",
     "brand": "Independent",
-    "address": "просп. Гагаріна, 120",
+    "address": "просп. Науки, 120",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -738,16 +743,17 @@
     "cycle": 35,
     "lat": 48.426262,
     "lng": 35.024313,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: просп. Гагаріна",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "просп. Гагаріна, 120"
   },
   {
     "id": "dn29",
-    "name": "просп. Гагаріна, 165",
+    "name": "просп. Науки, 165",
     "brand": "Independent",
-    "address": "просп. Гагаріна, 165",
+    "address": "просп. Науки, 165",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -764,17 +770,18 @@
     "cycle": 7,
     "lat": 48.42535,
     "lng": 35.029214,
-    "note": "Оновлення: Четвер",
+    "note": "Оновлення: Четвер · Стара назва вулиці: просп. Гагаріна",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "thu"
+    "restockDay": "thu",
+    "addressOld": "просп. Гагаріна, 165"
   },
   {
     "id": "dn30",
-    "name": "просп. Гагаріна, 29",
+    "name": "просп. Науки, 29",
     "brand": "Independent",
-    "address": "просп. Гагаріна, 29",
+    "address": "просп. Науки, 29",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -791,17 +798,18 @@
     "cycle": 7,
     "lat": 48.449968,
     "lng": 35.06046,
-    "note": "Оновлення: Понеділок",
+    "note": "Оновлення: Понеділок · Стара назва вулиці: просп. Гагаріна",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "mon"
+    "restockDay": "mon",
+    "addressOld": "просп. Гагаріна, 29"
   },
   {
     "id": "dn31",
-    "name": "просп. Гагаріна, 29, 2 поверх",
+    "name": "просп. Науки, 29, 2 поверх",
     "brand": "Independent",
-    "address": "просп. Гагаріна, 29, 2 поверх",
+    "address": "просп. Науки, 29, 2 поверх",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -818,10 +826,11 @@
     "cycle": 35,
     "lat": 48.449968,
     "lng": 35.06046,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: просп. Гагаріна",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "просп. Гагаріна, 29, 2 поверх"
   },
   {
     "id": "dn32",
@@ -847,7 +856,7 @@
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "dn33",

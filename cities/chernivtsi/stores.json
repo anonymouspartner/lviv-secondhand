@@ -124,19 +124,19 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.262563,
-    "lng": 25.946564,
+    "lat": 48.2921,
+    "lng": 25.9358,
     "note": "Оновлення: Субота",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "approx",
     "restockDay": "sat"
   },
   {
     "id": "cv6",
-    "name": "вул. Комарова, 31",
+    "name": "вул. Сергія Скальда, 31",
     "brand": "Independent",
-    "address": "вул. Комарова, 31",
+    "address": "вул. Сергія Скальда, 31",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -153,11 +153,12 @@
     "cycle": 7,
     "lat": 48.254796,
     "lng": 25.933411,
-    "note": "Оновлення: Четвер",
+    "note": "Оновлення: Четвер · Стара назва вулиці: вул. Комарова",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "thu"
+    "restockDay": "thu",
+    "addressOld": "вул. Комарова, 31"
   },
   {
     "id": "cv7",

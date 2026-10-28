@@ -28,9 +28,9 @@
   },
   {
     "id": "lu2",
-    "name": "вул. Воїнів-Інтернаціоналістів, 1",
+    "name": "вул. Воїнів-Афганців, 1",
     "brand": "Independent",
-    "address": "вул. Воїнів-Інтернаціоналістів, 1",
+    "address": "вул. Воїнів-Афганців, 1",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -47,11 +47,12 @@
     "cycle": 7,
     "lat": 50.761059,
     "lng": 25.362677,
-    "note": "Оновлення: Пʼятниця",
+    "note": "Оновлення: Пʼятниця · Стара назва вулиці: вул. Воїнів-Інтернаціоналістів",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "fri"
+    "restockDay": "fri",
+    "addressOld": "вул. Воїнів-Інтернаціоналістів, 1"
   },
   {
     "id": "lu3",
@@ -185,13 +186,13 @@
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "lu8",
-    "name": "просп. Відродження, 29а",
+    "name": "вул. Олени Пчілки, 29а",
     "brand": "Independent",
-    "address": "просп. Відродження, 29а",
+    "address": "вул. Олени Пчілки, 29а",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -208,17 +209,18 @@
     "cycle": 7,
     "lat": 50.752805,
     "lng": 25.377984,
-    "note": "Оновлення: Пʼятниця",
+    "note": "Оновлення: Пʼятниця · Стара назва вулиці: просп. Відродження",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "fri"
+    "restockDay": "fri",
+    "addressOld": "просп. Відродження, 29а"
   },
   {
     "id": "lu9",
-    "name": "просп. Волі, 27",
+    "name": "бульвар Старобульварна, 27",
     "brand": "Independent",
-    "address": "просп. Волі, 27",
+    "address": "бульвар Старобульварна, 27",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -235,11 +237,12 @@
     "cycle": 7,
     "lat": 50.746208,
     "lng": 25.33854,
-    "note": "Оновлення: Пʼятниця",
+    "note": "Оновлення: Пʼятниця · Стара назва вулиці: просп. Волі",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "fri"
+    "restockDay": "fri",
+    "addressOld": "просп. Волі, 27"
   },
   {
     "id": "lu10",
@@ -319,7 +322,7 @@
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "lu13",

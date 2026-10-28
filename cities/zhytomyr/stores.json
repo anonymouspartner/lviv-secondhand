@@ -262,7 +262,7 @@
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "zh11",
@@ -315,7 +315,7 @@
     "note": "Оновлення: Понеділок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "street",
     "restockDay": "mon"
   },
   {
@@ -342,7 +342,7 @@
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "zh14",

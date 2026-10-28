@@ -135,9 +135,9 @@
   },
   {
     "id": "kh6",
-    "name": "вул. Героїв Праці, 14",
+    "name": "вул. Нескорених, 14",
     "brand": "Independent",
-    "address": "вул. Героїв Праці, 14",
+    "address": "вул. Нескорених, 14",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -154,17 +154,18 @@
     "cycle": 7,
     "lat": 50.02495,
     "lng": 36.330651,
-    "note": "Оновлення: Субота",
+    "note": "Оновлення: Субота · Стара назва вулиці: вул. Героїв Праці",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "sat"
+    "restockDay": "sat",
+    "addressOld": "вул. Героїв Праці, 14"
   },
   {
     "id": "kh7",
-    "name": "вул. Євгена Котляра, 8/10В",
+    "name": "вул. Слов’янська, 8/10В",
     "brand": "Independent",
-    "address": "вул. Євгена Котляра, 8/10В",
+    "address": "вул. Слов’янська, 8/10В",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -181,10 +182,11 @@
     "cycle": 35,
     "lat": 49.989679,
     "lng": 36.207735,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: вул. Євгена Котляра",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "вул. Євгена Котляра, 8/10В"
   },
   {
     "id": "kh8",
@@ -400,9 +402,9 @@
   },
   {
     "id": "kh16",
-    "name": "вул. Пушкінська, 58",
+    "name": "вул. Григорія Сковороди, 58",
     "brand": "Independent",
-    "address": "вул. Пушкінська, 58",
+    "address": "вул. Григорія Сковороди, 58",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -419,10 +421,11 @@
     "cycle": 7,
     "lat": 50.00087,
     "lng": 36.244207,
-    "note": "Оновлення: Оновлення невідомо коли",
+    "note": "Оновлення: Оновлення невідомо коли · Стара назва вулиці: вул. Пушкінська",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "вул. Пушкінська, 58"
   },
   {
     "id": "kh17",
@@ -475,7 +478,7 @@
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "kh19",
@@ -577,12 +580,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 49.916358,
-    "lng": 36.407659,
+    "lat": 49.9935,
+    "lng": 36.2304,
     "note": "Оновлення: Четвер",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "approx",
     "restockDay": "thu"
   },
   {
@@ -614,9 +617,9 @@
   },
   {
     "id": "kh24",
-    "name": "вул. Суздальські Ряди, 12/3",
+    "name": "вул. Гостиний Двір, 12/3",
     "brand": "Independent",
-    "address": "вул. Суздальські Ряди, 12/3",
+    "address": "вул. Гостиний Двір, 12/3",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -633,11 +636,12 @@
     "cycle": 7,
     "lat": 49.991327,
     "lng": 36.224508,
-    "note": "Оновлення: Четвер",
+    "note": "Оновлення: Четвер · Стара назва вулиці: вул. Суздальські Ряди",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "thu"
+    "restockDay": "thu",
+    "addressOld": "вул. Суздальські Ряди, 12/3"
   },
   {
     "id": "kh25",
@@ -668,9 +672,9 @@
   },
   {
     "id": "kh26",
-    "name": "вул. Танкопія, 14a",
+    "name": "вул. Каденюка, 14a",
     "brand": "Independent",
-    "address": "вул. Танкопія, 14a",
+    "address": "вул. Каденюка, 14a",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -687,11 +691,12 @@
     "cycle": 7,
     "lat": 49.953263,
     "lng": 36.312525,
-    "note": "Оновлення: Субота",
+    "note": "Оновлення: Субота · Стара назва вулиці: вул. Танкопія",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "sat"
+    "restockDay": "sat",
+    "addressOld": "вул. Танкопія, 14a"
   },
   {
     "id": "kh27",
@@ -798,13 +803,13 @@
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "kh31",
-    "name": "просп. Гагаріна, 20",
+    "name": "просп. Аерокосмічний, 20",
     "brand": "Independent",
-    "address": "просп. Гагаріна, 20",
+    "address": "просп. Аерокосмічний, 20",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -821,17 +826,18 @@
     "cycle": 7,
     "lat": 49.980476,
     "lng": 36.245161,
-    "note": "Оновлення: Понеділок",
+    "note": "Оновлення: Понеділок · Стара назва вулиці: просп. Гагаріна",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "mon"
+    "restockDay": "mon",
+    "addressOld": "просп. Гагаріна, 20"
   },
   {
     "id": "kh32",
-    "name": "просп. Гагаріна, 38Б",
+    "name": "просп. Аерокосмічний, 38Б",
     "brand": "Independent",
-    "address": "просп. Гагаріна, 38Б",
+    "address": "просп. Аерокосмічний, 38Б",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -848,16 +854,17 @@
     "cycle": 7,
     "lat": 49.977737,
     "lng": 36.248714,
-    "note": "Оновлення: Оновлення невідомо коли",
+    "note": "Оновлення: Оновлення невідомо коли · Стара назва вулиці: просп. Гагаріна",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "просп. Гагаріна, 38Б"
   },
   {
     "id": "kh33",
-    "name": "просп. Гагаріна, 41/2",
+    "name": "просп. Аерокосмічний, 41/2",
     "brand": "Independent",
-    "address": "просп. Гагаріна, 41/2",
+    "address": "просп. Аерокосмічний, 41/2",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -874,16 +881,17 @@
     "cycle": 7,
     "lat": 49.976309,
     "lng": 36.254531,
-    "note": "Оновлення: Оновлення невідомо коли",
+    "note": "Оновлення: Оновлення невідомо коли · Стара назва вулиці: просп. Гагаріна",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "просп. Гагаріна, 41/2"
   },
   {
     "id": "kh34",
-    "name": "просп. Гагаріна, 72",
+    "name": "просп. Аерокосмічний, 72",
     "brand": "Independent",
-    "address": "просп. Гагаріна, 72",
+    "address": "просп. Аерокосмічний, 72",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -900,16 +908,17 @@
     "cycle": 7,
     "lat": 49.972558,
     "lng": 36.254353,
-    "note": "Оновлення: Оновлення невідомо коли",
+    "note": "Оновлення: Оновлення невідомо коли · Стара назва вулиці: просп. Гагаріна",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "просп. Гагаріна, 72"
   },
   {
     "id": "kh35",
-    "name": "просп. Героїв Сталінграда, 175",
+    "name": "просп. Байрона, 175",
     "brand": "Independent",
-    "address": "просп. Героїв Сталінграда, 175",
+    "address": "просп. Байрона, 175",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -926,11 +935,12 @@
     "cycle": 7,
     "lat": 49.944989,
     "lng": 36.317761,
-    "note": "Оновлення: Четвер",
+    "note": "Оновлення: Четвер · Стара назва вулиці: просп. Героїв Сталінграда",
     "source": "@lvivsecondhand_bot",
     "verified": false,
     "geocode_status": "ok",
-    "restockDay": "thu"
+    "restockDay": "thu",
+    "addressOld": "просп. Героїв Сталінграда, 175"
   },
   {
     "id": "kh36",
@@ -1221,7 +1231,7 @@
     "note": "Оновлення: Понеділок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "street",
     "restockDay": "mon"
   },
   {

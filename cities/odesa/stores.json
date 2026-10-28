@@ -1,9 +1,9 @@
 [
   {
     "id": "od1",
-    "name": "вул. Академіка Вільямса, 67",
+    "name": "вул. Євгена Чикаленка, 67",
     "brand": "Independent",
-    "address": "вул. Академіка Вільямса, 67",
+    "address": "вул. Євгена Чикаленка, 67",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -20,16 +20,17 @@
     "cycle": 35,
     "lat": 46.390619,
     "lng": 30.72609,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: вул. Академіка Вільямса",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "вул. Академіка Вільямса, 67"
   },
   {
     "id": "od2",
-    "name": "вул. Армійська, 17а",
+    "name": "вул. Незалежності, 17а",
     "brand": "Independent",
-    "address": "вул. Армійська, 17а",
+    "address": "вул. Незалежності, 17а",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -46,10 +47,11 @@
     "cycle": 35,
     "lat": 46.452098,
     "lng": 30.749936,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: вул. Армійська",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "вул. Армійська, 17а"
   },
   {
     "id": "od3",
@@ -79,9 +81,9 @@
   },
   {
     "id": "od4",
-    "name": "вул. Генерала Петрова, 17/2",
+    "name": "вул. Євгена Танцюри, 17/2",
     "brand": "Independent",
-    "address": "вул. Генерала Петрова, 17/2",
+    "address": "вул. Євгена Танцюри, 17/2",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -98,10 +100,11 @@
     "cycle": 35,
     "lat": 46.430127,
     "lng": 30.71018,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: вул. Генерала Петрова",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "вул. Генерала Петрова, 17/2"
   },
   {
     "id": "od5",
@@ -209,9 +212,9 @@
   },
   {
     "id": "od9",
-    "name": "вул. Лейтенанта Шмідта, 19",
+    "name": "вул. Олександра Станкова, 19",
     "brand": "Independent",
-    "address": "вул. Лейтенанта Шмідта, 19",
+    "address": "вул. Олександра Станкова, 19",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -228,10 +231,11 @@
     "cycle": 35,
     "lat": 46.469916,
     "lng": 30.743015,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: вул. Лейтенанта Шмідта",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "вул. Лейтенанта Шмідта, 19"
   },
   {
     "id": "od10",
@@ -257,7 +261,7 @@
     "note": "",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "od11",
@@ -283,7 +287,7 @@
     "note": "",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "od12",
@@ -413,7 +417,7 @@
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "street"
   },
   {
     "id": "od17",
@@ -469,9 +473,9 @@
   },
   {
     "id": "od19",
-    "name": "просп. Добровольського, 125",
+    "name": "просп. Князя Володимира Великого, 125",
     "brand": "Independent",
-    "address": "просп. Добровольського, 125",
+    "address": "просп. Князя Володимира Великого, 125",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -488,16 +492,17 @@
     "cycle": 7,
     "lat": 46.586116,
     "lng": 30.789491,
-    "note": "Оновлення: Оновлення невідомо коли",
+    "note": "Оновлення: Оновлення невідомо коли · Стара назва вулиці: просп. Добровольського",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "просп. Добровольського, 125"
   },
   {
     "id": "od20",
-    "name": "просп. Добровольського, 159",
+    "name": "просп. Князя Володимира Великого, 159",
     "brand": "Independent",
-    "address": "просп. Добровольського, 159",
+    "address": "просп. Князя Володимира Великого, 159",
     "addressEn": "",
     "phone": "",
     "type": "other",
@@ -514,10 +519,11 @@
     "cycle": 35,
     "lat": 46.595242,
     "lng": 30.800978,
-    "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
+    "note": "Оновлення: Понеділок (раз на пʼять тижнів) · Стара назва вулиці: просп. Добровольського",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "addressOld": "просп. Добровольського, 159"
   },
   {
     "id": "od21",
@@ -543,7 +549,7 @@
     "note": "Оновлення: Понеділок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok",
+    "geocode_status": "street",
     "restockDay": "mon"
   }
 ]
