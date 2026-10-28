@@ -40,3 +40,8 @@ dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 16px;margin:0 0 12
 dt{font-weight:700;}
 dd{margin:0;overflow-wrap:anywhere;}
 @media (max-width:600px){ .svc{grid-template-columns:1fr;} dl{grid-template-columns:1fr;gap:2px 0;} dd{margin-bottom:8px;} }
+/* Inside the Android app (html.in-app, set by app-env.js) every way to buy or
+   pay is hidden — Google Play payments policy; shops buy on the website. */
+html.in-app .pay, html.in-app .buy-ui{display:none!important;}
+.in-app-note{display:none;}
+html.in-app .in-app-note{display:block;background:#fff7d6;border:1px solid #f0d77a;color:#5a4300;border-radius:12px;padding:10px 14px;font-size:14px;}
