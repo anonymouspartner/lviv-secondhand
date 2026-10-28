@@ -130,7 +130,8 @@ to www offers the list once.
 - **Adding a city:** add it to `cities.json` and to the `CITIES` copies in
   `worker/worker.js` and `city-router/worker.js`; import leads with
   `scripts/import-competitor-city.mjs`; run the "Geocode city stores" workflow;
-  add a proxied DNS record for the subdomain (or rely on the `*` wildcard).
+  add a proxied `AAAA 100::` DNS record for the subdomain (no wildcard — the
+  router passes unknown hosts through to their own DNS).
 - **Not yet per city:** paid placements (Lviv only), SEO store pages and
   sitemaps, the Telegram bot, QR posters and social images.
 
