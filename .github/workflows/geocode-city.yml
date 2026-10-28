@@ -16,6 +16,10 @@ on:
         description: "Also retry stores already marked approx"
         type: boolean
         default: false
+      audit:
+        description: "Audit mode: reverse-geocode placed pins and fix stale street names / flag doubtful pins (scripts/audit-geocode.mjs)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -41,8 +45,12 @@ jobs:
         run: |
           ARGS="${{ inputs.city }}"
           [ "$ARGS" = "all" ] && ARGS="--all"
-          [ "${{ inputs.retry }}" = "true" ] && ARGS="$ARGS --retry"
-          node scripts/geocode-city.mjs $ARGS
+          if [ "${{ inputs.audit }}" = "true" ]; then
+            node scripts/audit-geocode.mjs $ARGS
+          else
+            [ "${{ inputs.retry }}" = "true" ] && ARGS="$ARGS --retry"
+            node scripts/geocode-city.mjs $ARGS
+          fi
 
       - name: Validate
         run: node scripts/validate-cities.mjs
@@ -56,5 +64,5 @@ jobs:
             echo "Nothing to geocode."
             exit 0
           fi
-          git commit -m "Geocode ${{ inputs.city }} stores [skip ci]"
+          git commit -m "${{ inputs.audit == true && 'Audit' || 'Geocode' }} ${{ inputs.city }} stores [skip ci]"
           git push
