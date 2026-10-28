@@ -18,12 +18,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.260473,
+    "lng": 25.943982,
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending"
+    "geocode_status": "ok"
   },
   {
     "id": "cv2",
@@ -44,12 +44,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.283842,
+    "lng": 25.931859,
     "note": "Оновлення: Вівторок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "tue"
   },
   {
@@ -71,12 +71,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.260981,
+    "lng": 25.953328,
     "note": "Оновлення: Понеділок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "mon"
   },
   {
@@ -103,7 +103,7 @@
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending"
+    "geocode_status": "approx"
   },
   {
     "id": "cv5",
@@ -124,12 +124,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.262563,
+    "lng": 25.946564,
     "note": "Оновлення: Субота",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "sat"
   },
   {
@@ -151,12 +151,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.254796,
+    "lng": 25.933411,
     "note": "Оновлення: Четвер",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "thu"
   },
   {
@@ -178,12 +178,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.266873,
+    "lng": 25.945067,
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending"
+    "geocode_status": "ok"
   },
   {
     "id": "cv8",
@@ -204,12 +204,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.265996,
+    "lng": 25.938847,
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending"
+    "geocode_status": "ok"
   },
   {
     "id": "cv9",
@@ -230,12 +230,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.294606,
+    "lng": 25.937247,
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending"
+    "geocode_status": "ok"
   },
   {
     "id": "cv10",
@@ -256,11 +256,11 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.2921,
-    "lng": 25.9358,
+    "lat": 48.266687,
+    "lng": 25.938994,
     "note": "Оновлення: Оновлення невідомо коли",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending"
+    "geocode_status": "ok"
   }
 ]

@@ -18,12 +18,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.91852,
+    "lng": 24.714666,
     "note": "Оновлення: Пʼятниця",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "fri"
   },
   {
@@ -45,12 +45,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.948591,
+    "lng": 24.69579,
     "note": "Оновлення: Четвер",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "thu"
   },
   {
@@ -72,12 +72,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.927193,
+    "lng": 24.708032,
     "note": "Оновлення: Середа",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "wed"
   },
   {
@@ -99,12 +99,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.936475,
+    "lng": 24.749526,
     "note": "Оновлення: Субота",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "sat"
   },
   {
@@ -126,12 +126,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.925157,
+    "lng": 24.708537,
     "note": "Оновлення: Пʼятниця",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "fri"
   },
   {
@@ -153,12 +153,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.932322,
+    "lng": 24.703512,
     "note": "Оновлення: Оновлення невідомо коли, але рідко",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending"
+    "geocode_status": "ok"
   },
   {
     "id": "if7",
@@ -179,12 +179,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.919551,
+    "lng": 24.707243,
     "note": "Оновлення: Понеділок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "mon"
   },
   {
@@ -206,12 +206,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.919099,
+    "lng": 24.710493,
     "note": "Оновлення: Вівторок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "tue"
   },
   {
@@ -233,12 +233,12 @@
       "sun": "?"
     },
     "cycle": 7,
-    "lat": 48.9226,
-    "lng": 24.7111,
+    "lat": 48.94399,
+    "lng": 24.699616,
     "note": "Оновлення: Понеділок",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "pending",
+    "geocode_status": "ok",
     "restockDay": "mon"
   }
 ]
