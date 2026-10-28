@@ -105,6 +105,25 @@ async function reverse(lat, lng) {
   return res.json();
 }
 
+// A reverse lookup can return the *other* street of a corner building, which
+// looks exactly like a rename. So a rename is only accepted when the old
+// street name no longer exists anywhere in the city (forward search comes
+// back empty or lands outside it).
+async function streetStillExists(oldStreet, city) {
+  const url = new URL('https://nominatim.openstreetmap.org/search');
+  url.searchParams.set('format', 'jsonv2'); url.searchParams.set('limit', '3');
+  url.searchParams.set('countrycodes', 'ua'); url.searchParams.set('accept-language', 'uk');
+  url.searchParams.set('q', `${oldStreet.replace(/^вул\.\s*/i, 'вулиця ').replace(/^просп\.\s*/i, 'проспект ')}, ${city.nameUa}`);
+  const res = await fetch(url, { headers: { 'User-Agent': UA } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const hits = await res.json();
+  return hits.some(h => {
+    const d = Math.hypot((+h.lat - city.center[0]) * 111, (+h.lon - city.center[1]) * 111 * Math.cos(city.center[0] * Math.PI / 180));
+    return d < 25 && /\b(road|highway|street|residential|primary|secondary|tertiary|pedestrian|living_street|unclassified|trunk)\b/.test(`${h.category} ${h.type} ${h.addresstype}`)
+      && streetMatch(oldStreet, h.name || h.display_name.split(',')[0]);
+  });
+}
+
 // Rebuild "вул. X, 14, 2 поверх" with the new street but the original number/suffix.
 export function rename(address, road) {
   const [, rest = ''] = /^[^,]*(,.*)$/.exec(address) || [];
@@ -128,6 +147,25 @@ if (isMain) {
       let rev;
       try { rev = await reverse(s.lat, s.lng); } catch (e) { lines.push(`${s.id}: lookup failed (${e.message})`); continue; }
       const r = classify(s, rev, city);
+      if (r.status === 'renamed') {
+        await sleep(1100);
+        let exists = false;
+        try { exists = await streetStillExists(s.address.split(',')[0], city); } catch (e) { lines.push(`${s.id}: rename check failed (${e.message})`); exists = true; }
+        if (exists) { r.status = 'street'; r.reason = `corner of ${r.road}; ${s.address.split(',')[0]} still exists — address kept`; }
+      }
+      // A rename applied by an earlier run is re-verified the same way and undone if the old street still exists.
+      if (s.addressOld && !dry) {
+        await sleep(1100);
+        let exists = false;
+        try { exists = await streetStillExists(s.addressOld.split(',')[0], city); } catch (e) { exists = false; }
+        if (exists) {
+          lines.push(`${s.id}  restore ${s.addressOld} (was wrongly renamed to ${s.address.split(',')[0]})`);
+          if (s.name === s.address) s.name = s.addressOld;
+          s.address = s.addressOld; delete s.addressOld;
+          s.note = (s.note || '').split(' · ').filter(x => !x.startsWith('Стара назва вулиці:')).join(' · ');
+          if (!s.note) delete s.note;
+        }
+      }
       tally[r.status]++;
       if (r.status !== 'ok') lines.push(`${s.id}  ${r.status.padEnd(7)} ${s.address}  →  ${r.reason}`);
       if (!dry) {
