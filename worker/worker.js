@@ -19,6 +19,35 @@ const ALLOWED_ORIGINS = new Set([
   'https://anonymouspartner.github.io', // legacy GitHub Pages origin (transition)
 ]);
 const APP_URL = 'https://www.lvivsecondhand.com/';
+// ── Cities ──────────────────────────────────────────────────────────────────
+// One app, one Worker, many city subdomains (see cities.json in the repo —
+// this is a copy, kept inline so the Worker has no runtime dependency on the
+// site). Store ids are globally unique and carry a city prefix (kv1 = Kyiv),
+// which is how links in pushes, invoices and redirects find the right host.
+// Lviv ids (c*, h*, s*) have no prefix. `promo:false` cities cannot buy
+// placements: the app hides the buttons and the checkout routes refuse too.
+const CITIES = [
+  { slug: 'lviv', host: 'www.lvivsecondhand.com', prefix: '', promo: true },
+  { slug: 'kyiv', host: 'kyiv.lvivsecondhand.com', prefix: 'kv', promo: false },
+  { slug: 'kharkiv', host: 'kharkiv.lvivsecondhand.com', prefix: 'kh', promo: false },
+  { slug: 'dnipro', host: 'dnipro.lvivsecondhand.com', prefix: 'dn', promo: false },
+  { slug: 'odesa', host: 'odesa.lvivsecondhand.com', prefix: 'od', promo: false },
+  { slug: 'zhytomyr', host: 'zhytomyr.lvivsecondhand.com', prefix: 'zh', promo: false },
+  { slug: 'ternopil', host: 'ternopil.lvivsecondhand.com', prefix: 'te', promo: false },
+  { slug: 'lutsk', host: 'lutsk.lvivsecondhand.com', prefix: 'lu', promo: false },
+  { slug: 'rivne', host: 'rivne.lvivsecondhand.com', prefix: 'rv', promo: false },
+  { slug: 'chernivtsi', host: 'chernivtsi.lvivsecondhand.com', prefix: 'cv', promo: false },
+  { slug: 'ivano-frankivsk', host: 'ivano-frankivsk.lvivsecondhand.com', prefix: 'if', promo: false },
+];
+for (const c of CITIES) ALLOWED_ORIGINS.add('https://' + c.host);
+const CITY_BY_PREFIX = CITIES.filter((c) => c.prefix).sort((a, b) => b.prefix.length - a.prefix.length);
+function cityForStore(id) {
+  const s = String(id || '');
+  return CITY_BY_PREFIX.find((c) => s.startsWith(c.prefix) && /^\d+$/.test(s.slice(c.prefix.length))) || CITIES[0];
+}
+// App root for a store's city: 'https://kyiv.lvivsecondhand.com/'.
+function appUrlFor(id) { return `https://${cityForStore(id).host}/`; }
+function promoAllowed(id) { return cityForStore(id).promo !== false; }
 const WORKER_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
 const TYPES = new Set(['store_open', 'filter', 'tab', 'lang', 'action']);
 const LANGS = new Set(['en', 'ua']);
@@ -516,7 +545,7 @@ function tgSend(env, chatId, text) {
   }).catch(() => {});
 }
 const uah = (kop) => (kop == null ? '?' : '₴' + (kop / 100).toLocaleString('uk-UA'));
-const storeLink = (id) => `${APP_URL}?store=${encodeURIComponent(id)}`;
+const storeLink = (id) => `${appUrlFor(id)}?store=${encodeURIComponent(id)}`;
 
 // ── Customer-portal readiness ────────────────────────────────────────────────
 // /billing only reaches Stripe once a real subscription exists, so before the first
@@ -2070,6 +2099,7 @@ export default {
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !PROMO_TIERS.has(tier) || !PROMO_CADENCES.has(cadence)) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
+        if (!promoAllowed(store)) return new Response('placements are not sold in this city yet', { status: 403, headers: cors(origin) });
         const run = isRun(cadence) ? PROMO_RUNS[`${tier}_${cadence}`] : null;
         const amount = run ? run.amount : PROMO_AMOUNTS[`${tier}_${cadence}`];
         if (!amount) return new Response('unknown tier', { status: 400, headers: cors(origin) });
@@ -2093,6 +2123,7 @@ export default {
         const tierKey = url.searchParams.get('tier') || '';
         const pin = clean(url.searchParams.get('pin'), 4);
         const tier = FLASH_DEAL_TIERS[tierKey];
+        if (/^[a-z0-9]{1,12}$/i.test(store) && !promoAllowed(store)) return new Response('placements are not sold in this city yet', { status: 403, headers: cors(origin) });
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !tier) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
@@ -2305,6 +2336,7 @@ export default {
         if (!/^[a-z0-9]{1,12}$/i.test(store) || !ORDER_ITEMS[item]) {
           return new Response('bad request', { status: 400, headers: cors(origin) });
         }
+        if (!promoAllowed(store)) return new Response('placements are not sold in this city yet', { status: 403, headers: cors(origin) });
         if (payProvider(env) !== 'liqpay') return new Response('checkout not available', { status: 503, headers: cors(origin) });
         // Arranged by hand, so we must be able to reach the buyer.
         const email = cleanEmail(url.searchParams.get('email'));
@@ -3065,7 +3097,7 @@ export default {
       const payload = JSON.stringify({
         title: '🛍️ Fresh stock today!',
         body: bodyText,
-        url: ids.length === 1 ? `${APP_URL}?store=${encodeURIComponent(ids[0])}` : APP_URL,
+        url: ids.length === 1 ? storeLink(ids[0]) : appUrlFor(ids[0]),
         kind: 'restock',
         stores: ids,
         tag: 'restock-' + today,

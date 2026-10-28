@@ -1,0 +1,13 @@
+name = "lviv-city-router"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+# Serves the city subdomains from the www GitHub Pages site (see worker.js).
+# The route needs each city subdomain to exist as a PROXIED (orange-cloud) DNS
+# record on lvivsecondhand.com — any target works (e.g. AAAA 100:: or a CNAME
+# to www), because the Worker answers before the record is ever used. One
+# wildcard record `*` covers every city at once; unknown names 302 to www.
+# www itself must stay DNS-only (grey cloud) → GitHub Pages, as it is today.
+routes = [
+  { pattern = "*.lvivsecondhand.com/*", zone_name = "lvivsecondhand.com" },
+]

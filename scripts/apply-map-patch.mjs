@@ -31,8 +31,19 @@ import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // STORES_PATH lets the test harness point this at a fixture instead of the
-// real dataset; unset everywhere else, so the workflow always hits stores.json.
-const storesPath = process.env.STORES_PATH || resolve(here, '..', 'stores.json');
+// real dataset. Otherwise the file is chosen per city: client_payload.city
+// (a slug from cities.json) → that city's stores file; absent → Lviv's
+// stores.json, which is what every existing dispatcher sends.
+const CITIES = JSON.parse(readFileSync(resolve(here, '..', 'cities.json'), 'utf8'));
+let storesPath = process.env.STORES_PATH || resolve(here, '..', 'stores.json');
+let cityPrefix = '';
+export function selectCity(slug) {
+  const city = CITIES.find((c) => c.slug === (slug || 'lviv'));
+  if (!city) throw new Error(`client_payload.city "${slug}" is not in cities.json.`);
+  cityPrefix = city.prefix || '';
+  if (!process.env.STORES_PATH) storesPath = resolve(here, '..', city.stores);
+  return city;
+}
 
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -118,15 +129,18 @@ function coordsLookReal(lat, lng) {
 
 const DUPLICATE_RADIUS_M = 60;
 
-// Next free c-id. Reuses nothing: ids of removed stores stay retired so an old
-// QR poster or shared link can never resolve to a different shop.
-function nextStoreId(stores) {
+// Next free id. Reuses nothing: ids of removed stores stay retired so an old
+// QR poster or shared link can never resolve to a different shop. Lviv ids
+// are c<n>; other cities use their cities.json prefix (kv<n> for Kyiv), which
+// keeps ids unique across every city — the shared Worker tables rely on it.
+function nextStoreId(stores, prefix = cityPrefix) {
+  const re = new RegExp(`^${prefix || 'c'}(\\d+)$`);
   let max = 0;
   for (const s of stores) {
-    const m = /^c(\d+)$/.exec(s && s.id ? s.id : '');
+    const m = re.exec(s && s.id ? s.id : '');
     if (m) max = Math.max(max, Number(m[1]));
   }
-  return 'c' + (max + 1);
+  return (prefix || 'c') + (max + 1);
 }
 
 export function addStore(stores, proposed) {
@@ -151,7 +165,7 @@ export function addStore(stores, proposed) {
 
   const id = nextStoreId(stores);
   const store = { id, name, lat, lng, cycle: Number(proposed.cycle) || 7 };
-  for (const k of ['brand', 'address', 'addressEn', 'phone', 'type', 'pricing', 'note', 'hours', 'restockDay', 'restock_date', 'dailyDrop']) {
+  for (const k of ['brand', 'address', 'addressEn', 'phone', 'type', 'pricing', 'note', 'hours', 'restockDay', 'restock_date', 'dailyDrop', 'source', 'verified', 'geocode_status']) {
     if (proposed[k] !== undefined && proposed[k] !== null && proposed[k] !== '') store[k] = proposed[k];
   }
   if (!store.brand) store.brand = 'Independent';
@@ -168,6 +182,7 @@ function main() {
   if (!payload || typeof payload !== 'object') throw new Error('Event has no client_payload.');
 
   const { mode } = payload;
+  selectCity(payload.city);
   // Two accepted shapes. The original single patch — { store_id, updates } —
   // is what the bot survey and /restock/approve still send. A batch —
   // { patches: [{ store_id, updates }] } — lets one approved contribution

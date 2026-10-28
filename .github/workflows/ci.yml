@@ -25,6 +25,8 @@ jobs:
 
       - name: Validate stores.json schema
         run: node scripts/validate-stores.mjs
+      - name: Validate cities (registry + every city stores file)
+        run: node scripts/validate-cities.mjs
 
       - name: Syntax-check index.html's inline script
         run: node scripts/check-inline-js.mjs
@@ -34,6 +36,8 @@ jobs:
 
       - name: Syntax-check the chain-feed parser
         run: node --check worker/chain-feed.mjs
+      - name: Syntax-check the city-router Worker
+        run: node --check city-router/worker.js
 
       - name: Syntax-check the Telegram bot Worker
         run: node --check telegram-bot/worker.js

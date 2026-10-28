@@ -5,6 +5,7 @@
   "backgroundColor": "#14472aff",
   "server": {
     "url": "https://www.lvivsecondhand.com",
+    "allowNavigation": ["*.lvivsecondhand.com"],
     "cleartext": false,
     "androidScheme": "https"
   },
