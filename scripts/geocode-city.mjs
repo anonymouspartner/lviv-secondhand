@@ -37,6 +37,9 @@ function normalise(address) {
     .replace(/^пл\.\s*/i, 'площа ')
     .replace(/^бульв?\.\s*/i, 'бульвар ')
     .replace(/\s*\(.*?\)\s*/g, ' ')          // "(2 поверх)", "(Винники)"
+    // JS \b is ASCII-only, so Cyrillic words are bounded with lookaheads.
+    .replace(/,?\s*\d\s*поверх(?=\s|,|$)/gi, '')      // ", 2 поверх" (floor note after the number)
+    .replace(/^(проспект)\s+(.*?)\s+проспект(?=\s|,|$)/i, '$1 $2') // "просп. Адміральський проспект"
     .replace(/,\s*(\d)/, ' $1')              // ", 16" → " 16"
     .replace(/(\d)\s+([А-ЯA-Zа-я])\b/, '$1$2') // "16 А" → "16А"
     .replace(/,\s*$/, '')
