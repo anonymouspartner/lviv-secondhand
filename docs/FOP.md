@@ -289,15 +289,26 @@ the owner, and that sandbox keys never publish. Each of these was checked to fai
 ## 4. Phase 3 — fiscal receipts (ПРРО) ⚖️
 
 A ФОП on groups 2–4 generally must issue a fiscal receipt for card payments taken
-online. Plan for it to need **no code**:
+online. Chosen: PrivatBank's free ПРРО «Каса», connected inside LiqPay.
 
-- [ ] Turn on fiscalisation for the LiqPay shop (PrivatBank's ПРРО or Checkbox);
-      each successful payment is fiscalised and the receipt emailed.
-- [ ] To make that email arrive, ask for the buyer's email (optional field) in the
-      sheet and pass it as the receipt destination.
-- [ ] If the integration can't do it, fall back to calling the Checkbox API from
-      `fulfil()` via `ctx.waitUntil`, failures swallowed and reported to the owner on
-      Telegram — same pattern as `queueInstagramAd`.
+**Built:** every LiqPay checkout carries `rro_info` (one line: product id, quantity
+1, price = cost = the charge in UAH; `delivery_emails` = the buyer's email when
+given). The product ids come from the `LIQPAY_RRO_GOODS` var in
+`worker/wrangler.toml`; while it is empty, checkouts are exactly as before.
+
+**Owner steps, in order:**
+- [ ] LiqPay cabinet → **РРО** → **Каса** → connect and sign with SmartID.
+- [ ] Same place → **Товари** ("goods") → create one product, e.g. «Рекламні
+      послуги на карті Lviv Second Hand», unit «послуга», tax «без ПДВ» (single
+      tax group 3). Copy its **ID**. More products are optional (keys listed above
+      `liqpayRroInfo()` in `worker/worker.js`).
+- [ ] Send the ID to the developer; it goes in as `LIQPAY_RRO_GOODS = '{"default": <ID>}'`
+      and deploys on merge.
+- [ ] Sandbox purchase (link from §3.8) → check that the checkout opens; then, on
+      live keys, check the first real payment produces a receipt in Каса.
+- ⚠️ To confirm with LiqPay: whether `rro_info` sent with a `subscribe` checkout is
+  also applied to the automatic monthly/annual renewals. If not, renewals need a
+  receipt issued another way.
 - Bank transfers to the IBAN (§5) need no fiscal receipt ⚖️.
 
 ---

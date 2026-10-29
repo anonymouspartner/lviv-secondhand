@@ -1039,6 +1039,46 @@ const liqpayLang = (v) => (v === 'en' ? 'en' : 'uk');
 // "YYYY-MM-DD HH:MM:SS" in UTC, the format subscribe_date_start takes.
 const liqpayNow = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
+// Fiscal receipts (ПРРО «Каса»). LiqPay fiscalises a card payment only when the
+// checkout carries rro_info: one line per item, each pointing at a product
+// ("товар") the owner created in the LiqPay cabinet under РРО → Каса → Товари,
+// plus the emails the receipt goes to. LIQPAY_RRO_GOODS (wrangler.toml var) is a
+// JSON map from what is being sold to that product's id:
+//   {"default": 123456}                         — one product for every sale
+//   {"featured_monthly": 1, "flash_3h": 2, …}   — or one per item, falling back
+//                                                  to "default" for the rest
+// Keys: <tier>_<cadence> for placements (verified_run7, spotlight_annual…),
+// flash_<tier> for flash deals (flash_3h, flash_24h, flash_24h_alert),
+// order_<item> for extras (order_deal, order_poster, order_push).
+// Unset, empty or unreadable → no rro_info, i.e. exactly the checkout as before
+// the register was connected. A sale with no matching id is logged, not blocked:
+// a missing receipt is fixable afterwards, a refused payment is a lost sale.
+function rroGoodsKey(intent) {
+  if (intent.kind === 'promo') return `${intent.tier}_${intent.cadence}`;
+  if (intent.kind === 'flashDeal') return `flash_${intent.tier}`;
+  if (intent.kind === 'order') return `order_${intent.item}`;
+  return intent.kind || '';
+}
+function liqpayRroInfo(env, intent) {
+  const raw = String(env.LIQPAY_RRO_GOODS || '').trim();
+  if (!raw) return null;
+  let map;
+  try { map = JSON.parse(raw); } catch { console.warn('LIQPAY_RRO_GOODS is not valid JSON — no fiscal receipt'); return null; }
+  if (!map || typeof map !== 'object') return null;
+  const key = rroGoodsKey(intent);
+  const goods = map[key] != null ? map[key] : map.default;
+  if (goods == null || String(goods).trim() === '') {
+    console.warn(`LIQPAY_RRO_GOODS has no product for "${key}" and no "default" — no fiscal receipt`);
+    return null;
+  }
+  // LiqPay rejects a quoted id or price: numbers where they are numbers.
+  const id = /^\d+$/.test(String(goods).trim()) ? Number(goods) : String(goods).trim();
+  const uah = intent.amount / 100;
+  const info = { items: [{ id, amount: 1, price: uah, cost: uah }] };
+  if (intent.email) info.delivery_emails = [intent.email];
+  return info;
+}
+
 const TIER_LABEL = { verified: 'Verified+', featured: 'Featured', spotlight: 'Spotlight' };
 const CADENCE_LABEL = { monthly: 'місяць', annual: 'рік', run1: '1 день', run7: '7 днів', run30: '30 днів' };
 
@@ -1073,6 +1113,8 @@ async function liqpayCheckout(env, intent, { lang, description, subscribe }) {
     params.subscribe_date_start = liqpayNow();
     params.subscribe_periodicity = subscribe; // 'month' | 'year'
   }
+  const rro = liqpayRroInfo(env, intent);
+  if (rro) params.rro_info = rro;
   const data = b64Utf8(JSON.stringify(params));
   const signature = await liqpaySign(env.LIQPAY_PRIVATE_KEY, data);
   // data and signature are base64, so they are safe inside an attribute as-is.
