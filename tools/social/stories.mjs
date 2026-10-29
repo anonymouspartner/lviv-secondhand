@@ -1,4 +1,4 @@
-// Four Instagram posts that argue for the app from a point of view, rather than
+// Five Instagram posts that argue for the app from a point of view, rather than
 // listing what it does. promo.mjs already covers the feature pitch; these are
 // the stories underneath it — one per audience:
 //
@@ -6,6 +6,7 @@
 //   2-owner    — the map at night, told as visibility on the day you have stock
 //   3-job      — the field-scout role, told as the survey card the job produces
 //   4-flash    — running a flash deal, told as the countdown the shopper sees
+//   5-testers  — the Android closed test, told as twelve seats to fill
 //
 // Each gets its own visual world on purpose. A single template recoloured four
 // ways reads as one advertiser talking four times; four treatments read as four
@@ -339,10 +340,61 @@ const flash = {
   </div>`,
 };
 
+// ── 5. Testers — twelve empty seats ─────────────────────────────────────────
+// Google Play publishes a new personal-account app only after 12 people have
+// kept it installed for 14 days, so the ask is literally "fill these seats".
+// The seats are drawn empty on purpose: the post must not claim a head count
+// it cannot know on the day it is seen. Links mirror the tester sheet in
+// index.html (TESTER_GROUP_URL / TESTER_PLAY_URL); the image names the site,
+// whose bar opens that sheet, because Instagram links are not clickable.
+const testers = {
+  name: '5-testers',
+  css: `
+    body{background:${C.acid};}
+    .card{padding:76px 64px 64px;background:${C.acid};color:${C.ink};}
+    .kicker{font-size:24px;letter-spacing:.16em;margin-bottom:20px;}
+    h1{font-size:88px;margin-bottom:22px;}
+    .sub{font-size:27px;line-height:1.45;max-width:30ch;margin-bottom:40px;}
+    .seats{display:grid;grid-template-columns:repeat(6,1fr);gap:18px;margin-bottom:16px;}
+    .seat{aspect-ratio:1;border:4px dashed ${C.ink};border-radius:50%;opacity:.55;
+      display:flex;align-items:center;justify-content:center;font-size:30px;}
+    .seat.you{opacity:1;border-style:solid;background:${C.ink};color:${C.acid};}
+    .seat-cap{font-size:21px;letter-spacing:.06em;margin-bottom:38px;}
+    .steps{flex:1;display:flex;flex-direction:column;gap:18px;}
+    .step{display:flex;gap:20px;align-items:baseline;font-size:27px;line-height:1.35;}
+    .step b{flex:none;width:46px;height:46px;border-radius:50%;background:${C.ink};color:${C.acid};
+      display:flex;align-items:center;justify-content:center;font-size:26px;}
+    .step i{font-style:normal;display:block;font-size:21px;opacity:.75;margin-top:3px;}
+    .foot{margin-top:30px;padding-top:26px;border-top:3px solid ${C.ink};}
+    .foot .cta{opacity:1;}
+  `,
+  body: `
+  <div class="card">
+    <div class="kicker body">ANDROID · ЗАКРИТИЙ ТЕСТ</div>
+    <h1 class="display">Потрібно<br>12 людей</h1>
+    <p class="sub body">Google опублікує наш застосунок у Play, коли 12 людей протестують його 14 днів. Займе дві хвилини.</p>
+    <div class="seats">${Array.from({ length: 12 }, (_, k) =>
+      `<div class="seat display ${k === 0 ? 'you' : ''}">${k === 0 ? 'ВИ' : ''}</div>`).join('')}</div>
+    <div class="seat-cap mono">12 МІСЦЬ · 14 ДНІВ · ТІЛЬКИ ANDROID</div>
+    <div class="steps">${[
+      ['Приєднайтеся до групи тестувальників', 'з Google-акаунта, що на телефоні'],
+      ['Відкрийте тест у Google Play', 'натисніть «Стати тестувальником» і встановіть'],
+      ['Тримайте застосунок 14 днів', 'і іноді відкривайте. Дякуємо!'],
+    ].map(([t, i], k) => `
+      <div class="step body"><b class="display">${k + 1}</b><div>${t}<i>${i}</i></div></div>`).join('')}</div>
+    <div class="foot"><span class="url display">${SITE}</span>
+      <span class="cta body">на Android → «Долучитися»</span></div>
+  </div>`,
+};
+
 // ── Render ───────────────────────────────────────────────────────────────────
-const POSTS = [shopper, owner, job, flash];
+const POSTS = [shopper, owner, job, flash, testers];
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
-for (const post of POSTS) {
+// STORY=5-testers renders one post; unset renders all.
+const only = process.env.STORY;
+const chosen = only ? POSTS.filter((p) => p.name === only) : POSTS;
+if (only && !chosen.length) throw new Error(`STORY=${only} matches no post`);
+for (const post of chosen) {
   const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   await page.setContent(page_html(post.css, post.body), { waitUntil: 'networkidle' });
   // JPEG q92: Instagram's publishing API accepts JPEG only, and every card here
@@ -352,4 +404,4 @@ for (const post of POSTS) {
   await page.close();
 }
 await browser.close();
-console.log(`Wrote ${POSTS.length} story posts (${W}×${H}) to marketing/instagram/ — prices read live: flash ${uah(PRICES.flash3h)}/${uah(PRICES.flash24h)}/${uah(PRICES.flash24hAlert)}, Verified+ ${uah(PRICES.verified)}/mo.`);
+console.log(`Wrote ${chosen.length} story posts (${W}×${H}) to marketing/instagram/ — prices read live: flash ${uah(PRICES.flash3h)}/${uah(PRICES.flash24h)}/${uah(PRICES.flash24hAlert)}, Verified+ ${uah(PRICES.verified)}/mo.`);
