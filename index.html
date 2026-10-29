@@ -787,6 +787,10 @@ html.in-app .in-app-note{display:block;text-align:center;font-size:13px;color:va
       <p style="margin-top:8px;">Tap the <strong>📍</strong> button (bottom-right) to turn <strong>your location</strong> on — you'll appear as a blue dot that follows you as you move. The button turns green while it's on; tap it again to turn location off. Your browser will ask for permission the first time.</p>
     </div>
     <div class="help-section">
+      <h3>🏙 Other cities</h3>
+      <p>Every city has its own map. Tap <strong>🏙</strong> in the header to switch. Lviv is the fully checked map; newer cities start with addresses and restock days only.</p>
+    </div>
+    <div class="help-section">
       <h3>📦 Inventory Tracker</h3>
       <p>Inside each store, tap <strong>"Set Last Delivery Date"</strong> to record when new stock arrived. The app will:</p>
       <ul>
@@ -1287,6 +1291,7 @@ html.in-app .in-app-note{display:block;text-align:center;font-size:13px;color:va
 <section class="about-static" id="about" lang="uk">
   <h2>Про сервіс</h2>
   <p><strong>Секонд-хенди Львова</strong> (Lviv Second Hand) — безкоштовна карта секонд-хендів Львова: адреси, години роботи, ціни на вагу чи поштучно та дні завезення, щоб знати, коли в магазині найдешевше.</p>
+  <p><strong>Тепер не лише Львів.</strong> Для кожного міста — своя карта на власній адресі: Київ, Харків, Дніпро, Одеса, Житомир, Тернопіль, Луцьк, Рівне, Чернівці та Івано-Франківськ. Львів — найдетальніша й перевірена карта; у нових містах поки є адреси та дні завезення, а назви, години й ціни ми додаємо. Платні рекламні послуги доступні лише для магазинів Львова.</p>
   <p>Для власників магазинів ми продаємо <strong>рекламні послуги</strong> в застосунку: позначку Verified+, золоту позначку Featured, найбільшу позначку Spotlight, спалах-знижки та додаткові послуги. Ціни в гривнях; оплата карткою Visa / Mastercard через LiqPay (ПриватБанк) або переказом за рахунком. Кожне платне розміщення позначене як «Реклама».</p>
   <ul>
     <li><a href="services.html">Послуги і ціни</a> — що отримує магазин і скільки це коштує</li>
@@ -4050,6 +4055,7 @@ const HELP = {
   en: { title:'How to use this app', got:'Got it!', sections:[
     ['📋 The List','Shows all stores. Use the <strong>filter buttons</strong> at the top to narrow by chain (HUMANA, EconomClass, Світ, Євро Тренд), by KG or per-item pricing, by what is open now, or by stores you have or haven\'t visited. Scroll the filters sideways if you can\'t see them all.'],
     ['🗺️ The Map','Shows all store locations as pins. Pin <strong>colour shows the price cycle</strong>: <strong>green</strong> just restocked, <strong>amber</strong> mid-cycle, <strong>red</strong> late cycle and cheapest, <strong>blue</strong> when we have no restock date yet, <strong>purple</strong> for stores that restock every day (no cycle to track — always worth a look). The letter inside is the chain — <strong>H</strong> HUMANA, <strong>C</strong> Світ секонд-хенду, <strong>E</strong> EconomClass, <strong>Є</strong> Євро Тренд, no letter for unbranded stores. A ✓ on a pin means you\'ve visited. Tap any pin to see a summary, then tap "View Details".<br><br>Tap the <strong>📍</strong> button (bottom-right) to turn <strong>your location</strong> on — you\'ll appear as a blue dot that follows you. The button turns green while it\'s on; tap again to turn it off. Your browser asks for permission the first time.'],
+    ['🏙 Other cities','Lviv Second Hand is no longer just Lviv. Every city has its own map at its own address — currently {cities}. Tap <strong>🏙</strong> in the header (or the button below) to switch. Lviv is our fully checked, most detailed map; the newer cities start with <strong>addresses and restock days only</strong> — shop names, hours and prices are still being filled in, and a few pins may sit slightly off. Use <strong>Edit Store</strong> or <strong>🤝</strong> to correct what you see. Paid promotion is Lviv-only for now.'],
     ['📦 Inventory Tracker','Inside each store, tap <strong>"Set Last Delivery Date"</strong> to record when new stock arrived. The app counts the days, shows a progress bar, and estimates the current discount (or exact KG price). <strong>Green</strong> = fresh, high prices. <strong>Orange</strong> = mid-cycle. <strong>Red</strong> = late cycle, best deals!'],
     ['✅ Visited','Tap the big green <strong>"Mark as Visited"</strong> button inside any store. It turns into a checkmark and the card gets a green border in the list.'],
     ['✏️ Edit or remove a store','Open any store and tap <strong>Edit Store</strong> to fix its details, or <strong>🗑️ Remove this store</strong> at the bottom. Stores <em>you</em> added are deleted; built-in stores are just hidden on your device — a <strong>"Restore all"</strong> link at the bottom of the list brings them back anytime.'],
@@ -4060,6 +4066,7 @@ const HELP = {
   ua: { title:'Як користуватися додатком', got:'Зрозуміло!', sections:[
     ['📋 Список','Показує всі магазини. Використовуйте <strong>кнопки фільтрів</strong> угорі, щоб обрати мережу (HUMANA, EconomClass, Світ, Євро Тренд), ціну на вагу чи по штуці, відкриті зараз, відвідані чи ще не відвідані. Проведіть фільтри вбік, якщо не всі видно.'],
     ['🗺️ Карта','Показує розташування магазинів як позначки. <strong>Колір</strong> показує ціновий цикл: <strong>зелений</strong> — щойно завезли, <strong>жовтий</strong> — середина, <strong>червоний</strong> — кінець циклу, найдешевше, <strong>синій</strong> — дати завезення ще немає, <strong>фіолетовий</strong> — магазини з щоденним оновленням асортименту (циклу немає — заглянути варто завжди). Літера всередині — мережа: <strong>H</strong> HUMANA, <strong>C</strong> Світ секонд-хенду, <strong>E</strong> EconomClass, <strong>Є</strong> Євро Тренд, без літери — магазини поза мережами. ✓ означає, що ви відвідали. Натисніть позначку для короткого опису, потім «Деталі».<br><br>Натисніть кнопку <strong>📍</strong> (внизу праворуч), щоб увімкнути <strong>ваше місцезнаходження</strong> — ви з\'явитесь синьою крапкою, що рухається за вами. Кнопка стає зеленою, коли ввімкнено; натисніть ще раз, щоб вимкнути. Уперше браузер запитає дозвіл.'],
+    ['🏙 Інші міста','Lviv Second Hand — це вже не лише Львів. У кожного міста своя карта за власною адресою — зараз це {cities}. Щоб перемкнутися, натисніть <strong>🏙</strong> угорі (або кнопку нижче). Львів — наша найдетальніша й перевірена карта; нові міста поки містять лише <strong>адреси та дні завезення</strong>, а назви магазинів, години й ціни ми ще додаємо; деякі позначки можуть трохи зміщуватися. Виправляйте неточності через <strong>«Редагувати»</strong> або <strong>🤝</strong>. Платна реклама поки що лише у Львові.'],
     ['📦 Трекер товару','У магазині натисніть <strong>«Встановити дату поставки»</strong>, щоб вказати, коли завезли товар. Додаток рахує дні, показує смугу прогресу й оцінює знижку (чи точну ціну за кг). <strong>Зелений</strong> = свіжий, високі ціни. <strong>Помаранчевий</strong> = середина. <strong>Червоний</strong> = кінець циклу, найкращі ціни!'],
     ['✅ Відвідані','Натисніть велику зелену кнопку <strong>«Відмітити як відвідане»</strong> у магазині. Вона стане галочкою, а картка отримає зелену рамку у списку.'],
     ['✏️ Редагувати чи видалити','Відкрийте магазин і натисніть <strong>«Редагувати»</strong>, щоб змінити деталі, або <strong>🗑️ Видалити магазин</strong> внизу. Магазини, <em>додані вами</em>, видаляються; вбудовані просто ховаються на вашому пристрої — посилання <strong>«Відновити всі»</strong> внизу списку поверне їх будь-коли.'],
@@ -4072,7 +4079,7 @@ function renderHelp(){
   const hp = HELP[lang] || HELP.en;
   document.getElementById('help-sheet').innerHTML =
     `<div class="sheet-handle"></div><h2>${escHtml(hp.title)}</h2><br>`
-    + hp.sections.map(sec => `<div class="help-section"><h3>${escHtml(sec[0])}</h3><p>${sec[1]}</p></div>`).join('')
+    + hp.sections.map(sec => `<div class="help-section"><h3>${escHtml(sec[0])}</h3><p>${sec[1].replace('{cities}', escHtml(CITIES.map(c => lang === 'ua' ? c.nameUa : c.nameEn).join(', ')))}</p></div>`).join('')
     + `<button class="sheet-btn" onclick="document.getElementById('help-overlay').classList.add('hidden')">${escHtml(hp.got)}</button>`
     + (DONATE_URL
         ? `<p class="buy-ui" style="text-align:center;margin-top:16px;font-size:13px;color:var(--muted);">${escHtml(t('donateSub'))}</p>`
