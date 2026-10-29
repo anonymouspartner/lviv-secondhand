@@ -57,6 +57,14 @@ SHOW_BUY_IN_SANDBOX = "1"
 # GitHub Actions variable is not a Worker binding: the workflows and the Worker
 # genuinely cannot see each other's configuration.
 TG_CHANNEL = "@Lviv_Secondhand"
+# Fiscal receipts through LiqPay's ПРРО «Каса». The product ids the owner
+# creates in the LiqPay cabinet (РРО → Каса → Товари), as JSON. One product for
+# everything is enough: {"default": 123456}. Per-item ids (featured_monthly,
+# flash_3h, order_poster, …) override it — key list in worker.js above
+# liqpayRroInfo(). Not secrets: they only name catalog entries. Empty = checkout
+# carries no rro_info and no receipt is issued (the state before the register
+# was connected).
+LIQPAY_RRO_GOODS = ""
 # Optional: a separate group/channel chat id for edit-suggestion moderation
 # (Feature 6, POST /api/edit/stash → claim → the moderator's ✅/❌). Falls
 # back to OWNER_ID above when unset — set this only if you want edit review

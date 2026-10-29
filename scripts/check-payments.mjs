@@ -280,6 +280,7 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
     `monthly plan is not a LiqPay subscription: ${JSON.stringify(p)}`);
   check(p.amount === 600 && p.currency === 'UAH', `Featured monthly charged ${p.amount} ${p.currency}, expected 600 UAH`);
   check(p.public_key === LP_PUB && p.language === 'uk' && /\/liqpay-callback$/.test(p.server_url || ''), `LiqPay params wrong: ${JSON.stringify(p)}`);
+  check(!('rro_info' in p), `with LIQPAY_RRO_GOODS unset the checkout must carry no rro_info, got ${JSON.stringify(p.rro_info)}`);
   const orderId = p.order_id;
   const pre = row('SELECT * FROM payments WHERE id = ?', orderId);
   check(pre && pre.status === 'created' && pre.text === '-15% з застосунком' && pre.email === 'shop@example.com', `prepared payment row wrong: ${JSON.stringify(pre)}`);
@@ -765,6 +766,43 @@ async function lpCallback(fields, { key, e = lpEnv } = {}) {
   check((await promote('c12')) !== 403, '/promote must still accept a Lviv store id');
   const order = async (store) => (await mod.default.fetch(new Request(`https://x/order?store=${store}&item=poster`, { headers: { Origin: 'https://www.lvivsecondhand.com' } }), env2, { waitUntil() {} })).status;
   check((await order('od3')) === 403, '/order must refuse an Odesa store id');
+}
+
+// Fiscal receipts: rro_info for the «Каса» ПРРО, driven by LIQPAY_RRO_GOODS.
+{
+  const goods = (m) => ({ ...lpEnv, LIQPAY_RRO_GOODS: typeof m === 'string' ? m : JSON.stringify(m) });
+  const rroOf = async (path, m) => (await lpCheckout(path, goods(m))).params;
+
+  // One product for everything: a placement subscription, with the email.
+  let q = await rroOf('/promote?store=s30&tier=featured&cadence=monthly&email=shop%40example.com', { default: 777001 });
+  check(q && q.rro_info && q.rro_info.items.length === 1, `default product gave no rro_info: ${JSON.stringify(q && q.rro_info)}`);
+  const it = (q && q.rro_info && q.rro_info.items[0]) || {};
+  check(it.id === 777001 && it.amount === 1 && it.price === 600 && it.cost === 600,
+    `rro_info item wrong (id/price/cost must be numbers matching the charge): ${JSON.stringify(it)}`);
+  check(JSON.stringify(q.rro_info.delivery_emails) === '["shop@example.com"]', `receipt email missing: ${JSON.stringify(q.rro_info)}`);
+  check(q.amount === it.cost, `receipt total ${it.cost} differs from the charge ${q.amount}`);
+
+  // Per-item ids beat the default; each kind of sale maps to its own key.
+  const map = { default: 1, verified_run7: 2, flash_24h_alert: 3, order_poster: 4 };
+  q = await rroOf('/promote?store=s31&tier=verified&cadence=run7', map);
+  check(q.rro_info && q.rro_info.items[0].id === 2 && q.rro_info.items[0].price === 100, `verified_run7 not mapped: ${JSON.stringify(q.rro_info)}`);
+  check(!('delivery_emails' in q.rro_info), 'no email given, yet delivery_emails was sent');
+  q = await rroOf('/flash-deal?store=s32&tier=24h_alert&text=' + encodeURIComponent('-50% сьогодні'), map);
+  check(q.rro_info && q.rro_info.items[0].id === 3 && q.rro_info.items[0].cost === 120, `flash_24h_alert not mapped: ${JSON.stringify(q.rro_info)}`);
+  q = await rroOf('/order?store=s33&item=poster&email=a%40b.ua', map);
+  check(q.rro_info && q.rro_info.items[0].id === 4 && q.rro_info.items[0].cost === 150, `order_poster not mapped: ${JSON.stringify(q.rro_info)}`);
+  q = await rroOf('/flash-deal?store=s34&tier=3h&text=x', map);
+  check(q.rro_info && q.rro_info.items[0].id === 1, `unmapped sale should fall back to "default": ${JSON.stringify(q.rro_info)}`);
+
+  // Misconfiguration never blocks a sale: it just carries no receipt line.
+  for (const bad of ['{not json', '[]', { featured_annual: 9 }, { default: '' }]) {
+    const r = await lpCheckout('/promote?store=s35&tier=featured&cadence=monthly', goods(bad));
+    check(r.res.status === 200 && r.params && !('rro_info' in r.params),
+      `LIQPAY_RRO_GOODS=${JSON.stringify(bad)} should leave checkout working without rro_info, got HTTP ${r.res.status} ${JSON.stringify(r.params && r.params.rro_info)}`);
+  }
+  // The signature still covers the receipt data.
+  const s = await lpCheckout('/promote?store=s36&tier=spotlight&cadence=annual', goods({ default: 5 }));
+  check(s.sig === lpSign(s.data) && s.params.rro_info.items[0].cost === 12000, 'checkout with rro_info is not signed over it, or the annual price is wrong');
 }
 
 if (errors.length) {
