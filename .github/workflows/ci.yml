@@ -27,6 +27,8 @@ jobs:
         run: node scripts/validate-stores.mjs
       - name: Validate cities (registry + every city stores file)
         run: node scripts/validate-cities.mjs
+      - name: City store counts are current (header city menu)
+        run: node scripts/city-counts.mjs --check
 
       - name: Syntax-check index.html's inline script
         run: node scripts/check-inline-js.mjs
