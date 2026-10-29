@@ -365,10 +365,13 @@ header { background: var(--green); color: white; padding: calc(14px + env(safe-a
 @media (max-width: 560px) { #city-btn-label { display: none; } .city-btn { width: 36px; min-width: 36px; padding: 0; border-radius: 50%; font-size: 18px; } }
 #city-overlay { z-index: 1200; } /* above Leaflet's controls (1000) */
 .city-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.city-opt { display: block; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 12px; text-align: center; font-weight: 700; font-size: 14px; color: var(--text); text-decoration: none; background: #fff; }
-.city-opt.active { border-color: var(--green); color: var(--green); background: rgba(27,94,56,0.06); }
+/* Theme tokens only: a hard-coded #fff here put light dark-mode text on white. */
+.city-opt { display: block; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 12px; text-align: center; font-weight: 700; font-size: 14px; color: var(--text); text-decoration: none; background: var(--card); }
+.city-opt.active { border: 2px solid var(--green); color: var(--text); background: var(--green-pale); }
+.city-opt.active::before { content: '✓ '; color: var(--green); }
 #city-prompt .city-opt { color: #fff; border-color: rgba(255,255,255,0.45); background: rgba(255,255,255,0.12); }
-#city-prompt .city-opt.active { background: #fff; color: var(--green); border-color: #fff; }
+#city-prompt .city-opt.active { background: #fff; color: #17693a; border-color: #fff; } /* fixed colours: the banner is green in both themes */
+#city-prompt .city-opt.active::before { color: #17693a; }
 #lsh-toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); background: #222; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; opacity: 0; pointer-events: none; transition: .2s; z-index: 2500; max-width: 90vw; }
 #lsh-toast.show { opacity: 1; transform: translate(-50%, 0); }
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 900; display: flex; align-items: flex-end; }
