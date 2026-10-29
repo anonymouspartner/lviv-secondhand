@@ -38,6 +38,11 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Generate launcher icon and splash
+        # From native/resources/ (icon, adaptive layers, splash). Without this the
+        # app ships with Capacitor's default icon.
+        run: npx capacitor-assets generate --android --iconBackgroundColor '#14472a' --splashBackgroundColor '#14472a'
+
       - name: Sync web assets & config
         run: npx cap sync android
 
