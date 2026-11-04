@@ -247,6 +247,46 @@ const pretty = JSON.stringify(FIXTURE, null, 2) + '\n';
   check('while the real field in the same patch still lands', s1.phone === '+38 (1) 1');
 }
 
+// ── 11. City is read off the store id when the payload names none ──────────
+// Run #25 of update-map.yml: the restock/flash-deal/bot dispatchers send only
+// { store_id, updates }, so a patch for Kyiv's kv10 was looked up in Lviv's
+// stores.json and the run died. Evaluated in a child process without
+// GITHUB_EVENT_PATH so importing the applier does not run main() — CI sets
+// that variable for this very job.
+{
+  const probe = `
+    const m = await import(${JSON.stringify('file://' + applier)});
+    const out = {};
+    const tryIt = (k, f) => { try { out[k] = f(); } catch (e) { out[k] = 'ERR ' + e.message; } };
+    tryIt('kv10', () => m.cityForStoreId('kv10'));
+    tryIt('c21', () => m.cityForStoreId('c21'));
+    tryIt('cv3', () => m.cityForStoreId('cv3'));
+    tryIt('if12', () => m.cityForStoreId('if12'));
+    tryIt('single', () => m.cityForPayload({ store_id: 'kv10', updates: {} }));
+    tryIt('batch', () => m.cityForPayload({ patches: [{ store_id: 'kh2' }, { store_id: 'kh5' }] }));
+    tryIt('removes', () => m.cityForPayload({ removes: ['od4'] }));
+    tryIt('explicit', () => m.cityForPayload({ city: 'rivne', store_id: 'c1' }));
+    tryIt('addsOnly', () => m.cityForPayload({ adds: [{ name: 'x' }] }));
+    tryIt('mixed', () => m.cityForPayload({ patches: [{ store_id: 'c1' }, { store_id: 'kv1' }] }));
+    tryIt('kyivFile', () => (m.selectCity(m.cityForPayload({ store_id: 'kv10' })), m.storesPathFor && m.storesPathFor()));
+    console.log(JSON.stringify(out));
+  `;
+  const env = { ...process.env };
+  delete env.GITHUB_EVENT_PATH; delete env.STORES_PATH;
+  const out = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', probe], { env, encoding: 'utf8' }));
+  check('kv10 belongs to Kyiv', out.kv10 === 'kyiv', out.kv10);
+  check('an unprefixed Lviv id stays in Lviv', out.c21 === 'lviv', out.c21);
+  check('a two-letter prefix needs digits after it (cv3 is Chernivtsi)', out.cv3 === 'chernivtsi', out.cv3);
+  check('Ivano-Frankivsk ids resolve', out.if12 === 'ivano-frankivsk', out.if12);
+  check('a single {store_id, updates} with no city goes to the id\'s city', out.single === 'kyiv', out.single);
+  check('a batch with no city goes to its ids\' city', out.batch === 'kharkiv', out.batch);
+  check('removals alone are enough to pick the city', out.removes === 'odesa', out.removes);
+  check('an explicit city still wins', out.explicit === 'rivne', out.explicit);
+  check('a payload with no ids still defaults to Lviv', out.addsOnly === 'lviv', out.addsOnly);
+  check('ids from two cities are refused, not guessed', String(out.mixed).startsWith('ERR '), out.mixed);
+  check('a Kyiv id selects cities/kyiv/stores.json', String(out.kyivFile).endsWith('cities/kyiv/stores.json'), out.kyivFile);
+}
+
 console.log('');
 if (failures) { console.error(`map-patch: ${failures} check(s) failed.`); process.exit(1); }
 console.log('Map-patch pipeline OK — formatting preserved, fill-gaps never overwrites.');
