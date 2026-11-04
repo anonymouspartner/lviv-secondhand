@@ -32,8 +32,12 @@ import { dirname, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 // STORES_PATH lets the test harness point this at a fixture instead of the
 // real dataset. Otherwise the file is chosen per city: client_payload.city
-// (a slug from cities.json) → that city's stores file; absent → Lviv's
-// stores.json, which is what every existing dispatcher sends.
+// (a slug from cities.json) → that city's stores file. When the payload names
+// no city — which is what the single-store dispatchers in worker/worker.js,
+// telegram-bot/worker.js and scripts/patch-store.js send — the city is read off
+// the store ids' prefix (kv10 → Kyiv), the same rule as cityForStore() in
+// worker/worker.js. Unprefixed ids (c*, h*, s*) and payloads with no ids at
+// all fall back to Lviv's stores.json.
 const CITIES = JSON.parse(readFileSync(resolve(here, '..', 'cities.json'), 'utf8'));
 let storesPath = process.env.STORES_PATH || resolve(here, '..', 'stores.json');
 let cityPrefix = '';
@@ -44,6 +48,34 @@ export function selectCity(slug) {
   if (!process.env.STORES_PATH) storesPath = resolve(here, '..', city.stores);
   return city;
 }
+
+// The city a store id belongs to, by prefix: the prefix must be followed by
+// digits only, so Lviv's unprefixed ids (c21, h3, s7) never match a two-letter
+// prefix such as Chernivtsi's 'cv'. Returns the city slug, or 'lviv'.
+const CITY_BY_PREFIX = CITIES.filter((c) => c.prefix).sort((a, b) => b.prefix.length - a.prefix.length);
+export function cityForStoreId(id) {
+  const s = String(id || '');
+  const c = CITY_BY_PREFIX.find((x) => s.startsWith(x.prefix) && /^\d+$/.test(s.slice(x.prefix.length)));
+  return c ? c.slug : 'lviv';
+}
+
+// The city a payload without an explicit `city` is about, from every store id
+// it names. Ids from two cities in one payload is refused rather than guessed:
+// one run edits one city's file, so half of such a payload would silently go
+// nowhere.
+export function cityForPayload(payload) {
+  if (payload.city) return payload.city;
+  const ids = [];
+  if (Array.isArray(payload.patches)) for (const p of payload.patches) if (p && p.store_id) ids.push(p.store_id);
+  if (payload.store_id) ids.push(payload.store_id);
+  if (Array.isArray(payload.removes)) for (const r of payload.removes) if (typeof r === 'string') ids.push(r);
+  const slugs = [...new Set(ids.map(cityForStoreId))];
+  if (slugs.length > 1) throw new Error(`client_payload names stores from several cities (${slugs.join(', ')}) and no city — send one city per dispatch.`);
+  return slugs[0] || 'lviv';
+}
+
+// Which file the next main() call will read and write — for the test harness.
+export function storesPathFor() { return storesPath; }
 
 function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -182,7 +214,7 @@ function main() {
   if (!payload || typeof payload !== 'object') throw new Error('Event has no client_payload.');
 
   const { mode } = payload;
-  selectCity(payload.city);
+  selectCity(cityForPayload(payload));
   // Two accepted shapes. The original single patch — { store_id, updates } —
   // is what the bot survey and /restock/approve still send. A batch —
   // { patches: [{ store_id, updates }] } — lets one approved contribution
