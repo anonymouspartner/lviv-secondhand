@@ -262,7 +262,8 @@
     "note": "Оновлення: Понеділок (раз на пʼять тижнів)",
     "source": "@lvivsecondhand_bot",
     "verified": false,
-    "geocode_status": "ok"
+    "geocode_status": "ok",
+    "restock_date": "2026-11-04"
   },
   {
     "id": "kv11",
