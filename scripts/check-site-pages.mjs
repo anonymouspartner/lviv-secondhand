@@ -10,7 +10,7 @@
 //   - «Про сервіс» and the links on the home page outside any <script>;
 //   - services.html listing every price offer.html §4 charges;
 //   - the new pages in the sitemap, their images present, no Stripe, no phone.
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 
 const failures = [];
 const check = (ok, msg) => { if (!ok) failures.push(msg); };
@@ -59,6 +59,28 @@ for (const f of PAGES) {
 
 // The home page as served (scripts removed) explains the service and links out.
 const home = stripScripts(read('index.html'));
+
+// Crawl paths into the generated pages. The app renders store links only in
+// JavaScript, and Google never discovered a single /store/ or /chain/ page
+// until the static HTML linked them: a visible link to /store/ outside any
+// <noscript>, and a <noscript> list naming every chain page that exists.
+{
+  const visible = home.replace(/<noscript>[\s\S]*?<\/noscript>/gi, '');
+  check(visible.includes('href="/store/"'), 'index.html has no visible static link to /store/');
+  const ns = (home.match(/<noscript>[\s\S]*?<\/noscript>/gi) || []).join('');
+  check(ns.includes('href="/store/"'), 'index.html <noscript> does not link /store/');
+  const chainDirs = readdirSync('chain', { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+  for (const c of chainDirs) check(ns.includes(`href="/chain/${c}/"`), `index.html <noscript> does not link /chain/${c}/ — run node scripts/build-store-pages.mjs`);
+}
+
+// robots.txt blocks the API paths Google lifted out of the inline script, by
+// prefix. A prefix is easy to over-match, so no real page may fall under one.
+{
+  const disallow = read('robots.txt').split('\n').map((l) => l.match(/^Disallow:\s*(\S+)/i)).filter(Boolean).map((m) => m[1]);
+  check(disallow.includes('/promote') && disallow.includes('/api/'), 'robots.txt no longer blocks the metrics API paths');
+  const urls = [...read('sitemap.xml').matchAll(/<loc>https:\/\/www\.lvivsecondhand\.com([^<]*)<\/loc>/g)].map((m) => m[1]);
+  for (const u of urls) for (const d of disallow) check(!u.startsWith(d), `robots.txt "Disallow: ${d}" blocks ${u}, which is in the sitemap`);
+}
 check(/<h2>Про сервіс<\/h2>/.test(home), 'index.html has no static «Про сервіс» section');
 for (const href of ['services.html', 'contacts.html', 'returns.html', 'offer.html', 'privacy.html']) {
   const about = (home.match(/<section class="about-static"[\s\S]*?<\/section>/) || [''])[0];

@@ -17,5 +17,21 @@ Disallow: /marketing/
 # Printable QR posters — internal print material for the owner and field
 # agents, not pages a shopper should land on from search.
 Disallow: /qr/
+# Not pages: these are the metrics Worker's API routes (index.html calls them
+# as METRICS_URL + '/promote', '/order', …). Google read the bare paths out of
+# the inline script and crawled them on this host, where they are 404s.
+# Prefix rules — keep them from matching a real page (scripts/check-site-pages.mjs
+# fails if any sitemap URL is blocked).
+Disallow: /api/
+Disallow: /cdn-cgi/
+Disallow: /promote
+Disallow: /flash-deal
+Disallow: /order
+Disallow: /subscribe
+Disallow: /unsubscribe
+Disallow: /status
+Disallow: /promos
+Disallow: /chain-prices
+Disallow: /test-push
 
 Sitemap: https://www.lvivsecondhand.com/sitemap.xml

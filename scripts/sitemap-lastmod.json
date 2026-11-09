@@ -1,0 +1,570 @@
+{
+  "https://www.lvivsecondhand.com/": {
+    "sha": "a80311f127b9dd26",
+    "date": "2026-11-09"
+  },
+  "https://www.lvivsecondhand.com/chain/birka-lux/": {
+    "sha": "f9141a61bfde0d3d",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/chain/economclass/": {
+    "sha": "20c597cb97b6550a",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/chain/humana/": {
+    "sha": "3fcbb41710778fa9",
+    "date": "2026-10-26"
+  },
+  "https://www.lvivsecondhand.com/chain/stok-ta-sekond-khend/": {
+    "sha": "fba4050ab008594d",
+    "date": "2026-10-20"
+  },
+  "https://www.lvivsecondhand.com/chain/svit-sekond-khendu/": {
+    "sha": "f2b4f32c59f6d5d8",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/chain/yevro-sekond-khend/": {
+    "sha": "1a5de8253dd52481",
+    "date": "2026-10-24"
+  },
+  "https://www.lvivsecondhand.com/chain/yevro-trend-sekond-khend/": {
+    "sha": "e592adb9095a3ba3",
+    "date": "2026-11-05"
+  },
+  "https://www.lvivsecondhand.com/chain/yevrobrend/": {
+    "sha": "27cff5e51e3d6c61",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/contacts.html": {
+    "sha": "7758ff88794c7815",
+    "date": "2026-10-26"
+  },
+  "https://www.lvivsecondhand.com/jobs/": {
+    "sha": "6d912400056a4b04",
+    "date": "2026-11-09"
+  },
+  "https://www.lvivsecondhand.com/offer.html": {
+    "sha": "bc37b17ed02c2bc9",
+    "date": "2026-11-09"
+  },
+  "https://www.lvivsecondhand.com/privacy.html": {
+    "sha": "160e3e070463097a",
+    "date": "2026-11-09"
+  },
+  "https://www.lvivsecondhand.com/returns.html": {
+    "sha": "8167ab71a81dbea0",
+    "date": "2026-10-26"
+  },
+  "https://www.lvivsecondhand.com/services.html": {
+    "sha": "189aea49b97744d5",
+    "date": "2026-10-28"
+  },
+  "https://www.lvivsecondhand.com/store/": {
+    "sha": "53f44b1ab425efd1",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c10/": {
+    "sha": "9ff8b84742912134",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c100/": {
+    "sha": "8ff607e4a23252ec",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c101/": {
+    "sha": "36cb40b7787cfe55",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c102/": {
+    "sha": "9c581b312fd548d7",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c103/": {
+    "sha": "731cef44c6ad01b1",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c104/": {
+    "sha": "3ad9b2fbb7a03534",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c105/": {
+    "sha": "24dfb59b3210b073",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c106/": {
+    "sha": "f656e5f5493f3315",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c107/": {
+    "sha": "99b2cef2ccf726c8",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c108/": {
+    "sha": "f0e1e1872bcde7a3",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c109/": {
+    "sha": "7d53a425a6f609b6",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c11/": {
+    "sha": "44bc0ececdd912f8",
+    "date": "2026-09-29"
+  },
+  "https://www.lvivsecondhand.com/store/c110/": {
+    "sha": "0c4c2d063a8f6f66",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c111/": {
+    "sha": "4b00d331dfce0625",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c112/": {
+    "sha": "880b1ff848715862",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c113/": {
+    "sha": "82f6a8c25dd5e796",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c114/": {
+    "sha": "47b45a82c218d052",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c115/": {
+    "sha": "8bd8de5cd56e246a",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c118/": {
+    "sha": "82744f280caa1dcc",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c119/": {
+    "sha": "73bbbd5f5e3a4b9b",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c121/": {
+    "sha": "4502cd5a83897115",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c125/": {
+    "sha": "c0daabd04232b85c",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c126/": {
+    "sha": "cd6328fd69cab901",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c127/": {
+    "sha": "3ee43b70998aee4c",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c128/": {
+    "sha": "d5ccd5514cc29551",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c129/": {
+    "sha": "14e6a62acce2f963",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c130/": {
+    "sha": "7cd7b002c979cd07",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c15/": {
+    "sha": "4dda3911c374f69a",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c16/": {
+    "sha": "cae7e19b0bc974d7",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c17/": {
+    "sha": "4ee1004a84e74c0d",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c19/": {
+    "sha": "de8e44cc12f9d4a4",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c2/": {
+    "sha": "51d14c0d3a016e6c",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c20/": {
+    "sha": "f2f0e06e61704aff",
+    "date": "2026-08-27"
+  },
+  "https://www.lvivsecondhand.com/store/c21/": {
+    "sha": "648ea44e98011ca3",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c22/": {
+    "sha": "3422448c6d6f6ed3",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c23/": {
+    "sha": "c73250f98abcd4f6",
+    "date": "2026-11-05"
+  },
+  "https://www.lvivsecondhand.com/store/c24/": {
+    "sha": "8519ced72c6b6084",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c25/": {
+    "sha": "d383eef553d9b170",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c26/": {
+    "sha": "7553164776aa8bf8",
+    "date": "2026-10-01"
+  },
+  "https://www.lvivsecondhand.com/store/c27/": {
+    "sha": "7a0d942511e9f290",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c28/": {
+    "sha": "cb6f6223e1942c9f",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c29/": {
+    "sha": "c989fb08c000a238",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c3/": {
+    "sha": "a2e10f65680181a4",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c30/": {
+    "sha": "135a66ce00fd82e6",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c31/": {
+    "sha": "0b1d965e02a47b13",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c32/": {
+    "sha": "03f826d8be20bbc4",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c33/": {
+    "sha": "6e5d865ce3ac518b",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c34/": {
+    "sha": "f58a16e0876984c1",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c35/": {
+    "sha": "7af8f4e1822ebf4f",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c36/": {
+    "sha": "781fa0a0451d5d6f",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c37/": {
+    "sha": "ef2f6d86940d32d2",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c38/": {
+    "sha": "4a4cad0d553a5ffe",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c39/": {
+    "sha": "6baee99804efa1a0",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c4/": {
+    "sha": "75f0065454e78c0c",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c40/": {
+    "sha": "1ad23fda8520dd33",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c41/": {
+    "sha": "3f20d30e5d243d04",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c42/": {
+    "sha": "8964fe9ae676069f",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c43/": {
+    "sha": "ee9ebcc722410f5b",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c44/": {
+    "sha": "e985041c94fd68fc",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c45/": {
+    "sha": "43f6c47e2f583280",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c46/": {
+    "sha": "4390344a165402f4",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c47/": {
+    "sha": "9e9ee4d53965e9e7",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c48/": {
+    "sha": "7d53875f4d2cd641",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c49/": {
+    "sha": "250043270bc12b39",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c5/": {
+    "sha": "6b474902c213e766",
+    "date": "2026-10-24"
+  },
+  "https://www.lvivsecondhand.com/store/c50/": {
+    "sha": "26684951a25d9ada",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c51/": {
+    "sha": "b0834ef34fe1dcb8",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c53/": {
+    "sha": "31984960ae2f15a0",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c54/": {
+    "sha": "1481c84dc5b96c47",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c55/": {
+    "sha": "95bfd56a84710bfe",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c57/": {
+    "sha": "4d73e86893ecca6c",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c58/": {
+    "sha": "4d2d943668d2456d",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c59/": {
+    "sha": "975e834cc8b331ef",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c60/": {
+    "sha": "f4124b559c7341c8",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c61/": {
+    "sha": "7408857099928921",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c62/": {
+    "sha": "611646b239f4134c",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c63/": {
+    "sha": "f2ba1972ab7ec3fe",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c64/": {
+    "sha": "0eea0f52ec3a7446",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c65/": {
+    "sha": "9b703c97de1f3962",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c66/": {
+    "sha": "a763fc1f0381022c",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c67/": {
+    "sha": "6e6f32e16e732797",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c68/": {
+    "sha": "35b5f1514b9817cb",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c69/": {
+    "sha": "c4152107485d7fa9",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c7/": {
+    "sha": "0e410f1f91667ec0",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c70/": {
+    "sha": "82b61f450a670e69",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c71/": {
+    "sha": "c51a09ab300677ab",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c72/": {
+    "sha": "45a7d15e1ab64d38",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c73/": {
+    "sha": "6708bb7c4ef01bbe",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c74/": {
+    "sha": "3e8c95613f53d98b",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c75/": {
+    "sha": "a0184e525edfb89f",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c76/": {
+    "sha": "7e411d1acbb691e4",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c77/": {
+    "sha": "cc2a7161631ea44c",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c78/": {
+    "sha": "7ba0e07d3c4bf8b4",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c79/": {
+    "sha": "1738ba099b2ced25",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c8/": {
+    "sha": "d969d20478436b74",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c80/": {
+    "sha": "d71fcc3fccaacc4b",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/c82/": {
+    "sha": "1c2b79ebee18cb3d",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c83/": {
+    "sha": "62106d76c29e6aa1",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c84/": {
+    "sha": "4c3c9a8275849c8f",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c85/": {
+    "sha": "a2229677c62d570e",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c87/": {
+    "sha": "0477bedf99384f25",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c88/": {
+    "sha": "0195b62a264143bb",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c89/": {
+    "sha": "5b2a0081fb5a8dd9",
+    "date": "2026-10-20"
+  },
+  "https://www.lvivsecondhand.com/store/c9/": {
+    "sha": "b68aefa19e0e8f0d",
+    "date": "2026-08-25"
+  },
+  "https://www.lvivsecondhand.com/store/c90/": {
+    "sha": "e84c00a1369b5655",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c91/": {
+    "sha": "91426d6035f4fccf",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c92/": {
+    "sha": "7b5226dc756978a9",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/c93/": {
+    "sha": "03f58011eb23416e",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c94/": {
+    "sha": "6c675ca7d51a20e7",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c95/": {
+    "sha": "4a9c9231a77bf483",
+    "date": "2026-09-28"
+  },
+  "https://www.lvivsecondhand.com/store/c96/": {
+    "sha": "33c293d60862970c",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/c98/": {
+    "sha": "d850544f6fb190c2",
+    "date": "2026-10-19"
+  },
+  "https://www.lvivsecondhand.com/store/c99/": {
+    "sha": "9edc5c048307ad78",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/h1/": {
+    "sha": "24b28e72f4deca23",
+    "date": "2026-10-26"
+  },
+  "https://www.lvivsecondhand.com/store/h2/": {
+    "sha": "6eefdaf51becb297",
+    "date": "2026-09-07"
+  },
+  "https://www.lvivsecondhand.com/store/h3/": {
+    "sha": "2d1d77f9b40a3038",
+    "date": "2026-10-26"
+  },
+  "https://www.lvivsecondhand.com/store/h4/": {
+    "sha": "3565b86b0935e41f",
+    "date": "2026-09-07"
+  },
+  "https://www.lvivsecondhand.com/store/h6/": {
+    "sha": "4beb729d045636f2",
+    "date": "2026-10-26"
+  },
+  "https://www.lvivsecondhand.com/store/h7/": {
+    "sha": "ae102f1a7667bb4d",
+    "date": "2026-10-26"
+  },
+  "https://www.lvivsecondhand.com/store/h8/": {
+    "sha": "b95066a8e385ec70",
+    "date": "2026-10-26"
+  },
+  "https://www.lvivsecondhand.com/store/s10/": {
+    "sha": "d9d2b9cb971840eb",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/s3/": {
+    "sha": "b24030ea14e9085f",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/s6/": {
+    "sha": "54f16cf52b1b9d82",
+    "date": "2026-08-26"
+  },
+  "https://www.lvivsecondhand.com/store/s7/": {
+    "sha": "1007c256a2d13f45",
+    "date": "2026-08-22"
+  },
+  "https://www.lvivsecondhand.com/store/s8/": {
+    "sha": "f85462e53536cb25",
+    "date": "2026-08-21"
+  },
+  "https://www.lvivsecondhand.com/store/s9/": {
+    "sha": "9650ebc8f3826e4a",
+    "date": "2026-08-25"
+  }
+}
