@@ -235,7 +235,10 @@ const caption = [
   hoursLine || null,
   phone ? `☎ ${store.phone}` : null,
   '',
-  `https://${SITE}/?store=${storeId}`,
+  // The store's own page (its canonical URL, with a link onto the map), not
+  // ?store=, which canonicals to the homepage. `store` is from stores.json and
+  // not the watermark, so build-store-pages.mjs has generated this page.
+  `https://${SITE}/store/${storeId}/`,
   '',
   'Не реклама — магазин не платив за це розміщення. Дані з карти.',
   '',

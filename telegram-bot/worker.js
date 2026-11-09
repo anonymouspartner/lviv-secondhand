@@ -199,8 +199,16 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Every store in STORES (stores.json minus the watermark, see build-data.mjs)
+// has a static page at /store/<id>/ with its own canonical and an "open on the
+// map" link. Linking that page, not ?store=<id> (which canonicals to the
+// homepage), lets each link the bot sends count for the store in search. Any
+// other id keeps the ?store=<id> deep link, which still opens the map as before.
+const PAGE_IDS = new Set(STORES.map((s) => s.id));
 function storeLink(id) {
-  return APP_URL + '?store=' + encodeURIComponent(id);
+  return PAGE_IDS.has(id)
+    ? APP_URL + 'store/' + encodeURIComponent(id) + '/'
+    : APP_URL + '?store=' + encodeURIComponent(id);
 }
 
 // One rendered store block (name, address, deep link into the app).
@@ -208,7 +216,7 @@ function storeBlock(s, extra) {
   const lines = [`🏪 <b>${esc(s.name)}</b>`];
   if (s.address) lines.push(`📍 ${esc(s.address)}`);
   if (extra) lines.push(extra);
-  lines.push(`<a href="${storeLink(s.id)}">Open in the app →</a>`);
+  lines.push(`<a href="${storeLink(s.id)}">Деталі й карта · Details &amp; map →</a>`);
   return lines.join('\n');
 }
 

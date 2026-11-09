@@ -170,10 +170,19 @@ jobs:
             const f=s.find(x=>x.id===process.env.STORE);
             process.stdout.write(f ? f.name : process.env.STORE);
           ')
+          # Link the store's own page (/store/<id>/, its canonical URL) when it
+          # has one: every non-watermark stores.json store does. ?store=<id>
+          # canonicals to the homepage, so it stays only as the fallback.
+          LINK=$(node -e '
+            const s=JSON.parse(require("fs").readFileSync("stores.json","utf8"));
+            const f=s.find(x=>x.id===process.env.STORE&&!x.watermark);
+            const id=encodeURIComponent(process.env.STORE);
+            process.stdout.write(f ? `${process.env.SITE}/store/${id}/` : `${process.env.SITE}/?store=${id}`);
+          ')
           {
             printf '%s\n\n' "$TEXT"
             printf '📍 %s\n' "$NAME"
-            printf '%s/?store=%s\n\n' "$SITE" "$STORE"
+            printf '%s\n\n' "$LINK"
             printf 'Реклама. Розміщення оплачене магазином.\n\n'
             printf '#секондхендльвів #львів #секондхенд #знижки #lviv\n'
           } > "$CAP"
