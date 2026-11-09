@@ -9,9 +9,9 @@
 //
 // Safety rails:
 //   • Only the city hosts listed below are proxied. Every other host on the
-//     zone that reaches this route — www, the apex, and unrelated proxied
-//     records such as read.lvivsecondhand.com (a Tunnel) — is passed straight
-//     through to whatever its own DNS record points at, so the Worker never
+//     zone that reaches this route — www, the apex, and any other proxied
+//     record a sibling service may add later (a Tunnel, another Worker) — is
+//     passed straight through to whatever its own DNS record points at, so the Worker never
 //     loops and never hijacks a sibling service. That also means each city
 //     needs its own DNS record: NO wildcard `*` record, or hosts that exist
 //     nowhere would land here with no origin behind them.

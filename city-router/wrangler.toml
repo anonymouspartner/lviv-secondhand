@@ -8,8 +8,8 @@ compatibility_date = "2026-08-01"
 # because the Worker answers before the record is ever used. Do NOT add a
 # wildcard `*` record: the Worker passes any non-city host through to its own
 # origin, and a wildcard would give unknown hosts none. www stays DNS-only
-# (grey cloud) → GitHub Pages, as it is today; other proxied hosts on the zone
-# (read.lvivsecondhand.com) are untouched because the Worker passes them through.
+# (grey cloud) → GitHub Pages, as it is today; any other proxied host added to the
+# zone later is untouched because the Worker passes every non-city host through.
 routes = [
   { pattern = "*.lvivsecondhand.com/*", zone_name = "lvivsecondhand.com" },
 ]
