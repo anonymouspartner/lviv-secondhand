@@ -122,9 +122,12 @@ jobs:
       - name: Check store pages are in sync with stores.json
         run: |
           node scripts/build-store-pages.mjs
-          if [ -n "$(git status --porcelain -- store chain sitemap.xml)" ]; then
-            echo "::error::store/, chain/ or sitemap.xml is stale. Run: node scripts/build-store-pages.mjs"
-            git status --porcelain -- store chain sitemap.xml
+          # index.html carries a generated <noscript> chain list, and every
+          # page's content hash feeds sitemap <lastmod> — so editing any page in
+          # the sitemap (index.html, offer.html, …) also needs a re-run.
+          if [ -n "$(git status --porcelain -- store chain sitemap.xml index.html scripts/sitemap-lastmod.json)" ]; then
+            echo "::error::store/, chain/, sitemap.xml, index.html's chain links or scripts/sitemap-lastmod.json is stale. Run: node scripts/build-store-pages.mjs"
+            git status --porcelain -- store chain sitemap.xml index.html scripts/sitemap-lastmod.json
             exit 1
           fi
           echo "Store pages are in sync."
