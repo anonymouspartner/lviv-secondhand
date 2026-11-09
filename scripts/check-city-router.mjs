@@ -179,6 +179,11 @@ for (const path of ['/store/c68/', '/contacts.html', '/services.html']) {
   check(/^Sitemap: https:\/\/odesa\.lvivsecondhand\.com\/sitemap\.xml$/m.test(text), 'odesa /robots.txt: Sitemap line not rewritten');
   check(!text.includes('www.lvivsecondhand.com/sitemap.xml'), 'odesa /robots.txt: still names the www sitemap');
   check(text.replace(/^Sitemap:.*$/gm, '') === www.replace(/^Sitemap:.*$/gm, ''), 'odesa /robots.txt: rules differ from www');
+  // The API-path rules that stop Google crawling 404s built from the inline
+  // script must reach every city host too, not just www.
+  for (const path of ['/api/', '/cdn-cgi/', '/promote', '/flash-deal', '/order', '/subscribe', '/unsubscribe', '/status', '/promos', '/chain-prices', '/test-push']) {
+    check(text.split('\n').includes(`Disallow: ${path}`), `odesa /robots.txt: missing "Disallow: ${path}"`);
+  }
 }
 
 // Untouched: non-HTML, HEAD, redirects (still moved onto the city host), and
@@ -191,7 +196,7 @@ for (const path of ['/store/c68/', '/contacts.html', '/services.html']) {
   check(head.res.status === 200, 'kyiv HEAD /: failed');
   const redir = await get('https://kyiv.lvivsecondhand.com/store');
   check(redir.res.status === 301 && redir.res.headers.get('location') === 'https://kyiv.lvivsecondhand.com/store/', `kyiv /store: redirect location ${redir.res.headers.get('location')}`);
-  for (const href of ['https://read.lvivsecondhand.com/x', 'https://lvivsecondhand.com/']) {
+  for (const href of ['https://sibling.lvivsecondhand.com/x', 'https://lvivsecondhand.com/']) {
     const { res, text: t } = await get(href);
     check(res.headers.get('x-passthrough') === '1' && t === `passthrough:${href}`, `${href}: not passed through untouched`);
   }
