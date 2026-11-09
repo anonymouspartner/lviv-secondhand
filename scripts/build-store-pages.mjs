@@ -598,8 +598,15 @@ function sitemap(stores, chains) {
     { loc: `${ORIGIN}/contacts.html`, freq: 'yearly', pri: '0.3' },
     { loc: `${ORIGIN}/returns.html`, freq: 'yearly', pri: '0.3' },
   ];
+  // Each city subdomain's homepage is its own indexable page (the city router
+  // gives it a self-canonical). Cross-host URLs are accepted here because the
+  // Search Console property is the whole lvivsecondhand.com domain (DNS-verified).
+  const cityHomes = JSON.parse(readFileSync(join(ROOT, 'cities.json'), 'utf8'))
+    .filter((c) => c.host !== new URL(ORIGIN).host)
+    .map((c) => ({ loc: `https://${c.host}/`, freq: 'daily', pri: '0.9' }));
   const entries = [
     ...staticUrls,
+    ...cityHomes,
     ...chains.map((c) => ({ loc: `${ORIGIN}/chain/${c.slug}/`, freq: 'weekly', pri: '0.7' })),
     ...stores.map((s) => ({ loc: `${ORIGIN}/store/${s.id}/`, freq: 'weekly', pri: '0.6' })),
   ];
@@ -657,4 +664,4 @@ for (const c of chains) {
 writeFileSync(join(OUT_DIR, 'index.html'), indexPage(stores, chains));
 writeFileSync(join(ROOT, 'sitemap.xml'), sitemap(stores, chains));
 
-console.log(`Generated ${stores.length} store pages + ${chains.length} chain pages + /store/ index + sitemap.xml (${stores.length + chains.length + 8} URLs).`);
+console.log(`Generated ${stores.length} store pages + ${chains.length} chain pages + /store/ index + sitemap.xml (${stores.length + chains.length + 8} www URLs + city homepages).`);

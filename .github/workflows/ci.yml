@@ -41,6 +41,14 @@ jobs:
       - name: Syntax-check the city-router Worker
         run: node --check city-router/worker.js
 
+      # The city router proxied www byte-for-byte, so every city homepage
+      # shipped www's canonical and Google filed all ten as duplicates of Lviv.
+      # This drives the Worker against the repo's HTML and asserts each city
+      # homepage is self-canonical, every other page names www, and each city
+      # host serves its own robots.txt/sitemap. Also: one canonical per page.
+      - name: Check city-router canonicals, robots.txt and sitemap
+        run: node scripts/check-city-router.mjs
+
       - name: Syntax-check the Telegram bot Worker
         run: node --check telegram-bot/worker.js
 

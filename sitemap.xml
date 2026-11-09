@@ -45,6 +45,56 @@
     <priority>0.3</priority>
   </url>
   <url>
+    <loc>https://kyiv.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://kharkiv.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://dnipro.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://odesa.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://zhytomyr.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ternopil.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://lutsk.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://rivne.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://chernivtsi.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ivano-frankivsk.lvivsecondhand.com/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://www.lvivsecondhand.com/chain/economclass/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
