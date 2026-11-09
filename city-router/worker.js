@@ -31,7 +31,9 @@
 //     those pages are Lviv content or shared legal pages);
 //   • any page with no canonical gets the www one appended, so Google never
 //     has to guess between 11 copies ("Duplicate without user-selected
-//     canonical").
+//     canonical");
+//   • Lviv's /store/ and /chain/ pages also get <meta name="robots"
+//     content="noindex, follow"> — they are www's pages, not this city's.
 // It also answers /robots.txt (www's rules, but this host's sitemap) and
 // /sitemap.xml (just this city's homepage — the only page a city host owns).
 //
@@ -96,13 +98,20 @@ function headRewriter(host, pathname) {
   }
   // A page with no canonical of its own: name the www copy. /jobs/index.html
   // and /jobs/ are one page, so the canonical drops a trailing index.html.
+  // Lviv's store and chain pages are also noindex here (they keep the www
+  // canonical): ten more copies of ~140 Lviv pages are pure crawl waste, and a
+  // city host should only ever rank for its own homepage.
   let seen = false;
   const www = `${ORIGIN}${pathname.replace(/\/index\.html$/, '/')}`;
+  const lvivOnly = /^\/(store|chain)\//.test(pathname);
   return new HTMLRewriter()
     .on('link[rel="canonical"]', { element() { seen = true; } })
     .on('head', {
       element(el) {
-        el.onEndTag((end) => { if (!seen) end.before(`<link rel="canonical" href="${escAttr(www)}">`, { html: true }); });
+        el.onEndTag((end) => {
+          if (!seen) end.before(`<link rel="canonical" href="${escAttr(www)}">`, { html: true });
+          if (lvivOnly) end.before('<meta name="robots" content="noindex, follow">', { html: true });
+        });
       },
     });
 }

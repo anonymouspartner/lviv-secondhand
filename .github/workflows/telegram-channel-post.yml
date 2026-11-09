@@ -10,7 +10,8 @@ name: Post to the Telegram channel
 # public surface: someone forwarding "Bomba has gone 6 days" into a friends'
 # chat is the distribution. It also fixes the one structural problem with the
 # Instagram feed — a channel post's link is CLICKABLE, so the caption's
-# https://www.lvivsecondhand.com/?store=… actually goes somewhere.
+# link to the store's page (https://www.lvivsecondhand.com/store/<id>/) actually
+# goes somewhere.
 #
 # WHY THIS IS CHEAP
 # Telegram has no equivalent of Meta's container/publish dance, no 60-day token

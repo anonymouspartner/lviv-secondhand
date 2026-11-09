@@ -3698,10 +3698,21 @@ function openShareModal(){
 }
 
 
-// ── Deep link to a single store (?store=<id>) ──
+// ── Share link to a single store ──
+// Lviv stores from stores.json each have a static page, /store/<id>/
+// (scripts/build-store-pages.mjs), with its own canonical and an "open on the
+// map" link back to ?store=<id>. Sharing that page lets every shared link count
+// for the store page in search; ?store=<id> canonicals to the homepage. Stores
+// with no page (other cities, ones added on this device, the watermark) keep
+// the ?store=<id> link, which still works exactly as before.
+function storeShareUrl(id){
+  const s = isLviv() && STORES.find(x => x.id === id);
+  if (s && !s.watermark) return 'https://www.lvivsecondhand.com/store/' + encodeURIComponent(id) + '/';
+  return appUrl() + '?store=' + encodeURIComponent(id);
+}
 function copyStoreLink(id){
   track('action','store_link');
-  const link = appUrl() + '?store=' + encodeURIComponent(id);
+  const link = storeShareUrl(id);
   const done = () => alert(t('storeLinkCopied'));
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(link).then(done).catch(()=>prompt(t('storeLinkCopied'), link));

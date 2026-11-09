@@ -268,7 +268,7 @@ jobs:
       caption: ${{ needs.render.outputs.caption }}
 
   # The store card is the post that benefits most from the channel: its caption
-  # ends in a /?store=… deep link, which is dead text on Instagram and a working
+  # ends in a /store/<id>/ link, which is dead text on Instagram and a working
   # link here. Separate job so one surface failing cannot take the other down.
   mirror:
     needs: render

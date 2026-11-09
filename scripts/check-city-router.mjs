@@ -162,6 +162,21 @@ for (const path of ['/store/c68/', '/contacts.html', '/services.html']) {
   check(c.length === 1 && c[0] === `https://www.lvivsecondhand.com${path}`, `kharkiv ${path}: canonical is ${JSON.stringify(c)}`);
 }
 
+// Lviv's store and chain pages are noindex on city hosts (canonical kept), and
+// nowhere else: not on www, not on a city homepage, not on the shared pages.
+const robotsMeta = (html) => [...html.matchAll(/<meta\s+name="robots"\s+content="([^"]*)"\s*\/?>/gi)].map((m) => m[1]);
+for (const path of ['/store/c68/', '/chain/humana/', '/store/']) {
+  const { text } = await get(`https://kyiv.lvivsecondhand.com${path}`);
+  const r = robotsMeta(text);
+  check(r.length === 1 && r[0] === 'noindex, follow', `kyiv ${path}: robots meta is ${JSON.stringify(r)}, want one "noindex, follow"`);
+  check(/<meta name="robots" content="noindex, follow">\s*<\/head>/.test(text), `kyiv ${path}: robots meta is not inside <head>`);
+  check(canonicals(text)[0] === `https://www.lvivsecondhand.com${path}`, `kyiv ${path}: canonical changed`);
+}
+for (const href of ['https://www.lvivsecondhand.com/store/c68/', 'https://www.lvivsecondhand.com/chain/humana/', 'https://kyiv.lvivsecondhand.com/', 'https://kyiv.lvivsecondhand.com/offer.html', 'https://kyiv.lvivsecondhand.com/contacts.html']) {
+  const { text } = await get(href);
+  check(robotsMeta(text).length === 0, `${href}: has a robots meta ${JSON.stringify(robotsMeta(text))}, want none`);
+}
+
 // Per-host sitemap: one <loc>, the city root.
 {
   upstreamCalls = [];
