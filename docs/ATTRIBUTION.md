@@ -23,7 +23,7 @@ they drift.
 | `poster` | The generic in-store QR poster (`marketing/qr-poster.pdf`); per-store posters use `qr-<id>` | `tools/social/qr-poster.mjs` |
 | `sellsheet` | The QR on the owner pitch / price sheet (`marketing/sell-sheet.pdf`) | `tools/social/sell-sheet.mjs` |
 
-Anything that arrives with no tag is reported as `(none)`.
+Anything that arrives with no tag is reported as `(none)`. Older rows tagged `tg` came from the daily restock channel post before it was renamed `tgch` (Nov 2026); read them as `tgch`.
 
 ## How it is read
 
