@@ -49,6 +49,15 @@ jobs:
       - name: Check city-router canonicals, robots.txt and sitemap
         run: node scripts/check-city-router.mjs
 
+      # Before this, 1,574 of 1,577 app opens in 30 days had no ?src=, and the
+      # static store pages (where shared links and search land) sent no
+      # metrics at all. Pins the link builders (bot, channel, Instagram, QR,
+      # share, PWA, Android), that no ?src= reaches what Google crawls, the
+      # store-page beacon (incl. skipping automated browsers), and the Worker's
+      # page_view type and by-src stats against a real SQLite database.
+      - name: Check visit attribution (?src=)
+        run: node --no-warnings scripts/check-attribution.mjs
+
       - name: Syntax-check the Telegram bot Worker
         run: node --check telegram-bot/worker.js
 

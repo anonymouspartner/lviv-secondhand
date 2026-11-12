@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'worker/**'
+      - 'shared/**'   # attribution tags, imported and bundled at deploy
       - '.github/workflows/deploy-worker.yml'
   workflow_dispatch:
 

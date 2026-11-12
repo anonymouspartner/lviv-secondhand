@@ -11,6 +11,7 @@
 // Deployed by .github/workflows/deploy-worker.yml. Secrets: VAPID_PRIVATE.
 
 import { CHANNEL_URL, postUrl, readChannelPrices } from './chain-feed.mjs';
+import { SRC, withSrc } from '../shared/attribution.mjs';
 
 const PRIMARY_ORIGIN = 'https://www.lvivsecondhand.com';
 const ALLOWED_ORIGINS = new Set([
@@ -49,7 +50,10 @@ function cityForStore(id) {
 function appUrlFor(id) { return `https://${cityForStore(id).host}/`; }
 function promoAllowed(id) { return cityForStore(id).promo !== false; }
 const WORKER_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
-const TYPES = new Set(['store_open', 'filter', 'tab', 'lang', 'action']);
+// page_view: one per view of a static /store/<id>/, /chain/<slug>/ or /store/
+// page (scripts/build-store-pages.mjs). Same insert and same visitor counting
+// as every other type; it only gives those pages a name in the events table.
+const TYPES = new Set(['store_open', 'filter', 'tab', 'lang', 'action', 'page_view']);
 const LANGS = new Set(['en', 'ua']);
 const MAX_BATCH = 20;
 // Every POST body funnels through this one guard before route dispatch, so it
@@ -546,6 +550,10 @@ function tgSend(env, chatId, text) {
 }
 const uah = (kop) => (kop == null ? '?' : '₴' + (kop / 100).toLocaleString('uk-UA'));
 const storeLink = (id) => `${appUrlFor(id)}?store=${encodeURIComponent(id)}`;
+// Links in messages the bot sends to subscribers (flash deals, restock alerts)
+// carry src=tgbot like every other bot message (docs/ATTRIBUTION.md). Owner
+// pings keep the bare storeLink: the owner's own taps are not a channel.
+const subscriberLink = (link) => withSrc(link, SRC.tgbot);
 
 // ── Customer-portal readiness ────────────────────────────────────────────────
 // /billing only reaches Stripe once a real subscription exists, so before the first
@@ -1424,7 +1432,7 @@ async function broadcastFlashDeal(env, ctx, storeId, text, expiresAt) {
   const rows = (res && res.results) || [];
   if (!rows.length) return;
   const hoursLeft = Math.max(1, Math.round((new Date(expiresAt) - Date.now()) / 3600000));
-  const msg = `⚡ Спалах-знижка: ${text}\nЗникає приблизно через ${hoursLeft} год. · Flash deal: ${text} — ends in about ${hoursLeft}h\n\n${storeLink(storeId)}`;
+  const msg = `⚡ Спалах-знижка: ${text}\nЗникає приблизно через ${hoursLeft} год. · Flash deal: ${text} — ends in about ${hoursLeft}h\n\n${subscriberLink(storeLink(storeId))}`;
   // Early-bird perk (Feature 6): a trusted contributor (>= TRUSTED_POINTS)
   // hears about it the moment it's live; everyone else waits EARLY_BIRD_DELAY_MIN.
   const trusted = [], standard = [];
@@ -2425,12 +2433,28 @@ export default {
           const bySrc = await env.DB.prepare(
             "SELECT src, COUNT(*) AS n FROM events WHERE day >= ? AND type = 'store_open' AND src IS NOT NULL GROUP BY src ORDER BY n DESC"
           ).bind(ago(29)).all();
+          // Arrivals by channel: app opens (the once-per-tab app_open beacon)
+          // and static store/chain page views, per src, over 7 and 30 days.
+          // Untagged arrivals are their own "(none)" row rather than dropped —
+          // how much is still unattributed is itself the number to watch. The
+          // label cannot collide with a real tag: src is stripped to
+          // [A-Za-z0-9_-] on the way in. Tags: shared/attribution.mjs.
+          const arrivals = (from) => env.DB.prepare(
+            "SELECT COALESCE(src, '(none)') AS src," +
+            " SUM(CASE WHEN type = 'action' THEN 1 ELSE 0 END) AS opens," +
+            " SUM(CASE WHEN type = 'page_view' THEN 1 ELSE 0 END) AS views" +
+            " FROM events WHERE day >= ? AND ((type = 'action' AND key = 'app_open') OR type = 'page_view')" +
+            ' GROUP BY 1 ORDER BY opens + views DESC, src LIMIT 50'
+          ).bind(from).all().then((r) => (r && r.results) || []);
+          const [arrivals7, arrivals30] = await Promise.all([arrivals(ago(6)), arrivals(ago(29))]);
           return json({
             ok: true,
             today: d1, last7: d7, last30: d30, allTime: dAll,
             since: (first && first.d) || null,
             events30: (ev && ev.n) || 0,
             storeOpensBySrc30: (bySrc && bySrc.results) || [],
+            arrivalsBySrc7: arrivals7,
+            arrivalsBySrc30: arrivals30,
             daily: (daily && daily.results) || [],
           }, 200, origin);
         } catch (e) {
@@ -3166,8 +3190,8 @@ export default {
     for (const [chatId, rows] of byChat) {
       const names = rows.map((r) => r.name || r.store_id);
       const text = names.length === 1
-        ? `🛍️ ${names[0]} — сьогодні завіз!\n\nНайбільший вибір саме зараз.\n${storeLink(rows[0].store_id)}\n\n${names[0]} restocks today — best choice right now.\n\nВідписатися · unsubscribe — /stop`
-        : `🛍️ Сьогодні завіз у ${names.length} магазинах, за якими ви стежите:\n\n${names.map((n) => '• ' + n).join('\n')}\n\n${APP_URL}\n\nВідписатися · unsubscribe — /stop`;
+        ? `🛍️ ${names[0]} — сьогодні завіз!\n\nНайбільший вибір саме зараз.\n${subscriberLink(storeLink(rows[0].store_id))}\n\n${names[0]} restocks today — best choice right now.\n\nВідписатися · unsubscribe — /stop`
+        : `🛍️ Сьогодні завіз у ${names.length} магазинах, за якими ви стежите:\n\n${names.map((n) => '• ' + n).join('\n')}\n\n${subscriberLink(APP_URL)}\n\nВідписатися · unsubscribe — /stop`;
       ctx.waitUntil(tgSend(env, chatId, text).catch(() => {}));
       // Roll each row forward past today so it fires again next cycle rather
       // than every day from now on.

@@ -11,7 +11,7 @@ name: Post to the Telegram channel
 # chat is the distribution. It also fixes the one structural problem with the
 # Instagram feed — a channel post's link is CLICKABLE, so the caption's
 # link to the store's page (https://www.lvivsecondhand.com/store/<id>/) actually
-# goes somewhere.
+# goes somewhere. Links to our site are tagged ?src=tgch just before posting.
 #
 # WHY THIS IS CHEAP
 # Telegram has no equivalent of Meta's container/publish dance, no 60-day token
@@ -206,6 +206,13 @@ jobs:
           IMG: ${{ inputs.image }}
         run: |
           API="https://api.telegram.org/bot$BOT_TOKEN"
+
+          # Every link to our site in the caption is tagged src=tgch here, the
+          # one path all channel posts take, so a caption written once for both
+          # Instagram (src=ig) and the channel still credits channel taps to the
+          # channel. Bare "www.lvivsecondhand.com" mentions become tagged links
+          # too (Telegram links them anyway). See docs/ATTRIBUTION.md.
+          CAPTION="$(printf '%s' "$CAPTION" | node scripts/tag-caption.mjs tgch)"
 
           # Counted with jq, not ${#CAPTION}: the caption is Ukrainian, and the
           # shell's idea of a character depends on the runner's locale while

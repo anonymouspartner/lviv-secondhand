@@ -179,6 +179,11 @@ jobs:
             const id=encodeURIComponent(process.env.STORE);
             process.stdout.write(f ? `${process.env.SITE}/store/${id}/` : `${process.env.SITE}/?store=${id}`);
           ')
+          # src=ig: this caption is for Instagram (docs/ATTRIBUTION.md).
+          LINK=$(node --input-type=module -e '
+            import { SRC, withSrc } from "./shared/attribution.mjs";
+            process.stdout.write(withSrc(process.argv[1], SRC.ig));
+          ' "$LINK")
           {
             printf '%s\n\n' "$TEXT"
             printf '📍 %s\n' "$NAME"

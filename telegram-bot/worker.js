@@ -70,13 +70,18 @@
 // live in the VISITS KV namespace, keyed so they sort chronologically.
 // ─────────────────────────────────────────────────────────────────────────────
 import { STORES } from './stores.gen.js';
+import { qrLink } from '../shared/attribution.mjs';
+import { APP_URL, site, storeLink } from './links.mjs';
 import {
   getCycleLengthKeyboard, getDayOfWeekKeyboard, getOpenTimeKeyboard, getCloseTimeKeyboard,
   getConfirmKeyboard, summaryText, sessionToUpdates, DAY_OPTIONS,
 } from './telegram-agent-keyboards.js';
 import { ROUTE_MAP_PAGE } from './route-map-page.mjs';
 
-const APP_URL = 'https://www.lvivsecondhand.com/';
+// APP_URL, site() and storeLink() live in ./links.mjs: every link to our site
+// that the bot sends goes through site() and carries src=tgbot. The exceptions
+// are files Telegram or a printer fetches (the QR image, the print PDFs), which
+// run no beacon. scripts/check-attribution.mjs enforces this.
 const METRICS_WORKER_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
 
 // Every call from this Worker to the metrics Worker goes through here.
@@ -199,24 +204,13 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// Every store in STORES (stores.json minus the watermark, see build-data.mjs)
-// has a static page at /store/<id>/ with its own canonical and an "open on the
-// map" link. Linking that page, not ?store=<id> (which canonicals to the
-// homepage), lets each link the bot sends count for the store in search. Any
-// other id keeps the ?store=<id> deep link, which still opens the map as before.
-const PAGE_IDS = new Set(STORES.map((s) => s.id));
-function storeLink(id) {
-  return PAGE_IDS.has(id)
-    ? APP_URL + 'store/' + encodeURIComponent(id) + '/'
-    : APP_URL + '?store=' + encodeURIComponent(id);
-}
 
 // One rendered store block (name, address, deep link into the app).
 function storeBlock(s, extra) {
   const lines = [`🏪 <b>${esc(s.name)}</b>`];
   if (s.address) lines.push(`📍 ${esc(s.address)}`);
   if (extra) lines.push(extra);
-  lines.push(`<a href="${storeLink(s.id)}">Деталі й карта · Details &amp; map →</a>`);
+  lines.push(`<a href="${esc(storeLink(s.id))}">Деталі й карта · Details &amp; map →</a>`);
   return lines.join('\n');
 }
 
@@ -266,7 +260,7 @@ function helpText() {
     '/materials — print-ready flyers, stickers, poster · рекламні матеріали для друку',
     '/help — this message · ця довідка',
     '',
-    `🗺️ Full map, hours &amp; price tracker: ${APP_URL}`,
+    `🗺️ Full map, hours &amp; price tracker: ${site()}`,
     `📸 Instagram — щотижневі ціни та нові магазини · weekly prices and new stores: https://www.instagram.com/secondhandlvivbot/`,
   ].join('\n');
 }
@@ -290,10 +284,10 @@ function materialsText() {
     '👉 <code>c12</code>   (або · or <code>/materials c12</code>)',
     'Кожен QR веде саме на цей магазин, не на загальну карту.',
     'Each QR opens that one store, not the general map.',
-    `🗂️ <a href="${APP_URL}qr/">Список усіх кодів · All store codes</a>`,
+    `🗂️ <a href="${site('qr/')}">Список усіх кодів · All store codes</a>`,
     '',
     'Друкуй наліпки на самоклейному папері A4. · Print stickers on A4 label paper.',
-    `🗺️ ${APP_URL}`,
+    `🗺️ ${site()}`,
   ].join('\n');
 }
 
@@ -315,7 +309,7 @@ function todayText() {
       'The tracked by-weight stores restock Mon–Fri.',
       '',
       'Try /cheap for the stores longest since a restock, or open the full map:',
-      APP_URL,
+      site(),
     ].join('\n');
   }
   const blocks = todays.map((s) => storeBlock(s, '🆕 Fresh stock today')).join('\n\n');
@@ -386,7 +380,7 @@ function cheapText() {
 }
 
 function cheapEmpty() {
-  return `Поки немає даних про завози. · No restock dates tracked yet. Open the full map: ${APP_URL}`;
+  return `Поки немає даних про завози. · No restock dates tracked yet. Open the full map: ${site()}`;
 }
 
 // Stores with a fixed weekly restock day — any day, not just today. This is a
@@ -430,7 +424,7 @@ function dayPickerHelp() {
 function rareText() {
   const rare = STORES.filter((s) => s.cycle > 7).sort((a, b) => b.cycle - a.cycle);
   if (!rare.length) {
-    return `No rarely-restocking stores on record. Open the full map: ${APP_URL}`;
+    return `No rarely-restocking stores on record. Open the full map: ${site()}`;
   }
   const blocks = rare.map((s) => storeBlock(s, `🐢 Restocks every ${s.cycle} days`)).join('\n\n');
   return featuredBlock() + [
@@ -448,7 +442,7 @@ function submitText() {
     "Submit your store and its restock schedule for the official map — a maintainer reviews it, then it ships to everyone.",
     'Маєте або керуєте секонд-хендом? Надішліть його для офіційної карти — після перевірки він зʼявиться в застосунку.',
     '',
-    `👉 <a href="${APP_URL}?owner=1">Open the submission form · Відкрити форму</a>`,
+    `👉 <a href="${esc(site('?owner=1'))}">Open the submission form · Відкрити форму</a>`,
   ].join('\n');
 }
 
@@ -907,7 +901,7 @@ async function handleRestockSubStart(env, ctx) {
     await tg(env, 'sendMessage', {
       chat_id: chatId,
       text: `📦 Для <b>${esc(name)}</b> ще не відомий графік завозу, тому попередити не вийде.\n` +
-            `Знаєте дату? Надішліть її через застосунок — ${APP_URL}?store=${encodeURIComponent(storeId)}\n\n` +
+            `Знаєте дату? Надішліть її через застосунок — ${esc(site('?store=' + encodeURIComponent(storeId)))}\n\n` +
             `No restock schedule on record for <b>${esc(name)}</b> yet, so there is nothing to predict from.`,
       parse_mode: 'HTML',
     });
@@ -1700,7 +1694,7 @@ async function promptStorePick(env, uid, chatId, session) {
   const mapIds = near.map(({ s }) => s.id).join(',');
   await say(env, chatId,
     '2️⃣ Який це магазин? Надішліть номер · Which store? Reply with the number:\n' + lines.join('\n') +
-    `\n\n🗺️ <a href="${APP_URL}?route=${mapIds}">Ці магазини на карті · These stores on the map</a>` +
+    `\n\n🗺️ <a href="${esc(site('?route=' + mapIds))}">Ці магазини на карті · These stores on the map</a>` +
     '\n\nНемає у списку — надішліть назву, або <code>new Назва</code>.\nNot listed — send a name, or <code>new Name</code>.' +
     '\n\n/cancel щоб вийти · to abort',
     near.map((_, i) => [String(i + 1)]));
@@ -2058,7 +2052,7 @@ function notAgentMsg(uid) {
 }
 
 // Job brief for a prospective/onboarding agent to read and review.
-const JOB_BRIEF_URL = 'https://www.lvivsecondhand.com/jobs/';
+const JOB_BRIEF_URL = site('jobs/');
 function jobText() {
   return [
     '📋 <b>Опис вакансії · Job brief</b>',
@@ -2271,7 +2265,7 @@ async function cmdStoreQr(env, chatId, rawId) {
     await say(env, chatId,
       `🤷 Не знайшов магазин <code>${esc(rawId)}</code>. · No store with that id.\n` +
       `Формат — літера + число, напр. <code>c21</code>, <code>h1</code>. · Format is letter+number.\n` +
-      `Усі коди · All ids: ${APP_URL}qr/`);
+      `Усі коди · All ids: ${site('qr/')}`);
     return;
   }
   const code = store.id.toUpperCase();
@@ -2282,15 +2276,15 @@ async function cmdStoreQr(env, chatId, rawId) {
     parse_mode: 'HTML',
     caption:
       `🎯 <b>${esc(code)}</b> — QR цього магазину · this store's QR\n` +
-      `Веде на · Opens: ${APP_URL}?store=${encodeURIComponent(store.id)}\n\n` +
-      `🖨️ <a href="${APP_URL}qr/${store.id}/">Плакат A5 для друку · Printable A5 poster</a>`,
+      `Веде на · Opens: ${esc(qrLink(store.id))}\n\n` +
+      `🖨️ <a href="${site('qr/' + store.id + '/')}">Плакат A5 для друку · Printable A5 poster</a>`,
   });
   // Telegram refuses a photo it cannot fetch (e.g. Pages still deploying).
   // Fall back to links rather than leaving the agent with silence.
   if (res && res.ok === false) {
     await say(env, chatId,
       `🎯 <b>${esc(code)}</b>\n` +
-      `🖨️ <a href="${APP_URL}qr/${store.id}/">Плакат A5 · A5 poster</a>\n` +
+      `🖨️ <a href="${site('qr/' + store.id + '/')}">Плакат A5 · A5 poster</a>\n` +
       `🖼️ <a href="${photo}">QR (PNG)</a>`);
   }
 }
@@ -2365,14 +2359,14 @@ async function handleRouteMapSubmit(env, request) {
     + (from ? `&origin=${from.lat},${from.lng}` : '')
     + `&destination=${ordered[ordered.length - 1].lat},${ordered[ordered.length - 1].lng}`
     + (ordered.length > 1 ? '&waypoints=' + ordered.slice(0, -1).slice(0, 9).map((s) => `${s.lat},${s.lng}`).join('|') : '');
-  const routeUrl = `${APP_URL}?route=${ordered.map((s) => s.id).join(',')}`;
+  const routeUrl = site('?route=' + ordered.map((s) => s.id).join(','));
   const skipNote = skipped.length
     ? `\n\n⚠️ Пропущено (вже зайнято іншим агентом): ${skipped.map((n) => esc(n)).join(', ')}. · ` +
       `Skipped (already taken by another agent): ${skipped.map((n) => esc(n)).join(', ')}.`
     : '';
   const text = `🧭 <b>Маршрут · Route</b> — ${ordered.length} магазинів${totalLine}\n\n` +
     lines.join('\n') +
-    `\n\n🗺️ <a href="${routeUrl}">Показати на карті · See it on the map</a>` +
+    `\n\n🗺️ <a href="${esc(routeUrl)}">Показати на карті · See it on the map</a>` +
     `\n🧭 <a href="${mapsUrl}">Навігація в Google Maps · Turn-by-turn in Google Maps</a>` +
     `\n\nЦей маршрут закріплений за вами на 12 годин. На місці надішліть /visit. · ` +
     `This route is claimed for you for 12 hours. Send /visit once you're there.` +
@@ -2456,6 +2450,18 @@ async function cmdAdminMenu(env, chatId) {
 // counts once each. That makes the 7- and 30-day figures visit-days rather than
 // distinct people, and the wording below says so — a number labelled "unique
 // visitors" that quietly means something else is worse than no number.
+// A fixed-width table of arrivals by src for cmdAdminVisitors. Rows come from
+// the metrics Worker's /api/stats (arrivalsBySrc7 / arrivalsBySrc30).
+function srcTable(title, rows) {
+  const out = [`🔗 <b>Звідки прийшли · Where from — ${title}</b>`];
+  if (!Array.isArray(rows) || !rows.length) return [...out, '<i>Немає даних. · No data.</i>'];
+  out.push(`<code>${'src'.padEnd(12)} ${'opens'.padStart(6)} ${'views'.padStart(6)}</code>`);
+  for (const r of rows.slice(0, 12)) {
+    out.push(`<code>${esc(String(r.src).slice(0, 12).padEnd(12))} ${String(r.opens || 0).padStart(6)} ${String(r.views || 0).padStart(6)}</code>`);
+  }
+  return [...out, '<i>opens = відкриття застосунку · app opens; views = сторінки магазинів · store/chain pages</i>'];
+}
+
 async function cmdAdminVisitors(env, chatId) {
   if (!env.ADMIN_KEY) {
     await tg(env, 'sendMessage', { chat_id: chatId,
@@ -2521,6 +2527,9 @@ async function cmdAdminVisitors(env, chatId) {
     `<i>Один відвідувач на день. Показники за 7/30 днів — це людино-дні, а не окремі люди.</i>`,
     `<i>One visitor per day; the 7- and 30-day figures are visit-days, not distinct people.</i>`,
   ];
+  // Where people came from: app opens + store/chain page views per ?src= tag
+  // (docs/ATTRIBUTION.md), "(none)" being everything untagged.
+  lines.push('', ...srcTable('7 днів · Last 7 days', s.arrivalsBySrc7), '', ...srcTable('30 днів · Last 30 days', s.arrivalsBySrc30));
   if (s.since) lines.push('', `<i>Облік ведеться з ${esc(s.since)}. · Counting since ${esc(s.since)}.</i>`);
   lines.push(`<i>Подій за 30 днів · Events in 30 days: ${s.events30}</i>`);
 

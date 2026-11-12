@@ -28,6 +28,7 @@
 //
 // Run: FEATURE_STORE_ID=s10 node store-feature.mjs
 import { chromium } from 'playwright';
+import { SRC, withSrc } from '../../shared/attribution.mjs';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -238,7 +239,8 @@ const caption = [
   // The store's own page (its canonical URL, with a link onto the map), not
   // ?store=, which canonicals to the homepage. `store` is from stores.json and
   // not the watermark, so build-store-pages.mjs has generated this page.
-  `https://${SITE}/store/${storeId}/`,
+  // src=ig here; telegram-channel-post.yml retags it src=tgch for the channel.
+  withSrc(`https://${SITE}/store/${storeId}/`, SRC.ig),
   '',
   'Не реклама — магазин не платив за це розміщення. Дані з карти.',
   '',

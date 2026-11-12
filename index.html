@@ -3710,9 +3710,15 @@ function storeShareUrl(id){
   if (s && !s.watermark) return 'https://www.lvivsecondhand.com/store/' + encodeURIComponent(id) + '/';
   return appUrl() + '?store=' + encodeURIComponent(id);
 }
+// Links people copy or scan out of the app say so: ?src=share (the tag list is
+// shared/attribution.mjs; scripts/check-attribution.mjs keeps this in step).
+const SHARE_SRC = 'share';
+function withShareSrc(u){
+  try { const x = new URL(u); x.searchParams.set('src', SHARE_SRC); return x.toString(); } catch(e){ return u; }
+}
 function copyStoreLink(id){
   track('action','store_link');
-  const link = storeShareUrl(id);
+  const link = withShareSrc(storeShareUrl(id));
   const done = () => alert(t('storeLinkCopied'));
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(link).then(done).catch(()=>prompt(t('storeLinkCopied'), link));
@@ -3723,7 +3729,7 @@ function copyStoreLink(id){
 
 // ── Share the app itself (URL + QR) ──
 function copyAppUrl(){
-  const url = appUrl();
+  const url = withShareSrc(appUrl());
   const done = () => alert(t('appLinkCopied'));
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(url).then(done).catch(()=>prompt(t('appLinkCopied'), url));
@@ -3744,7 +3750,7 @@ function renderAppQr(){
   const holder = document.getElementById('share-app-qr-img');
   if(typeof qrcode === 'undefined'){ holder.textContent = appUrl(); return; }
   const qr = qrcode(0, 'M');            // type 0 = auto-size, error correction M
-  qr.addData(appUrl());
+  qr.addData(withShareSrc(appUrl()));
   qr.make();
   holder.innerHTML = qr.createSvgTag(6, 0);
 }
@@ -4396,6 +4402,14 @@ try {
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
   }
   visitSrc = sessionStorage.getItem('lviv_sh_src') || '';
+  // The Android app (Capacitor shell, native/capacitor.config.json) loads this
+  // site by URL and appends "LvivSecondHandApp" to the user agent. A launch
+  // with no other tag is credited to it — read from the user agent rather than
+  // a start URL so existing installs are counted without a new APK.
+  if (!visitSrc && /LvivSecondHandApp/.test(navigator.userAgent)) {
+    visitSrc = 'twa';
+    sessionStorage.setItem('lviv_sh_src', visitSrc);
+  }
 } catch(e) { /* private mode denies sessionStorage — attribution is optional, the app is not */ }
 
 // ── Android tester drive ──
@@ -4455,8 +4469,15 @@ function openTesterSheet(){
   track('action', 'tester_sheet');
 }
 
+// Automated browsers are not visitors. On 9 Nov headless test runs and
+// Googlebot's renderer roughly doubled the visitor count. Same test as the
+// static store/chain pages (scripts/build-store-pages.mjs).
+const IS_AUTOMATED = (() => {
+  try { return navigator.webdriver === true || /bot|crawl|spider|headless|lighthouse|google-inspectiontool/i.test(navigator.userAgent); }
+  catch(e){ return false; }
+})();
 function track(type, key){
-  if (!METRICS_URL) return;
+  if (!METRICS_URL || IS_AUTOMATED) return;
   try {
     const body = JSON.stringify({ type, key: key == null ? '' : String(key), lang, src: visitSrc });
     if (navigator.sendBeacon) navigator.sendBeacon(METRICS_URL, body);

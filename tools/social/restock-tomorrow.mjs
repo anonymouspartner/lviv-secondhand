@@ -36,6 +36,7 @@
 //
 // Run: node restock-tomorrow.mjs
 import { readFileSync } from 'node:fs';
+import { SRC, withSrc } from '../../shared/attribution.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -78,11 +79,10 @@ if (!dated.length && !weekly.length) {
 // The map filters to exactly these shops. One tappable link beats one link per
 // store: a channel post is read on a phone, and fifteen links is a wall.
 //
-// src=tg because this post is channel-only, so every tap on this link genuinely
-// came from Telegram — no other surface carries it. Captions that go to both
-// Instagram and the channel cannot be tagged this cleanly, which is why they
-// are not tagged yet.
-const routeUrl = `${SITE}/?route=${[...dated, ...weekly].map((s) => s.id).join(',')}&src=tg`;
+// src=tgch: this post is channel-only, so every tap on this link genuinely came
+// from the channel (docs/ATTRIBUTION.md). telegram-channel-post.yml would tag it
+// anyway; tagging it here keeps the caption honest when read on its own.
+const routeUrl = withSrc(`${SITE}/?route=${[...dated, ...weekly].map((s) => s.id).join(',')}`, SRC.tgch);
 
 // Long enough to be complete on a normal day (the busiest fixed day has 14),
 // capped so an unusual day cannot turn the post into a scroll.

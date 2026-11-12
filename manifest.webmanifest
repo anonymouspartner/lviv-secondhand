@@ -5,7 +5,7 @@
   "description": "Find and track second-hand clothing stores in Lviv — map, inventory cycle tracker, and price estimates.",
   "lang": "en",
   "dir": "ltr",
-  "start_url": ".",
+  "start_url": "./?src=pwa",
   "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
