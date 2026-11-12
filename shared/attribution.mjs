@@ -23,6 +23,13 @@ export const SRC = Object.freeze({
   share: 'share', // the app's "copy link to this store" / "share the app"
   pwa: 'pwa',     // launches of the installed web app (manifest start_url)
   twa: 'twa',     // launches of the Android app (Capacitor shell, by user agent)
+  // The generic print materials (tools/social/, served from marketing/ and
+  // handed out by the bot's /materials). One tag each, so a flyer and a sticker
+  // can be told apart; per-store posters use qrTag() instead.
+  flyer: 'flyer',         // shopper handout flyer (flyer.pdf)
+  sticker: 'sticker',     // QR sticker sheet (qr-stickers.pdf)
+  poster: 'poster',       // generic in-store QR poster (qr-poster.pdf)
+  sellsheet: 'sellsheet', // the owner pitch / price sheet (sell-sheet.pdf)
 });
 
 // Same rule as the app and the Worker: at most 16 characters of [A-Za-z0-9_-].

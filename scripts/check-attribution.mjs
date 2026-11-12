@@ -26,7 +26,7 @@ const A = await import('../shared/attribution.mjs');
 const { SRC, withSrc, tagLinksInText, qrTag, qrLink } = A;
 
 // ── the tag list ────────────────────────────────────────────────────────────
-check(JSON.stringify(Object.keys(SRC)) === JSON.stringify(['tgch', 'tgbot', 'ig', 'share', 'pwa', 'twa']), `SRC keys changed: ${Object.keys(SRC)}`);
+check(JSON.stringify(Object.keys(SRC)) === JSON.stringify(['tgch', 'tgbot', 'ig', 'share', 'pwa', 'twa', 'flyer', 'sticker', 'poster', 'sellsheet']), `SRC keys changed: ${Object.keys(SRC)}`);
 for (const [k, v] of Object.entries(SRC)) {
   check(k === v && /^[a-z0-9-]{1,16}$/.test(v), `SRC.${k} = "${v}" is not a valid tag`);
   check(read('docs/ATTRIBUTION.md').includes('`' + v + '`'), `docs/ATTRIBUTION.md does not document "${v}"`);
@@ -105,6 +105,15 @@ check(srcOf(L.site('?route=c1,c2')) === 'tgbot' && new URL(L.site('?route=c1,c2'
   check(/withSrc\(`https:\/\/\$\{SITE\}\/store\/\$\{storeId\}\/`, SRC\.ig\)/.test(read('tools/social/store-feature.mjs')), 'store-feature.mjs caption link must be src=ig');
   check(/withSrc\(process\.argv\[1\], SRC\.ig\)/.test(read('.github/workflows/instagram-ad.yml')), 'instagram-ad.yml caption link must be src=ig');
   check(/SRC\.tgch\)/.test(read('tools/social/restock-tomorrow.mjs')) && !/&src=tg`/.test(read('tools/social/restock-tomorrow.mjs')), 'restock-tomorrow.mjs must tag tgch');
+}
+
+// ── print materials (tools/social → marketing/*.pdf) ───────────────────────
+// Each generic printout's QR carries its own tag. The PDFs are committed, so
+// this checks the generator; the committed output was verified by decoding.
+for (const [gen, env, tag] of [['flyer', 'FLYER_URL', 'flyer'], ['qr-stickers', 'STICKER_URL', 'sticker'], ['qr-poster', 'POSTER_URL', 'poster'], ['sell-sheet', 'SELLSHEET_URL', 'sellsheet']]) {
+  const src = read(`tools/social/${gen}.mjs`);
+  check(src.includes(`const URL_TARGET = withSrc(process.env.${env} || 'https://www.lvivsecondhand.com/', SRC.${tag});`), `tools/social/${gen}.mjs: its QR must be tagged src=${tag}`);
+  check(/QRCode\.toString\(URL_TARGET,/.test(src), `tools/social/${gen}.mjs: the QR must encode URL_TARGET`);
 }
 
 // ── QR posters ──────────────────────────────────────────────────────────────
