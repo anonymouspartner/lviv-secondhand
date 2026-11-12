@@ -107,12 +107,12 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-si
 </head>
 <body>
 <div class="wrap">
-  <nav class="crumb"><a href="https://www.lvivsecondhand.com/">Секонд-хенди Львова</a> › <a href="https://www.lvivsecondhand.com/store/">Усі магазини</a> › Yevromiks</nav>
+  <nav class="crumb"><a data-map href="https://www.lvivsecondhand.com/">Секонд-хенди Львова</a> › <a href="https://www.lvivsecondhand.com/store/">Усі магазини</a> › Yevromiks</nav>
 
   <h1>Yevromiks</h1>
   <p class="sub">Секонд-хенд у Львові · вул. Городоцька, 123</p>
 
-  <a class="cta" href="https://www.lvivsecondhand.com/?store=s3">Відкрити на карті</a>
+  <a class="cta" data-map href="https://www.lvivsecondhand.com/?store=s3">Відкрити на карті</a>
   <a class="cta alt" href="https://www.google.com/maps/dir/?api=1&amp;destination=49.8195,23.9855" rel="noopener">Прокласти маршрут</a>
 
   <h2>Інформація</h2>
@@ -154,9 +154,37 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-si
     <a href="https://www.instagram.com/secondhandlvivbot/">Instagram</a> ·
     <a href="https://t.me/Secondhandlvivbot">Telegram</a><br>
     Дані оновлюються спільнотою. Помітили помилку — виправте у
-    <a href="https://www.lvivsecondhand.com/?store=s3">застосунку</a>.<br>
+    <a data-map href="https://www.lvivsecondhand.com/?store=s3">застосунку</a>.<br>
     <a href="https://www.lvivsecondhand.com/">← Усі секонд-хенди Львова на карті</a>
   </footer>
 </div>
+<script>
+(function(){
+  var src = '';
+  try {
+    var p = new URLSearchParams(location.search);
+    var raw = (p.get('src') || '').slice(0, 16).replace(/[^A-Za-z0-9_-]/g, '');
+    if (raw) {
+      sessionStorage.setItem('lviv_sh_src', raw);
+      p.delete('src');
+      var qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    }
+    src = sessionStorage.getItem('lviv_sh_src') || '';
+  } catch (e) {}
+  if (src) {
+    var links = document.querySelectorAll('a[data-map]');
+    for (var i = 0; i < links.length; i++) {
+      try { var u = new URL(links[i].href); u.searchParams.set('src', src); links[i].href = u.toString(); } catch (e) {}
+    }
+  }
+  try {
+    if (navigator.webdriver === true || /bot|crawl|spider|headless|lighthouse|google-inspectiontool/i.test(navigator.userAgent)) return;
+    var body = JSON.stringify({ type: 'page_view', key: "store:s3", lang: 'ua', src: src });
+    if (navigator.sendBeacon) navigator.sendBeacon('https://lviv-metrics.lshanalytic.workers.dev', body);
+    else fetch('https://lviv-metrics.lshanalytic.workers.dev', { method: 'POST', body: body, keepalive: true }).catch(function(){});
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>

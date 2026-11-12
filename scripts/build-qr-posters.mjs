@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Generate a printable QR poster per store, plus a bulk contact sheet.
 //
-// Each poster encodes the store's own deep link (…/?store=<id>), so a shopper
+// Each poster encodes the store's own deep link (…/?store=<id>&src=qr-<id>), so a shopper
 // scanning it in the shop lands on that shop's page in the app rather than the
 // generic map. The owner prints these and the field agent places them — that's
 // the ₴200 poster bonus in docs/FIELD_AGENT.md.
@@ -23,10 +23,17 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { deflateSync } from 'node:zlib';
+import { qrLink } from '../shared/attribution.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const qrcode = require(join(ROOT, 'vendor/qrcode.js'));
+
+// What every poster (and the bot's qr.png) encodes: the store's deep link,
+// tagged src=qr-<id> so a scan is credited to that poster (docs/ATTRIBUTION.md).
+// Posters printed before the tag still encode the bare /?store=<id>; that link
+// keeps working exactly as before, it is just counted as "(none)".
+// (qrLink comes from shared/attribution.mjs, which the bot uses too.)
 
 const ORIGIN = 'https://www.lvivsecondhand.com';
 const OUT_DIR = join(ROOT, 'qr');
@@ -181,7 +188,7 @@ body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;backgrou
 
 function poster(s) {
   const [dark, bright] = paletteFor(s.id);
-  const link = `${ORIGIN}/?store=${encodeURIComponent(s.id)}`;
+  const link = qrLink(s.id);
   const svg = qrSvg(link, dark, 280);
   return `<!DOCTYPE html>
 <html lang="uk">
@@ -219,7 +226,7 @@ function poster(s) {
 function sheet(stores) {
   const cells = stores.map((s) => {
     const [dark, bright] = paletteFor(s.id);
-    const link = `${ORIGIN}/?store=${encodeURIComponent(s.id)}`;
+    const link = qrLink(s.id);
     // Store id only — no name, no address. It is also the thing that actually
     // disambiguates: several shops share a name ("Євро секонд хенд" ×3), so the
     // id is what lets the agent match a cut-out sticker back to a door via the
@@ -333,7 +340,7 @@ for (const s of stores) {
   // qr.png is what the Telegram bot sends for `/materials <id>` — sendPhoto
   // takes a URL, so the image has to exist as a static file.
   const [dark] = paletteFor(s.id);
-  writeFileSync(join(OUT_DIR, s.id, 'qr.png'), qrPng(`${ORIGIN}/?store=${encodeURIComponent(s.id)}`, dark));
+  writeFileSync(join(OUT_DIR, s.id, 'qr.png'), qrPng(qrLink(s.id), dark));
 }
 mkdirSync(join(OUT_DIR, 'sheet'), { recursive: true });
 writeFileSync(join(OUT_DIR, 'sheet', 'index.html'), sheet(stores));

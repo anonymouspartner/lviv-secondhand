@@ -190,6 +190,47 @@ function restockLine(s, todayIso) {
   return { has: false };
 }
 
+// ── page-view beacon ────────────────────────────────────────────────────────
+// Since shared links and search results land here rather than in the app,
+// these pages need to count. One inline script per page, no external file, no
+// cookies, no third party: it does exactly what index.html does with ?src=
+// (same sanitising, same sessionStorage key, same address-bar strip), skips
+// automated browsers the same way index.html's track() does, sends ONE
+// page_view beacon to the same metrics Worker, and — only when the visitor
+// arrived with a src — carries it onto the links into the map (data-map), so
+// someone who continues into the app keeps their attribution. The static hrefs
+// stay clean: crawlers only ever see untagged links. Kept in step with
+// index.html by scripts/check-attribution.mjs.
+const METRICS_URL = 'https://lviv-metrics.lshanalytic.workers.dev';
+const pageBeacon = (key) => `<script>
+(function(){
+  var src = '';
+  try {
+    var p = new URLSearchParams(location.search);
+    var raw = (p.get('src') || '').slice(0, 16).replace(/[^A-Za-z0-9_-]/g, '');
+    if (raw) {
+      sessionStorage.setItem('lviv_sh_src', raw);
+      p.delete('src');
+      var qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    }
+    src = sessionStorage.getItem('lviv_sh_src') || '';
+  } catch (e) {}
+  if (src) {
+    var links = document.querySelectorAll('a[data-map]');
+    for (var i = 0; i < links.length; i++) {
+      try { var u = new URL(links[i].href); u.searchParams.set('src', src); links[i].href = u.toString(); } catch (e) {}
+    }
+  }
+  try {
+    if (navigator.webdriver === true || /bot|crawl|spider|headless|lighthouse|google-inspectiontool/i.test(navigator.userAgent)) return;
+    var body = JSON.stringify({ type: 'page_view', key: ${JSON.stringify(key)}, lang: 'ua', src: src });
+    if (navigator.sendBeacon) navigator.sendBeacon('${METRICS_URL}', body);
+    else fetch('${METRICS_URL}', { method: 'POST', body: body, keepalive: true }).catch(function(){});
+  } catch (e) {}
+})();
+</script>`;
+
 function storePage(s, todayIso, allStores, chainBySlug) {
   const { rows } = parseHours(s.hours);
   const nearby = nearbyStores(s, allStores);
@@ -303,12 +344,12 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-si
 </head>
 <body>
 <div class="wrap">
-  <nav class="crumb"><a href="${ORIGIN}/">Секонд-хенди Львова</a> › <a href="${ORIGIN}/store/">Усі магазини</a> › ${esc(s.name)}</nav>
+  <nav class="crumb"><a data-map href="${ORIGIN}/">Секонд-хенди Львова</a> › <a href="${ORIGIN}/store/">Усі магазини</a> › ${esc(s.name)}</nav>
 
   <h1>${esc(s.name)}</h1>
   <p class="sub">Секонд-хенд у Львові${addr ? ` · ${esc(addr)}` : ''}</p>
 
-  <a class="cta" href="${esc(appUrl)}">Відкрити на карті</a>
+  <a class="cta" data-map href="${esc(appUrl)}">Відкрити на карті</a>
   <a class="cta alt" href="${esc(mapsUrl)}" rel="noopener">Прокласти маршрут</a>
 
   <h2>Інформація</h2>
@@ -355,10 +396,11 @@ ${nearby.map(({ store: o, m }) =>
     <a href="https://www.instagram.com/secondhandlvivbot/">Instagram</a> ·
     <a href="https://t.me/Secondhandlvivbot">Telegram</a><br>
     Дані оновлюються спільнотою. Помітили помилку — виправте у
-    <a href="${esc(appUrl)}">застосунку</a>.<br>
+    <a data-map href="${esc(appUrl)}">застосунку</a>.<br>
     <a href="${ORIGIN}/">← Усі секонд-хенди Львова на карті</a>
   </footer>
 </div>
+${pageBeacon(`store:${s.id}`)}
 </body>
 </html>
 `;
@@ -467,12 +509,12 @@ footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);font-si
 </head>
 <body>
 <div class="wrap">
-  <nav class="crumb"><a href="${ORIGIN}/">Секонд-хенди Львова</a> › <a href="${ORIGIN}/store/">Усі магазини</a> › ${esc(brand)}</nav>
+  <nav class="crumb"><a data-map href="${ORIGIN}/">Секонд-хенди Львова</a> › <a href="${ORIGIN}/store/">Усі магазини</a> › ${esc(brand)}</nav>
 
   <h1>${esc(brand)} у Львові</h1>
   <p class="sub">${n} ${nWord} мережі на карті секонд-хендів Львова — адреси, години роботи та дні завезення.</p>
 
-  <a class="cta" href="${ORIGIN}/">Відкрити на карті</a>
+  <a class="cta" data-map href="${ORIGIN}/">Відкрити на карті</a>
 
   <h2>Про мережу</h2>
   <table class="facts">
@@ -493,10 +535,11 @@ ${rows}
     <a href="https://www.instagram.com/secondhandlvivbot/">Instagram</a> ·
     <a href="https://t.me/Secondhandlvivbot">Telegram</a><br>
     Дані оновлюються спільнотою. Помітили помилку — виправте у
-    <a href="${ORIGIN}/">застосунку</a>.<br>
+    <a data-map href="${ORIGIN}/">застосунку</a>.<br>
     <a href="${ORIGIN}/store/">← Усі секонд-хенди Львова списком</a>
   </footer>
 </div>
+${pageBeacon(`chain:${chain.slug}`)}
 </body>
 </html>
 `;
@@ -567,10 +610,10 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);font-si
 </head>
 <body>
 <div class="wrap">
-  <nav class="crumb"><a href="${ORIGIN}/">Секонд-хенди Львова</a> › Усі магазини</nav>
+  <nav class="crumb"><a data-map href="${ORIGIN}/">Секонд-хенди Львова</a> › Усі магазини</nav>
   <h1>${esc(title)}</h1>
   <p class="sub">${stores.length} магазинів на карті Львова — адреси, години, ціни та дні завезення.</p>
-  <a class="cta" href="${ORIGIN}/">Відкрити карту</a>
+  <a class="cta" data-map href="${ORIGIN}/">Відкрити карту</a>
 ${chains.length ? `
   <h2>Мережі секонд-хендів</h2>
   <ul>
@@ -581,8 +624,9 @@ ${chains.map((c) => `      <li><a href="${ORIGIN}/chain/${esc(c.slug)}/">${esc(c
 ` : ''}  <ul>
 ${items}
   </ul>
-  <footer><a href="${ORIGIN}/">← На карту секонд-хендів Львова</a></footer>
+  <footer><a data-map href="${ORIGIN}/">← На карту секонд-хендів Львова</a></footer>
 </div>
+${pageBeacon('store_index')}
 </body>
 </html>
 `;

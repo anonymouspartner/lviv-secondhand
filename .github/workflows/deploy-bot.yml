@@ -33,6 +33,7 @@ on:
     branches: [main]
     paths:
       - 'telegram-bot/**'
+      - 'shared/**'   # attribution tags, imported and bundled at deploy
       - 'stores.json'
       - '.github/workflows/deploy-bot.yml'
   workflow_dispatch:

@@ -804,10 +804,10 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);font-si
 </head>
 <body>
 <div class="wrap">
-  <nav class="crumb"><a href="https://www.lvivsecondhand.com/">Секонд-хенди Львова</a> › Усі магазини</nav>
+  <nav class="crumb"><a data-map href="https://www.lvivsecondhand.com/">Секонд-хенди Львова</a> › Усі магазини</nav>
   <h1>Усі секонд-хенди Львова — список магазинів</h1>
   <p class="sub">126 магазинів на карті Львова — адреси, години, ціни та дні завезення.</p>
-  <a class="cta" href="https://www.lvivsecondhand.com/">Відкрити карту</a>
+  <a class="cta" data-map href="https://www.lvivsecondhand.com/">Відкрити карту</a>
 
   <h2>Мережі секонд-хендів</h2>
   <ul>
@@ -950,7 +950,35 @@ footer{margin-top:30px;padding-top:16px;border-top:1px solid var(--line);font-si
       <li><a href="https://www.lvivsecondhand.com/store/s8/">Umka</a><span class="dim"> — вул. Генерала Чупринки, 59</span></li>
       <li><a href="https://www.lvivsecondhand.com/store/s3/">Yevromiks</a><span class="dim"> — вул. Городоцька, 123</span></li>
   </ul>
-  <footer><a href="https://www.lvivsecondhand.com/">← На карту секонд-хендів Львова</a></footer>
+  <footer><a data-map href="https://www.lvivsecondhand.com/">← На карту секонд-хендів Львова</a></footer>
 </div>
+<script>
+(function(){
+  var src = '';
+  try {
+    var p = new URLSearchParams(location.search);
+    var raw = (p.get('src') || '').slice(0, 16).replace(/[^A-Za-z0-9_-]/g, '');
+    if (raw) {
+      sessionStorage.setItem('lviv_sh_src', raw);
+      p.delete('src');
+      var qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    }
+    src = sessionStorage.getItem('lviv_sh_src') || '';
+  } catch (e) {}
+  if (src) {
+    var links = document.querySelectorAll('a[data-map]');
+    for (var i = 0; i < links.length; i++) {
+      try { var u = new URL(links[i].href); u.searchParams.set('src', src); links[i].href = u.toString(); } catch (e) {}
+    }
+  }
+  try {
+    if (navigator.webdriver === true || /bot|crawl|spider|headless|lighthouse|google-inspectiontool/i.test(navigator.userAgent)) return;
+    var body = JSON.stringify({ type: 'page_view', key: "store_index", lang: 'ua', src: src });
+    if (navigator.sendBeacon) navigator.sendBeacon('https://lviv-metrics.lshanalytic.workers.dev', body);
+    else fetch('https://lviv-metrics.lshanalytic.workers.dev', { method: 'POST', body: body, keepalive: true }).catch(function(){});
+  } catch (e) {}
+})();
+</script>
 </body>
 </html>
