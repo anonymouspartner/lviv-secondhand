@@ -6,13 +6,16 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { CSS, C } from './brand.mjs';
+import { SRC, withSrc } from '../../shared/attribution.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '../..');
 const outDir = resolve(repoRoot, 'marketing');
 mkdirSync(outDir, { recursive: true });
 
-const URL_TARGET = process.env.POSTER_URL || 'https://www.lvivsecondhand.com/';
+// Tagged src=poster so a scan of this printout shows up as such in the owner's
+// stats (docs/ATTRIBUTION.md). An override URL to our site is tagged too.
+const URL_TARGET = withSrc(process.env.POSTER_URL || 'https://www.lvivsecondhand.com/', SRC.poster);
 const iconB64 = readFileSync(resolve(repoRoot, 'icon-512.png')).toString('base64');
 
 const qrSvg = await QRCode.toString(URL_TARGET, {

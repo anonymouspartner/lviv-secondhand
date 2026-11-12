@@ -18,6 +18,10 @@ they drift.
 | `share` | The app's "copy link to this store", "copy app link" and on-screen app QR | `index.html` (`withShareSrc()`) |
 | `pwa` | Launches of the installed web app | `manifest.webmanifest` `start_url` |
 | `twa` | Launches of the Android app | `index.html`, from the `LvivSecondHandApp` user-agent suffix the Capacitor shell adds (`native/capacitor.config.json`). Read from the user agent, not a start URL, so existing installs count without a new APK. Used only when no other tag arrived. |
+| `flyer` | The QR on the shopper handout flyer (`marketing/flyer.pdf`) | `tools/social/flyer.mjs` |
+| `sticker` | The QR stickers (`marketing/qr-stickers.pdf`) | `tools/social/qr-stickers.mjs` |
+| `poster` | The generic in-store QR poster (`marketing/qr-poster.pdf`); per-store posters use `qr-<id>` | `tools/social/qr-poster.mjs` |
+| `sellsheet` | The QR on the owner pitch / price sheet (`marketing/sell-sheet.pdf`) | `tools/social/sell-sheet.mjs` |
 
 Anything that arrives with no tag is reported as `(none)`.
 
@@ -43,13 +47,16 @@ matching `/bot|crawl|spider|headless|lighthouse|google-inspectiontool/i`.
   own pages that Google crawls. The static HTML is always clean; the map-link
   tag above is added by script, for a visitor who already has one.
 - Payment, billing and LiqPay URLs, `t.me` deep links, `mailto:` and `tel:`.
-- Files rather than pages: the print PDFs under `marketing/`, the QR image
-  the bot sends. They run no beacon, so a tag would record nothing.
+- Links *to* files rather than pages: the bot's links to the print PDFs under
+  `marketing/`, and the QR image it sends. They run no beacon, so a tag would
+  record nothing. (The QR codes printed *inside* those PDFs are tagged: see
+  `flyer`, `sticker`, `poster`, `sellsheet` above.)
 - Owner-only bot pings from the metrics Worker. The owner's own taps are not a
   channel.
 
-Old QR posters printed before tagging encode `/?store=<id>`. They keep working
-exactly as before and count as `(none)`.
+Anything printed before tagging keeps working exactly as before and counts as
+`(none)`: per-store QR posters encode `/?store=<id>`, and the flyer, stickers,
+generic poster and sell sheet encode the bare site URL.
 
 ## Adding a tag
 
