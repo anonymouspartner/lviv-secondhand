@@ -58,6 +58,14 @@ jobs:
       - name: Check visit attribution (?src=)
         run: node --no-warnings scripts/check-attribution.mjs
 
+      # Барахолка listings are Ukrainian or English, never Russian. The first
+      # real listing (#aca62f28) was Russian with none of ы э ъ ё and went out
+      # to the channel and Instagram. Tests the detector both ways (including
+      # Ukrainian with no і ї є ґ) and drives the bot: a Russian title/area is
+      # re-asked, and the owner's ✅ holds a Russian card back.
+      - name: Check the barakholka language rule
+        run: node --no-warnings scripts/check-lang.mjs
+
       - name: Syntax-check the Telegram bot Worker
         run: node --check telegram-bot/worker.js
 

@@ -72,6 +72,7 @@
 import { STORES } from './stores.gen.js';
 import { qrLink } from '../shared/attribution.mjs';
 import { APP_URL, site, storeLink } from './links.mjs';
+import { detectLang, listingLang, RU_REFUSAL } from './lang-check.mjs';
 import {
   getCycleLengthKeyboard, getDayOfWeekKeyboard, getOpenTimeKeyboard, getCloseTimeKeyboard,
   getConfirmKeyboard, summaryText, sessionToUpdates, DAY_OPTIONS,
@@ -3179,6 +3180,10 @@ const SELL_SKIP = '➡️ Пропустити';
 const SELL_DONE = '✅ Готово';
 const SELL_PUBLISH = '📮 Опублікувати';
 const SELL_CANCEL_HINT = '\n\n/cancel щоб вийти · to abort';
+// The two free-text questions, kept as constants because a refused answer
+// (lang-check.mjs: Russian) asks the very same question again.
+const SELL_TITLE_PROMPT = '✏️ <b>Що це?</b> Коротко — до 60 символів.\n\nНаприклад: Джинсова куртка Levi’s';
+const SELL_AREA_PROMPT = '📍 <b>Район і як забрати?</b>\n\nНаприклад: Сихів, самовивіз';
 
 const sellCatByLabel = (t) => SELL_CATEGORIES.find((c) => c.label === t) || null;
 const sellCatByCode = (c) => SELL_CATEGORIES.find((x) => x.code === c) || null;
@@ -3209,6 +3214,20 @@ function sellCard(d, username) {
     // never have to work out which kind of post they are looking at.
     'Оголошення від користувача · ми не беремо участі в угоді',
   ].filter((x) => x !== null).join('\n');
+}
+
+// The seller-written parts of a card built by sellCard: the title (first line,
+// after the category icon) and the area (the 📍 line). The rest of the card is
+// our own fixed Ukrainian text, which must not be what the language check sees
+// — its і would switch the Russian-word rule off for every card.
+function sellerFieldsOfCard(card) {
+  const lines = String(card || '').split('\n');
+  const icons = new Set(SELL_CATEGORIES.map((c) => c.label.split(' ')[0]));
+  const first = lines[0] || '';
+  const sp = first.indexOf(' ');
+  const title = sp > 0 && icons.has(first.slice(0, sp)) ? first.slice(sp + 1) : first;
+  const areaLine = lines.find((l) => l.startsWith('📍 '));
+  return { title, area: areaLine ? areaLine.slice(2).trim() : '' };
 }
 
 // Asks GitHub to mirror one approved listing to Instagram
@@ -3262,7 +3281,7 @@ async function handleSellFlow(env, c, msg, ctx) {
       return true;
     }
     await putSellSession(env, uid, { step: 'category', data: { photos: [] } });
-    await say(env, chatId, '🏷 <b>Що продаєте?</b> Оберіть категорію.' + SELL_CANCEL_HINT,
+    await say(env, chatId, '🏷 <b>Що продаєте?</b> Оберіть категорію.\n\nМова оголошень — українська або англійська.' + SELL_CANCEL_HINT,
       sellKb([[SELL_CATEGORIES[0].label, SELL_CATEGORIES[1].label],
               [SELL_CATEGORIES[2].label, SELL_CATEGORIES[3].label],
               [SELL_CATEGORIES[4].label, SELL_CATEGORIES[5].label],
@@ -3306,7 +3325,7 @@ async function handleSellFlow(env, c, msg, ctx) {
       if (!d.photos.length) { await say(env, chatId, 'Потрібне хоча б одне фото.' + SELL_CANCEL_HINT, sellKb([[SELL_DONE]])); return true; }
       session.step = 'title';
       await putSellSession(env, uid, session);
-      await say(env, chatId, '✏️ <b>Що це?</b> Коротко — до 60 символів.\n\nНаприклад: Джинсова куртка Levi’s' + SELL_CANCEL_HINT);
+      await say(env, chatId, SELL_TITLE_PROMPT + SELL_CANCEL_HINT);
       return true;
     }
     await say(env, chatId, `Надішліть фото, або «${SELL_DONE}».` + SELL_CANCEL_HINT, sellKb([[SELL_DONE]]));
@@ -3316,6 +3335,9 @@ async function handleSellFlow(env, c, msg, ctx) {
   if (step === 'title') {
     const t = (text || '').trim();
     if (!t || t.length > 60) { await say(env, chatId, 'Від 1 до 60 символів.' + SELL_CANCEL_HINT); return true; }
+    // Ukrainian or English only (docs/MARKET.md rule 8). The step does not
+    // advance; the seller is asked the same question again.
+    if (detectLang(t) === 'ru') { await say(env, chatId, esc(RU_REFUSAL) + '\n\n' + SELL_TITLE_PROMPT + SELL_CANCEL_HINT); return true; }
     d.title = t;
     session.step = 'price';
     await putSellSession(env, uid, session);
@@ -3351,7 +3373,7 @@ async function handleSellFlow(env, c, msg, ctx) {
     }
     session.step = 'area';
     await putSellSession(env, uid, session);
-    await say(env, chatId, '📍 <b>Район і як забрати?</b>\n\nНаприклад: Сихів, самовивіз' + SELL_CANCEL_HINT, sellKb([[SELL_SKIP]]));
+    await say(env, chatId, SELL_AREA_PROMPT + SELL_CANCEL_HINT, sellKb([[SELL_SKIP]]));
     return true;
   }
 
@@ -3359,6 +3381,7 @@ async function handleSellFlow(env, c, msg, ctx) {
     if (text !== SELL_SKIP) {
       const a = (text || '').trim();
       if (!a || a.length > 60) { await say(env, chatId, `До 60 символів, або «${SELL_SKIP}».`, sellKb([[SELL_SKIP]])); return true; }
+      if (detectLang(a) === 'ru') { await say(env, chatId, esc(RU_REFUSAL) + '\n\n' + SELL_AREA_PROMPT + SELL_CANCEL_HINT, sellKb([[SELL_SKIP]])); return true; }
       d.area = a;
     }
     session.step = 'confirm';
@@ -3452,6 +3475,13 @@ async function handleSellCallback(env, c, cq) {
     const card = raw.startsWith('🆕 Нове оголошення #') && sep > 0 ? raw.slice(sep + 2) : null;
     if (!card) {
       await tg(env, 'sendMessage', { chat_id: c.ownerId, text: `⚠️ Не впізнав підпис для #${id} — не публікую. Попросіть надіслати /sell ще раз.` });
+      return true;
+    }
+    // Second gate for the language rule, for listings queued before the wizard
+    // checked it (and anything that slips past it). Nothing is posted and the
+    // buttons stay, so the owner can still ❌.
+    if (listingLang(sellerFieldsOfCard(card)) === 'ru') {
+      await tg(env, 'sendMessage', { chat_id: c.ownerId, text: `⚠️ Схоже на російську — не публікую #${id}` });
       return true;
     }
     const posted = await tg(env, 'sendPhoto', {
