@@ -45,6 +45,13 @@
 //      workflow that never shipped — looks exactly like success from inside
 //      the Worker, and the feature silently does nothing forever.
 //
+//   9. The bot's config defines everything the bot reads.
+//      TG_CHANNEL was in worker/wrangler.toml but not telegram-bot/wrangler.toml,
+//      so approving the first real /sell listing answered "TG_CHANNEL не
+//      налаштовано" and left it pending. Two Workers, two configs, no shared
+//      source: values both need must be in both, and equal; and every env.X the
+//      bot reads must be a var, a binding or a secret something actually sets.
+//
 // Exit code 1 on any violation.
 
 import fs from 'node:fs';
@@ -338,6 +345,53 @@ const errors = [];
     }
   }
   console.log(`dispatches: ${sent.size} sent, ${listening.size} listened for`);
+}
+
+// ── 9 · the bot's config defines everything the bot reads ────────────────────
+{
+  // [vars] of a wrangler.toml, read as text (flat KEY = "value" lines only —
+  // which is all either file uses there).
+  const varsOf = (file) => {
+    const out = new Map();
+    let inVars = false;
+    for (const raw of fs.readFileSync(file, 'utf8').split('\n')) {
+      const line = raw.trim();
+      if (/^\[\[?[^\]]+\]\]?$/.test(line)) { inVars = line === '[vars]'; continue; }
+      if (!inVars) continue;
+      const m = /^([A-Z_][A-Z0-9_]*)\s*=\s*"([^"]*)"/.exec(line);
+      if (m) out.set(m[1], m[2]);
+    }
+    return out;
+  };
+  const botToml = fs.readFileSync('telegram-bot/wrangler.toml', 'utf8');
+  const botVars = varsOf('telegram-bot/wrangler.toml');
+  const workerVars = varsOf('worker/wrangler.toml');
+
+  // Values both Workers need. Each Worker reads its own copy; they must agree.
+  for (const k of ['TG_CHANNEL', 'OWNER_ID']) {
+    if (!workerVars.has(k)) errors.push(`worker/wrangler.toml [vars] does not define ${k}.`);
+    if (!botVars.has(k)) errors.push(`telegram-bot/wrangler.toml [vars] does not define ${k} — the bot reads env.${k} and would see undefined.`);
+    if (workerVars.has(k) && botVars.has(k) && workerVars.get(k) !== botVars.get(k)) {
+      errors.push(`${k} differs: worker/wrangler.toml "${workerVars.get(k)}" vs telegram-bot/wrangler.toml "${botVars.get(k)}".`);
+    }
+  }
+
+  // Every env.X the bot reads has a source: a [vars] entry, a binding, or a
+  // secret. Secrets are not in the repo, so "has a source" for them means
+  // deploy-bot.yml puts it — or it is named below with where it is set by hand.
+  const SET_BY_HAND = { WEBHOOK_SECRET: 'wrangler secret put by hand (docs/TELEGRAM_BOT.md); register-webhook.yml must use the same value' };
+  const bindings = new Set([...botToml.matchAll(/^\s*binding\s*=\s*"([A-Z_][A-Z0-9_]*)"/gm)].map((m) => m[1]));
+  const deploy = fs.readFileSync('.github/workflows/deploy-bot.yml', 'utf8');
+  const deploySecrets = new Set([...deploy.matchAll(/wrangler(?:@\d+)? secret put ([A-Z_][A-Z0-9_]*)/g)].map((m) => m[1]));
+  const botSrc = fs.readdirSync('telegram-bot').filter((f) => /\.m?js$/.test(f) && f !== 'stores.gen.js')
+    .map((f) => fs.readFileSync(`telegram-bot/${f}`, 'utf8')).join('\n');
+  const read = new Set([...botSrc.matchAll(/\benv\.([A-Z_][A-Z0-9_]*)/g)].map((m) => m[1]));
+  for (const k of [...read].sort()) {
+    if (botVars.has(k) || bindings.has(k) || deploySecrets.has(k) || SET_BY_HAND[k]) continue;
+    const there = workerVars.has(k) ? ` (worker/wrangler.toml has it — the bot cannot see that config)` : '';
+    errors.push(`telegram-bot reads env.${k} but nothing defines it for the bot: not in its [vars], not a binding, not a secret deploy-bot.yml sets${there}.`);
+  }
+  console.log(`bot config: ${read.size} env names read — ${botVars.size} vars, ${bindings.size} bindings, ${deploySecrets.size} deployed secrets, ${Object.keys(SET_BY_HAND).length} set by hand`);
 }
 
 if (errors.length) {
