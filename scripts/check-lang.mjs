@@ -147,7 +147,7 @@ for (const [input, wantRu] of [['Самовывоз Сихов', true], ['Сих
     check(s && s.step === 'area' && s.data.area === undefined, `area "${input}": step moved to ${s && s.step}`);
     check(say && say.body.text.includes('українською') && say.body.text.includes('<b>Район і як забрати?</b>'), `area "${input}": refusal or re-ask missing`);
   } else {
-    check(s && s.step === 'confirm' && s.data.area === input, `area "${input}": did not advance to confirm (step ${s && s.step})`);
+    check(s && s.step === 'ships' && s.data.area === input, `area "${input}": did not advance to the shipping question (step ${s && s.step})`);
   }
 }
 console.log('wizard: Russian title/area re-asked, Ukrainian/English advance');

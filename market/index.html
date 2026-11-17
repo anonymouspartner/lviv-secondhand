@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#17693a">
+<title>Барахолка — Lviv Second Hand</title>
+<meta name="description" content="Вживані речі від людей по всій Україні: у вашому місті або з доставкою Новою Поштою, Укрпоштою чи Meest. Оголошення з каналу @Lviv_Secondhand.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="canonical" href="https://www.lvivsecondhand.com/market/">
+<!--
+  The барахолка on the site: a read-only view of what is live in the channel,
+  with the bot's two buyer filters. Posting stays in the bot (/sell) — it is
+  where the seller's @username, the moderation gate and the Instagram consent
+  live. Data: GET /api/market on the metrics Worker (public fields only) and
+  /api/market/photo for the first photo. City list: /cities.json, the same
+  registry the app and the bot use. Everything seller-written is put on the
+  page with textContent, never innerHTML.
+-->
+<style>
+:root{--paper:#fbf7ea;--ink:#12261b;--green:#17693a;--green2:#0f4526;--acid:#ffd23f;--muted:#5f7468;--line:#e6e0cd;--card:#fff;--chip:#f0ead6;--warn:#b3261e;--shadow:0 1px 2px rgba(13,44,26,.06),0 8px 24px rgba(13,44,26,.06)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#0b2015;--ink:#eef1e6;--green:#37a266;--green2:#123b24;--muted:#9db3a5;--line:#24402f;--card:#0f2a1b;--chip:#143723;--warn:#ff8a80;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35)}}
+:root[data-theme="dark"]{--paper:#0b2015;--ink:#eef1e6;--green:#37a266;--green2:#123b24;--muted:#9db3a5;--line:#24402f;--card:#0f2a1b;--chip:#143723;--warn:#ff8a80;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35)}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:0 auto;padding:24px 16px 56px}
+a{color:var(--green)}
+.eyebrow{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#0c2316;background:var(--acid);padding:5px 11px;border-radius:999px}
+h1{font-size:clamp(28px,6vw,42px);line-height:1.05;margin:12px 0 6px}
+.lead{margin:0 0 16px;color:var(--muted);max-width:60ch}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 18px}
+.f{font:inherit;font-size:14px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 13px;border-radius:999px;cursor:pointer}
+.f[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#fff}
+select{font:inherit;font-size:14px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 10px;border-radius:999px}
+.sell{margin-left:auto;font-size:14px;font-weight:800;text-decoration:none;background:var(--acid);color:#0c2316;padding:8px 14px;border-radius:999px}
+@media(max-width:560px){.sell{margin-left:0}}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;min-width:0}
+.ph{aspect-ratio:4/5;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:40px}
+.ph img{width:100%;height:100%;object-fit:contain;display:block}
+.body{padding:12px 14px 14px;display:grid;gap:4px;font-size:14px}
+.t{font-weight:800;font-size:16px;overflow-wrap:anywhere}
+.p{font-weight:900;font-size:18px;color:var(--green)}
+.m{color:var(--muted)}
+.ship{font-weight:700}
+.safe{font-size:13px}
+.trust{font-size:13px;color:var(--muted)}
+.acts{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:13.5px;font-weight:700}
+.acts a{text-decoration:none}
+.acts .rep{color:var(--warn)}
+.state{padding:28px 0;color:var(--muted)}
+.disc{margin-top:26px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="eyebrow">Барахолка</span>
+  <h1>Речі від людей по всій Україні</h1>
+  <p class="lead">У вашому місті — або з доставкою Новою Поштою, Укрпоштою чи Meest. Купуєте з доставкою? Спершу прочитайте <a href="bezpeka.html">як не натрапити на шахраїв</a>.</p>
+
+  <div class="bar" role="group" aria-label="Фільтри">
+    <button class="f" type="button" data-f="all" aria-pressed="true">Усі</button>
+    <button class="f" type="button" data-f="city" aria-pressed="false">🏙 Тільки моє місто</button>
+    <button class="f" type="button" data-f="ships" aria-pressed="false">📦 З доставкою до мене</button>
+    <label>Моє місто: <select id="city" aria-label="Моє місто"></select></label>
+    <a class="sell" href="https://t.me/Secondhandlvivbot">🏷 Продати річ</a>
+  </div>
+
+  <div id="list" class="grid" aria-live="polite"></div>
+  <p id="state" class="state">Завантажуємо оголошення…</p>
+
+  <p class="disc">Оголошення від користувачів · ми не беремо участі в угоді, не приймаємо оплату й не гарантуємо її. Домовляйтеся з продавцем напряму в Telegram. Щось підозріле — «Поскаржитись».</p>
+</div>
+<script>
+(function () {
+  var METRICS = 'https://lviv-metrics.lshanalytic.workers.dev';
+  var BOT = 'Secondhandlvivbot';
+  var CHANNEL = 'Lviv_Secondhand';
+  var KEY = 'lvsh_market_city';
+  var CARRIERS = { novaposhta: 'Нова Пошта', ukrposhta: 'Укрпошта', meest: 'Meest' };
+  var ICONS = { women: '👗', men: '👔', shoes: '👟', kids: '🧸', accessories: '🎒', sport: '⚽', other: '📦' };
+  var cities = [];
+  var filter = 'all';
+  var city = 'lviv';
+
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function link(href, text, cls) { var a = el('a', cls, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; }
+  function cityName(slug) { for (var i = 0; i < cities.length; i++) if (cities[i].slug === slug) return cities[i].nameUa; return ''; }
+
+  function card(l) {
+    var c = el('article', 'card');
+    var ph = el('div', 'ph', ICONS[l.category] || '📦');
+    var img = new Image();
+    img.alt = l.title; img.loading = 'lazy';
+    img.onload = function () { ph.textContent = ''; ph.appendChild(img); };
+    img.src = METRICS + '/api/market/photo?id=' + encodeURIComponent(l.id);
+    c.appendChild(ph);
+    var b = el('div', 'body');
+    b.appendChild(el('div', 't', l.title));
+    b.appendChild(el('div', 'p', l.price_uah + ' ₴'));
+    var spec = [l.size ? 'Розмір ' + l.size : '', l.condition ? 'Стан ' + l.condition : ''].filter(Boolean).join(' · ');
+    if (spec) b.appendChild(el('div', 'm', spec));
+    b.appendChild(el('div', 'm', '📍 ' + [cityName(l.city), l.area || ''].filter(Boolean).join(', ')));
+    if (l.ships_nationwide) {
+      var names = (l.carriers || []).map(function (x) { return CARRIERS[x]; }).filter(Boolean).join(', ');
+      b.appendChild(el('div', 'ship', '📦 Відправка по Україні · ' + names + ' · накладений платіж ' + (l.cod ? '✓' : '✗')));
+      var s = el('div', 'safe', '🛡 ');
+      var sa = el('a', null, 'Як не натрапити на шахраїв'); sa.href = 'bezpeka.html'; s.appendChild(sa);
+      b.appendChild(s);
+    }
+    if (l.trust) b.appendChild(el('div', 'trust', '🧾 Продано: ' + (l.trust.sold || 0) + (l.trust.is_new ? ' · 🆕 новий продавець' : '')));
+    var acts = el('div', 'acts');
+    acts.appendChild(link('https://t.me/' + encodeURIComponent(l.seller_username), 'Написати @' + l.seller_username));
+    if (l.channel_msg_id) acts.appendChild(link('https://t.me/' + CHANNEL + '/' + l.channel_msg_id, 'У каналі'));
+    acts.appendChild(link('https://t.me/' + BOT + '?start=rep_' + encodeURIComponent(l.id), '⚠️ Поскаржитись', 'rep'));
+    b.appendChild(acts);
+    c.appendChild(b);
+    return c;
+  }
+
+  function load() {
+    var list = document.getElementById('list');
+    var state = document.getElementById('state');
+    list.textContent = ''; state.textContent = 'Завантажуємо оголошення…'; state.hidden = false;
+    var q = filter === 'all' ? '' : '?filter=' + filter + '&city=' + encodeURIComponent(city);
+    fetch(METRICS + '/api/market' + q).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) throw new Error('bad');
+      if (!d.listings.length) {
+        state.textContent = filter === 'city' ? 'Поки немає оголошень у ' + (cityName(city) || 'вашому місті') + '. Спробуйте «З доставкою до мене».'
+          : filter === 'ships' ? 'Поки немає оголошень з доставкою.' : 'Поки немає оголошень.';
+        return;
+      }
+      state.hidden = true;
+      d.listings.forEach(function (l) { list.appendChild(card(l)); });
+    }).catch(function () { state.textContent = 'Не вдалося завантажити оголошення. Спробуйте пізніше або відкрийте канал @' + CHANNEL + '.'; });
+  }
+
+  document.querySelectorAll('.f').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      filter = btn.getAttribute('data-f');
+      document.querySelectorAll('.f').forEach(function (b) { b.setAttribute('aria-pressed', String(b === btn)); });
+      load();
+    });
+  });
+
+  fetch('/cities.json').then(function (r) { return r.json(); }).catch(function () { return []; }).then(function (list) {
+    cities = Array.isArray(list) && list.length ? list : [{ slug: 'lviv', nameUa: 'Львів', host: 'www.lvivsecondhand.com' }];
+    // Remembered choice first, then the city subdomain this page is on, then Lviv.
+    var saved = store(KEY);
+    var byHost = cities.filter(function (c) { return c.host === location.hostname; })[0];
+    city = (saved && cities.some(function (c) { return c.slug === saved; })) ? saved : (byHost ? byHost.slug : 'lviv');
+    var sel = document.getElementById('city');
+    cities.forEach(function (c) { var o = el('option', null, c.nameUa); o.value = c.slug; sel.appendChild(o); });
+    sel.value = city;
+    sel.addEventListener('change', function () { city = sel.value; store(KEY, city); if (filter !== 'all') load(); });
+    load();
+  });
+})();
+</script>
+</body>
+</html>

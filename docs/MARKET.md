@@ -1,12 +1,11 @@
 # Барахолка — a bot-run resale market
 
-A design, not a commitment. Nothing here is built.
-
 Shoppers list their own second-hand items; the bot collects them, an owner
 approves them, and they publish to the existing
 [@Lviv_Secondhand](https://t.me/Lviv_Secondhand) channel, alongside the map's
-own posts. **No payments, no escrow, no shipping** — see
-[What this is not](#what-this-is-not).
+own posts. Listings cover every city in `cities.json`, and sellers may offer to
+ship anywhere in Ukraine. **No payments, no escrow, no waybills** — see
+[What this is not](#what-this-is-not) and [Shipping](#shipping).
 
 ---
 
@@ -20,7 +19,10 @@ Naming it early, because every marketplace decision below follows from it:
   digital goods only.)
 - **We do not guarantee anything.** Not the item, not the seller, not the
   meeting. The rules say so in the seller's own language, on every surface.
-- **We do not ship.** Handover is between the two people.
+- **We do not ship.** A seller *may* offer to send the item by Нова Пошта,
+  Укрпошта or Meest, and the listing says so — but the seller books it and the
+  buyer pays the carrier or the seller. We create no waybill, quote no price,
+  hold no money and offer no "safe deal". See [Shipping](#shipping).
 - **We are not a shop.** Bulk resellers are the fastest way to kill a
   барахолка, and the rules exclude them explicitly.
 
@@ -103,9 +105,9 @@ needing a van are out.
 The rule is deliberately about **size and handover**, not about a category
 list. A category list has to be extended every time someone lists something
 nobody thought of, and each extension is a moderation argument. "Could you
-carry it to the meeting point?" answers every one of those without a
-discussion, and it follows from the fact that we run no shipping and take no
-part in the handover.
+carry it to the meeting point — or to a post office branch?" answers every one
+of those without a discussion. Shipping did not widen the scope: what fits in
+your hands fits in a parcel.
 
 ## Categories
 
@@ -129,8 +131,12 @@ and a listing with a photo and a price is already useful.
 | 4 | Ціна, ₴ | number | ✅ |
 | 5 | Розмір | buttons: XS S M L XL / «Пропустити» | — |
 | 6 | Стан | buttons: 10/10 … 6/10 / «Пропустити» | — |
-| 7 | Район і як забрати | free text / «Пропустити» | — |
-| 8 | Підтвердження | preview + «Опублікувати» — and the line naming both surfaces (see [Instagram](#instagram--every-listing-mirrored)) | ✅ |
+| 7 | Місто | buttons, one per city in `cities.json` (the person's remembered city first) — no free text, no skip | ✅ |
+| 8 | Район і як забрати | free text / «Пропустити» | — |
+| 9 | Відправите по Україні? | buttons: так / ні | ✅ |
+| 9a | Перевізники | multi-select: Нова Пошта · Укрпошта · Meest, «Готово» needs ≥ 1 (only if 9 = так) | ✅ |
+| 9b | Накладений платіж? | buttons: так / ні (only if 9 = так) | ✅ |
+| 10 | Підтвердження | preview + «Опублікувати» — and the line naming both surfaces (see [Instagram](#instagram--every-listing-mirrored)) | ✅ |
 
 `/cancel` exits at any step, and the hint repeats at every step — the bot
 already does this everywhere else.
@@ -146,11 +152,29 @@ through the bot would double the moderation surface for v1.
 Розмір M · Стан 8/10
 450 ₴
 
-📍 Сихів · самовивіз
+📍 Київ, Оболонь
+📦 Відправка по Україні · Нова Пошта, Meest · накладений платіж ✓
+🛡 Як не натрапити на шахраїв: https://www.lvivsecondhand.com/market/bezpeka.html?src=tgch
 Продає @username
+🧾 Продано: 0 · 🆕 новий продавець
 
-#жіноче
+#жіноче #київ #доставка
+
+Оголошення від користувача · ми не беремо участі в угоді
+[ ⚠️ Поскаржитись ]
 ```
+
+The 📦 and 🛡 lines appear only when the seller ships. The 🛡 link is the
+safety page (`market/bezpeka.html`) — on every shipping listing, because paying
+a stranger in another city is where барахолка scams happen.
+
+**The trust line.** `🧾 Продано: N` counts the seller's listings closed with
+«✅ Продано». `🆕 новий продавець` is shown while the seller's first listing
+here is under 30 days old, or while N is 0. Telegram does not tell a bot how
+old an account is, so "new" means new *to us*. N is self-reported (the seller
+taps «Продано»), which is why the card says «Продано», not «успішних угод». The
+line is computed when the listing is created, so the moderation message shows
+exactly what the post will.
 
 Everything comes from the wizard; there is no free-form block a seller can
 fill with contacts, links or claims. Optional fields simply vanish when
@@ -179,6 +203,60 @@ to cross from Telegram to a Worker over HTTP, which is not the case here.
 is the cheapest possible spam filter while volume is low, and the point of the
 pilot is to find out whether volume exists at all. Auto-approve for sellers
 with N successful listings is the obvious later relaxation.
+
+## Shipping
+
+Sellers in any of our cities can offer to ship. What the listing records:
+
+| Field | Values | Notes |
+| --- | --- | --- |
+| `city` | a `cities.json` slug | required; buttons only, so one city is one spelling |
+| `ships_nationwide` | 0 / 1 | |
+| `carriers` | JSON array of `novaposhta`, `ukrposhta`, `meest` | only when shipping, at least one |
+| `cod` | 0 / 1 | накладений платіж; only when shipping |
+
+Everything else about the parcel is between buyer and seller. We do not book,
+price, track or insure anything. **The Nova Poshta API (cost estimate, branch
+lookup) is deliberately out of scope** — a TODO in the bot and the Worker, not
+a plan.
+
+### Buyer filters
+
+Two filters, the same in the bot (🛍 Барахолка) and on the site (`/market/`):
+
+- **Тільки моє місто** — live listings in the buyer's city.
+- **З доставкою до мене** — every live listing that ships, the buyer's own city
+  first.
+
+The bot asks the buyer's city the first time a filter needs it and keeps it in
+KV (`market-prefs:<uid>`, no TTL); `/city` or «📍 Моє місто» changes it, and a
+seller's answer at the city step fills it in if it was empty. The site keeps the
+choice in `localStorage`, falling back to the city subdomain it is opened on.
+Both read `GET /api/market` on the metrics Worker, which returns public fields
+only — never the seller's Telegram id or the photo file ids. Photos reach the
+site through `GET /api/market/photo`, which resolves the file on Telegram
+server-side so the bot token never reaches a browser.
+
+Posting stays in the bot. The site page is read-only: the seller's @username,
+the moderation gate and the Instagram consent all live in the `/sell` wizard.
+
+### Complaints
+
+Every published post carries «⚠️ Поскаржитись» (callback `rep:<id>`); the site's
+report link opens the bot with `/start rep_<id>`, so every complaint carries a
+Telegram identity. `listing_reports` holds one row per (listing, person): a
+second tap by the same person is not a second vote, and the seller's own tap
+does not count.
+
+Each new complaint is forwarded to the owner with a «🗑 Зняти» button. The third
+from distinct people moves the listing to `hidden`: the channel caption is
+replaced by a «приховано, перевіряє модератор» line (the seller's text, price
+and @username go; the photo stays, a caption edit cannot remove it), the seller
+is told, it leaves the feed and the filters, and the owner gets «↩️ Повернути» /
+«🗑 Зняти». Restoring keeps the listing's original expiry and sets
+`reports_cleared_at`, so only complaints after that moment count again.
+Removing deletes the post and marks the row `removed`. Nothing is removed
+without the owner's tap — moderation stays manual.
 
 ## Lifecycle — the part that decides whether this feels alive
 
@@ -312,9 +390,30 @@ CREATE TABLE IF NOT EXISTS listings (
   created_at      TEXT NOT NULL,
   expires_at      TEXT NOT NULL,
   nudged_at       TEXT,            -- set when the day-25 "ще актуально?" was sent
-  ig_ok           INTEGER          -- 1 = the seller was told it goes to Instagram
+  ig_ok           INTEGER,         -- 1 = the seller was told it goes to Instagram
+  city            TEXT NOT NULL DEFAULT 'lviv',   -- cities.json slug
+  ships_nationwide INTEGER NOT NULL DEFAULT 0,
+  carriers        TEXT,            -- JSON array, NULL unless shipping
+  cod             INTEGER,         -- накладений платіж, NULL unless shipping
+  reports_cleared_at TEXT          -- set when the owner restores a hidden listing
+);
+-- status also takes: hidden (3 complaints, awaiting the owner) | removed
+
+CREATE TABLE IF NOT EXISTS listing_reports (
+  listing_id  TEXT NOT NULL,
+  reporter_id TEXT NOT NULL,       -- Telegram user id
+  created_at  TEXT NOT NULL,
+  PRIMARY KEY (listing_id, reporter_id)
 );
 ```
+
+**Migration.** The five new columns are added by idempotent `ALTER TABLE …
+ADD COLUMN` in `ensureSchema()`, like `ig_ok` before them. Every listing made
+before them was made in Lviv, so `city`'s `DEFAULT 'lviv'` is the backfill —
+SQLite fills it into every existing row as the column is added — and
+`ships_nationwide` defaults to 0. An old row therefore reads, renders and
+filters as "Львів, no shipping". `scripts/check-market.mjs` runs the migration
+against a database built with the original table.
 
 Photos are stored as Telegram `file_id`s, not re-hosted: Telegram keeps them,
 and the bot can re-send by id indefinitely. The Instagram mirror is the one
@@ -356,7 +455,7 @@ until one is linked, and the seller's `@username` is the only contact by
 design. Link a discussion group and the line is worth changing back.
 
 ```
-📌 Барахолка Львів — правила
+📌 Барахолка — правила (вся Україна)
 
 1. Оголошення публікує лише бот: @Secondhandlvivbot → /sell
    Схвалене оголошення йде в канал і в Instagram.
@@ -370,8 +469,16 @@ design. Link a discussion group and the line is worth changing back.
 7. Продали — кнопка «✅ Продано» або /sold.
    Свої оголошення — /my. Через 30 днів зникає саме.
 8. Мова оголошень — українська або англійська.
+9. Доставка по Україні — домовленість між вами двома:
+   • обирайте накладений платіж і оглядайте річ у відділенні;
+   • не передплачуйте незнайомим;
+   • нікому не кажіть коди з SMS;
+   • «Нова Пошта» не надсилає посилань для оплати чи «отримання коштів».
+   Детальніше: lvivsecondhand.com/market/bezpeka.html
+10. Щось не так — «⚠️ Поскаржитись» під оголошенням.
 
 Питання по речі — напряму продавцю: його @username на картці.
+Шукати: бот → 🛍 Барахолка (моє місто / з доставкою) або lvivsecondhand.com/market/
 ```
 
 ## Open questions

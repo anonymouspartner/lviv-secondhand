@@ -219,7 +219,7 @@ async function ensureSchema(env) {
   // a Worker fetching another Worker on the same zone by its public URL gets
   // 404 / error 1042.
   await env.DB.prepare(
-    "CREATE TABLE IF NOT EXISTS listings (id TEXT PRIMARY KEY, seller_id TEXT NOT NULL, seller_username TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, price_uah INTEGER NOT NULL, size TEXT, condition TEXT, area TEXT, photo_ids TEXT NOT NULL, status TEXT NOT NULL, channel_msg_id INTEGER, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, nudged_at TEXT, ig_ok INTEGER)"
+    "CREATE TABLE IF NOT EXISTS listings (id TEXT PRIMARY KEY, seller_id TEXT NOT NULL, seller_username TEXT NOT NULL, category TEXT NOT NULL, title TEXT NOT NULL, price_uah INTEGER NOT NULL, size TEXT, condition TEXT, area TEXT, photo_ids TEXT NOT NULL, status TEXT NOT NULL, channel_msg_id INTEGER, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, nudged_at TEXT, ig_ok INTEGER, city TEXT NOT NULL DEFAULT 'lviv', ships_nationwide INTEGER NOT NULL DEFAULT 0, carriers TEXT, cod INTEGER, reports_cleared_at TEXT)"
   ).run();
   // The sweep runs every five minutes and asks exactly one question — which
   // live listings are due — so it gets the index that answers it. Without this
@@ -238,6 +238,30 @@ async function ensureSchema(env) {
   // 1 in this column and can never be mirrored, however the code later
   // changes. Same migration shape as events.src above.
   try { await env.DB.prepare('ALTER TABLE listings ADD COLUMN ig_ok INTEGER').run(); } catch {}
+  // Nationwide shipping (docs/MARKET.md, "Shipping"). Same idempotent-ALTER
+  // shape. Every listing made before these columns existed was made in Lviv —
+  // the bot only ever served Lviv then — so the DEFAULT is the backfill: SQLite
+  // fills it into every existing row as the column is added, in one statement,
+  // and an old row reads as "Lviv, no shipping", which is exactly what it was.
+  // carriers is a JSON array of LISTING_CARRIERS codes, NULL when not shipping;
+  // cod is 1/0 when shipping, NULL when not. reports_cleared_at is set when an
+  // admin restores a listing that complaints hid, so only newer complaints count.
+  try { await env.DB.prepare("ALTER TABLE listings ADD COLUMN city TEXT NOT NULL DEFAULT 'lviv'").run(); } catch {}
+  try { await env.DB.prepare('ALTER TABLE listings ADD COLUMN ships_nationwide INTEGER NOT NULL DEFAULT 0').run(); } catch {}
+  try { await env.DB.prepare('ALTER TABLE listings ADD COLUMN carriers TEXT').run(); } catch {}
+  try { await env.DB.prepare('ALTER TABLE listings ADD COLUMN cod INTEGER').run(); } catch {}
+  try { await env.DB.prepare('ALTER TABLE listings ADD COLUMN reports_cleared_at TEXT').run(); } catch {}
+  // Buyer browsing asks "live listings in this city" — after the ALTERs, since
+  // on an existing database the column only exists once they have run.
+  await env.DB.prepare(
+    "CREATE INDEX IF NOT EXISTS idx_listings_city ON listings (status, city)"
+  ).run();
+  // One row per (listing, person) — the primary key is what makes "three
+  // reports from distinct users" true: a second tap by the same person is a
+  // no-op, not a second vote.
+  await env.DB.prepare(
+    "CREATE TABLE IF NOT EXISTS listing_reports (listing_id TEXT NOT NULL, reporter_id TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (listing_id, reporter_id))"
+  ).run();
   // Today's prices as a chain published them on its own Telegram channel (see
   // worker/chain-feed.mjs and refreshChainFeed below). One row per chain, always
   // overwritten, never accumulated — this is a cache of one day's fact, not a
@@ -260,13 +284,54 @@ async function ensureSchema(env) {
 const LISTING_TTL_DAYS = 30;   // a listing removes itself after this
 const LISTING_NUDGE_DAYS = 25; // "ще актуально?" this many days in
 const LISTING_SOLD_GRACE_DAYS = 1; // a sold post lingers this long, marked, then goes
-const LISTING_STATUSES = new Set(['pending', 'live', 'sold', 'expired', 'rejected']);
+// hidden: taken off the feed by LISTING_REPORT_HIDE_AT complaints, waiting for
+// the admin. removed: the admin took it down after complaints.
+const LISTING_STATUSES = new Set(['pending', 'live', 'sold', 'expired', 'rejected', 'hidden', 'removed']);
+// Shipping is the seller's own arrangement with a carrier. We record which ones
+// they are willing to use and whether they accept накладений платіж — nothing
+// here creates a waybill, quotes a price or touches the money.
+// TODO(nova-poshta): cost estimate / branch lookup via the Nova Poshta API is
+// deliberately out of scope (docs/MARKET.md, "Shipping").
+const LISTING_CARRIERS = ['novaposhta', 'ukrposhta', 'meest'];
+const LISTING_CITIES = new Set(CITIES.map((c) => c.slug));
+const LISTING_REPORT_HIDE_AT = 3;      // distinct people, then it leaves the feed
+const LISTING_NEW_SELLER_DAYS = 30;    // "новий продавець" until this old here
 // Kept in step with the seven categories in docs/MARKET.md. Validated rather
 // than trusted: the value reaches a channel post, and an unbounded set would
 // let a caller invent a category that no reader recognises.
 const LISTING_CATEGORIES = new Set(['women', 'men', 'shoes', 'kids', 'accessories', 'sport', 'other']);
 
 const isoDaysFromNow = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+
+// The seller trust line. Telegram does not tell a bot how old an account is,
+// so "new" is measured from the seller's first listing HERE: under
+// LISTING_NEW_SELLER_DAYS, or nothing marked sold yet. `sold` counts the
+// seller's own «Продано» taps — self-reported, which the card does not hide.
+function trustFrom(sold, first) {
+  const n = Number(sold) || 0;
+  return { sold: n, is_new: n === 0 || !first || first > isoDaysFromNow(-LISTING_NEW_SELLER_DAYS) };
+}
+async function sellerTrust(env, sellerId) {
+  const r = await env.DB.prepare(
+    "SELECT COUNT(CASE WHEN status = 'sold' THEN 1 END) AS sold, MIN(created_at) AS first FROM listings WHERE seller_id = ?"
+  ).bind(String(sellerId)).first();
+  return trustFrom(r && r.sold, r && r.first);
+}
+// The listing as anyone may see it: everything on the channel card, nothing
+// that is not. seller_id (a Telegram user id) and the photo file ids stay here.
+function publicListing(r, trust) {
+  let carriers = [];
+  try { carriers = JSON.parse(r.carriers || '[]'); } catch {}
+  return {
+    id: r.id, category: r.category, title: r.title, price_uah: r.price_uah,
+    size: r.size || null, condition: r.condition || null,
+    city: r.city || 'lviv', area: r.area || null,
+    ships_nationwide: r.ships_nationwide === 1, carriers: Array.isArray(carriers) ? carriers : [],
+    cod: r.ships_nationwide === 1 ? r.cod === 1 : null,
+    seller_username: r.seller_username, channel_msg_id: r.channel_msg_id || null,
+    created_at: r.created_at, trust: trust || null,
+  };
+}
 
 // ── Store promotions ─────────────────────────────────────────────────────────
 // The rate card (docs/ADVERTISING.md) in kopiyky, keyed by tier+cadence. A
@@ -1471,9 +1536,11 @@ async function sweepListings(env) {
   const today = kyivDateStr();
 
   // Both 'live' (ran its 30 days) and 'sold' (grace period over): each needs
-  // the channel post gone, and only the message to the seller differs.
+  // the channel post gone, and only the message to the seller differs. A
+  // 'hidden' listing the admin never got to runs out the same clock — its post
+  // is already blanked, and expiry is the same outcome as for a live one.
   const due = await env.DB.prepare(
-    "SELECT id, seller_id, title, channel_msg_id, status FROM listings WHERE status IN ('live','sold') AND expires_at <= ? LIMIT 50"
+    "SELECT id, seller_id, title, channel_msg_id, status FROM listings WHERE status IN ('live','sold','hidden') AND expires_at <= ? LIMIT 50"
   ).bind(today).all();
   for (const r of (due && due.results) || []) {
     if (r.channel_msg_id && env.BOT_TOKEN && env.TG_CHANNEL) {
@@ -2071,6 +2138,68 @@ export default {
       return Response.redirect(`${APP_URL}?${key}=${screen}`, 302);
     }
     if (request.method === 'GET') {
+      // ── Барахолка: the public feed, for the site's /market/ page and the
+      // bot's buyer filters. Live listings only, public fields only.
+      //   ?filter=city&city=<slug> — «Тільки моє місто»
+      //   ?filter=ships[&city=<slug>] — «З доставкою до мене»: every listing
+      //     that ships nationwide, the buyer's own city first
+      //   no filter — everything live
+      if (url.pathname === '/api/market') {
+        const filter = url.searchParams.get('filter') || '';
+        const city = url.searchParams.get('city') || '';
+        if (city && !LISTING_CITIES.has(city)) return json({ ok: false, reason: 'bad_city' }, 400, origin);
+        if (filter === 'city' && !city) return json({ ok: false, reason: 'bad_city' }, 400, origin);
+        try {
+          await ensureSchema(env);
+          let sql = "SELECT * FROM listings WHERE status = 'live'";
+          const args = [];
+          if (filter === 'city') { sql += ' AND city = ?'; args.push(city); }
+          if (filter === 'ships') sql += ' AND ships_nationwide = 1';
+          sql += filter === 'ships' && city ? ' ORDER BY (city = ?) DESC, created_at DESC, rowid DESC' : ' ORDER BY created_at DESC, rowid DESC';
+          if (filter === 'ships' && city) args.push(city);
+          sql += ' LIMIT 100';
+          const res = await env.DB.prepare(sql).bind(...args).all();
+          const rows = (res && res.results) || [];
+          const stats = await env.DB.prepare(
+            "SELECT seller_id, COUNT(CASE WHEN status = 'sold' THEN 1 END) AS sold, MIN(created_at) AS first FROM listings WHERE seller_id IN (SELECT seller_id FROM listings WHERE status = 'live') GROUP BY seller_id"
+          ).all();
+          const trust = new Map(((stats && stats.results) || []).map((r) => [String(r.seller_id), trustFrom(r.sold, r.first)]));
+          const listings = rows.map((r) => publicListing(r, trust.get(String(r.seller_id)) || trustFrom(0, null)));
+          return new Response(JSON.stringify({ ok: true, listings }), {
+            headers: { ...cors(origin), 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' },
+          });
+        } catch { return json({ ok: false, reason: 'unavailable' }, 503, origin); }
+      }
+      // A live listing's first photo, for the site's cards. The photo lives on
+      // Telegram as a file_id; resolving it needs the bot token, which must
+      // never reach a browser, so the bytes are fetched here and passed
+      // through. Only live listings — a hidden or removed one has no photo.
+      if (url.pathname === '/api/market/photo') {
+        const id = url.searchParams.get('id') || '';
+        if (!/^[a-f0-9-]{1,36}$/.test(id) || !env.BOT_TOKEN) return new Response('not found', { status: 404 });
+        const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
+        const key = new Request(`https://market-photo.internal/${id}`);
+        try {
+          await ensureSchema(env);
+          const row = await env.DB.prepare("SELECT photo_ids FROM listings WHERE id = ? AND status = 'live'").bind(id).first();
+          if (!row) return new Response('not found', { status: 404 });
+          if (cache) { const hit = await cache.match(key); if (hit) return hit; }
+          const fileId = (JSON.parse(row.photo_ids || '[]') || [])[0];
+          if (!fileId) return new Response('not found', { status: 404 });
+          const meta = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/getFile`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: fileId }),
+          }).then((r) => r.json()).catch(() => null);
+          const fp = meta && meta.result && meta.result.file_path;
+          if (!fp) return new Response('not found', { status: 404 });
+          const img = await fetch(`https://api.telegram.org/file/bot${env.BOT_TOKEN}/${fp}`);
+          if (!img.ok) return new Response('not found', { status: 404 });
+          const out = new Response(await img.arrayBuffer(), {
+            headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' },
+          });
+          if (cache) { try { await cache.put(key, out.clone()); } catch {} }
+          return out;
+        } catch { return new Response('not found', { status: 404 }); }
+      }
       // A bank-transfer invoice, or its act once paid (?doc=act). Opened by the
       // invoice's own token; a wrong token and an unknown id are the same 404.
       if (url.pathname === '/invoice') {
@@ -2912,6 +3041,18 @@ export default {
         || !photos.length) {
         return json({ ok: false, reason: 'bad_request' }, 400, origin);
       }
+      // City is required and must be one of ours (cities.json): it is what the
+      // buyer filters on, and a free-typed city would split one city's
+      // listings across spellings. Shipping: carriers only when shipping, and
+      // at least one; cod only means something when shipping.
+      const ships = b.ships_nationwide === true || b.ships_nationwide === 1 ? 1 : 0;
+      const given = Array.isArray(b.carriers) ? b.carriers : [];
+      const carriers = ships ? LISTING_CARRIERS.filter((c) => given.includes(c)) : [];
+      if (typeof b.city !== 'string' || !LISTING_CITIES.has(b.city)) {
+        return json({ ok: false, reason: 'bad_city' }, 400, origin);
+      }
+      if (ships && !carriers.length) return json({ ok: false, reason: 'no_carriers' }, 400, origin);
+      const cod = ships ? (b.cod === true || b.cod === 1 ? 1 : 0) : null;
       await ensureSchema(env);
       const id = crypto.randomUUID().slice(0, 8);
       // Only the caller that actually showed the seller the Instagram line can
@@ -2919,14 +3060,17 @@ export default {
       // turn a listing into an Instagram post after the fact.
       const igOk = b.ig_ok === true || b.ig_ok === 1 ? 1 : 0;
       await env.DB.prepare(
-        'INSERT INTO listings (id, seller_id, seller_username, category, title, price_uah, size, condition, area, photo_ids, status, created_at, expires_at, ig_ok) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO listings (id, seller_id, seller_username, category, title, price_uah, size, condition, area, photo_ids, status, created_at, expires_at, ig_ok, city, ships_nationwide, carriers, cod) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).bind(
         id, b.seller_id, cleanText(b.seller_username, 32), b.category,
         cleanText(b.title, 60), Math.round(price),
         cleanText(b.size, 12) || null, cleanText(b.condition, 12) || null, cleanText(b.area, 60) || null,
-        JSON.stringify(photos), 'pending', kyivDateStr(), isoDaysFromNow(LISTING_TTL_DAYS), igOk
+        JSON.stringify(photos), 'pending', kyivDateStr(), isoDaysFromNow(LISTING_TTL_DAYS), igOk,
+        b.city, ships, ships ? JSON.stringify(carriers) : null, cod
       ).run();
-      return json({ ok: true, id }, 200, origin);
+      // The trust line goes on the moderation message, so the admin sees what
+      // the channel will.
+      return json({ ok: true, id, trust: await sellerTrust(env, b.seller_id) }, 200, origin);
     }
 
     // ── Барахолка: move a listing between states ───────────────────────────
@@ -2942,18 +3086,60 @@ export default {
       await ensureSchema(env);
       const row = await env.DB.prepare('SELECT * FROM listings WHERE id = ?').bind(id).first();
       if (!row) return json({ ok: false, reason: 'not_found' }, 404, origin);
-      const msgId = Number.isFinite(Number(body.channel_msg_id)) ? Number(body.channel_msg_id) : row.channel_msg_id;
+      const msgId = Number.isFinite(Number(body.channel_msg_id)) && body.channel_msg_id !== null ? Number(body.channel_msg_id) : row.channel_msg_id;
+      // An admin bringing back a listing that complaints hid is not a fresh
+      // publication: it keeps the clock it had, and only complaints made after
+      // this moment count towards hiding it again.
+      const restoring = row.status === 'hidden' && status === 'live';
       // Publishing restarts the clock: a listing that waited two days in the
       // approval queue should still get its full thirty days on the channel.
       // Selling shortens it instead — the post stays up one more day so a buyer
       // mid-conversation sees "ПРОДАНО" rather than finding a hole, then the
       // sweep removes it.
-      const expires = status === 'live' ? isoDaysFromNow(LISTING_TTL_DAYS)
+      const expires = restoring ? row.expires_at
+        : status === 'live' ? isoDaysFromNow(LISTING_TTL_DAYS)
         : status === 'sold' ? isoDaysFromNow(LISTING_SOLD_GRACE_DAYS)
         : row.expires_at;
-      await env.DB.prepare('UPDATE listings SET status = ?, channel_msg_id = ?, expires_at = ? WHERE id = ?')
-        .bind(status, msgId, expires, id).run();
-      return json({ ok: true, id, status, listing: { ...row, status, channel_msg_id: msgId, expires_at: expires } }, 200, origin);
+      const cleared = restoring ? new Date().toISOString() : row.reports_cleared_at;
+      await env.DB.prepare('UPDATE listings SET status = ?, channel_msg_id = ?, expires_at = ?, reports_cleared_at = ? WHERE id = ?')
+        .bind(status, msgId, expires, cleared || null, id).run();
+      const listing = { ...row, status, channel_msg_id: msgId, expires_at: expires, reports_cleared_at: cleared || null };
+      return json({ ok: true, id, status, listing, trust: await sellerTrust(env, row.seller_id) }, 200, origin);
+    }
+
+    // ── Барахолка: a complaint about a published listing ──────────────────
+    // From the «⚠️ Поскаржитись» button on a channel post, or the site's
+    // report link (which opens the bot). One per person per listing (primary
+    // key); the seller cannot vote on their own. At LISTING_REPORT_HIDE_AT
+    // distinct people the listing goes to 'hidden' here, atomically with the
+    // vote that tipped it — the bot then blanks the post and asks the admin.
+    if (url.pathname === '/api/listing/report') {
+      if (!env.ADMIN_KEY || (body && body.key) !== env.ADMIN_KEY) return json({ ok: false }, 401, origin);
+      const id = body && body.id;
+      const reporter = body && body.reporter_id != null ? String(body.reporter_id) : '';
+      if (typeof id !== 'string' || !/^[0-9]{1,20}$/.test(reporter)) return json({ ok: false, reason: 'bad_request' }, 400, origin);
+      await ensureSchema(env);
+      const row = await env.DB.prepare('SELECT * FROM listings WHERE id = ?').bind(id).first();
+      if (!row) return json({ ok: false, reason: 'not_found' }, 404, origin);
+      const countNow = async () => {
+        const c = await env.DB.prepare('SELECT COUNT(*) AS n FROM listing_reports WHERE listing_id = ? AND created_at > ?')
+          .bind(id, row.reports_cleared_at || '').first();
+        return Number(c && c.n) || 0;
+      };
+      if (row.status !== 'live') return json({ ok: true, added: false, reason: 'not_live', count: await countNow(), hidden: false, listing: row }, 200, origin);
+      if (String(row.seller_id) === reporter) return json({ ok: true, added: false, reason: 'own', count: await countNow(), hidden: false, listing: row }, 200, origin);
+      const ins = await env.DB.prepare('INSERT OR IGNORE INTO listing_reports (listing_id, reporter_id, created_at) VALUES (?, ?, ?)')
+        .bind(id, reporter, new Date().toISOString()).run();
+      const added = Number(ins && ins.meta && ins.meta.changes) > 0;
+      const count = await countNow();
+      let hidden = false;
+      if (count >= LISTING_REPORT_HIDE_AT) {
+        // Guarded on status so two simultaneous third votes hide it once.
+        const up = await env.DB.prepare("UPDATE listings SET status = 'hidden' WHERE id = ? AND status = 'live'").bind(id).run();
+        hidden = Number(up && up.meta && up.meta.changes) > 0;
+      }
+      return json({ ok: true, added, reason: added ? null : 'duplicate', count, hidden, threshold: LISTING_REPORT_HIDE_AT,
+        listing: { ...row, status: hidden ? 'hidden' : row.status } }, 200, origin);
     }
 
     // ── Барахолка: one listing, by id ─────────────────────────────────────
@@ -2976,7 +3162,7 @@ export default {
       if (typeof (body && body.seller_id) !== 'string') return json({ ok: false, reason: 'bad_request' }, 400, origin);
       await ensureSchema(env);
       const res = await env.DB.prepare(
-        "SELECT id, title, price_uah, status, expires_at, channel_msg_id FROM listings WHERE seller_id = ? AND status IN ('pending','live','sold') ORDER BY created_at DESC LIMIT 50"
+        "SELECT id, title, price_uah, status, expires_at, channel_msg_id FROM listings WHERE seller_id = ? AND status IN ('pending','live','sold','hidden') ORDER BY created_at DESC LIMIT 50"
       ).bind(body.seller_id).all();
       return json({ ok: true, listings: (res && res.results) || [] }, 200, origin);
     }

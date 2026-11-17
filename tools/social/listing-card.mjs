@@ -62,6 +62,20 @@ const CATEGORIES = {
 };
 const cat = CATEGORIES[L.category] || null;
 
+// The city, from cities.json — the same registry the bot validates against. A
+// row from before cities existed has city 'lviv' (the migration's default).
+const CITIES = JSON.parse(readFileSync(resolve(repoRoot, 'cities.json'), 'utf8'));
+const city = CITIES.find((c) => c.slug === (L.city || 'lviv')) || null;
+const where = [city ? city.nameUa : null, L.area || null].filter(Boolean).join(', ');
+// Shipping is a word on the card, not the carrier list: the image has one line
+// for it, and the caption below carries the detail.
+const ships = L.ships_nationwide === 1 || L.ships_nationwide === true;
+let carriers = [];
+try { carriers = Array.isArray(L.carriers) ? L.carriers : JSON.parse(L.carriers || '[]') || []; } catch {}
+const CARRIER_NAMES = { novaposhta: 'Нова Пошта', ukrposhta: 'Укрпошта', meest: 'Meest' };
+const carrierNames = carriers.map((c) => CARRIER_NAMES[c]).filter(Boolean).join(', ');
+const cityTag = city ? '#' + city.nameUa.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '') : null;
+
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -122,7 +136,7 @@ const page_html = `<!doctype html><html lang="uk"><head><meta charset="utf-8"><s
     <div class="info">
       <div class="t display">${esc(title)}</div>
       ${spec ? `<div class="s body">${esc(spec)}</div>` : ''}
-      ${L.area ? `<div class="a body">📍 ${esc(L.area)}</div>` : ''}
+      ${where ? `<div class="a body">📍 ${esc(where)}${ships ? ' · 📦 доставка по Україні' : ''}</div>` : ''}
       <div class="who body">Пишіть @${esc(L.seller_username)} у Telegram</div>
       <div class="foot">
         <span class="url display">${CHANNEL}</span>
@@ -177,14 +191,16 @@ const caption = [
   title,
   `${Math.round(price)} ₴`,
   spec || null,
-  L.area ? `📍 ${L.area}` : null,
+  where ? `📍 ${where}` : null,
+  ships ? `📦 Відправка по Україні · ${carrierNames} · накладений платіж ${L.cod === 1 || L.cod === true ? '✓' : '✗'}` : null,
+  ships ? `Купуєте з доставкою: накладений платіж і огляд у відділенні, без передоплати незнайомим.` : null,
   '',
   `Пишіть @${L.seller_username} у Telegram.`,
   '',
   `Уся барахолка — ${CHANNEL}`,
   'Оголошення користувача · ми не беремо участі в угоді й не гарантуємо її.',
   '',
-  ['#барахолка', '#секондхендльвів', '#львів', cat ? cat.tag : null, '#lviv', '#thrifted', '#вінтаж']
+  ['#барахолка', '#секондхендльвів', cityTag, cat ? cat.tag : null, ships ? '#доставка' : null, city && city.slug === 'lviv' ? '#lviv' : null, '#thrifted', '#вінтаж']
     .filter(Boolean).join(' '),
 ].filter((l) => l !== null).join('\n');
 

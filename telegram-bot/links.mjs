@@ -11,6 +11,11 @@ import { SRC, withSrc } from '../shared/attribution.mjs';
 export const APP_URL = 'https://www.lvivsecondhand.com/';
 export const site = (path = '') => withSrc(APP_URL + path, SRC.tgbot);
 
+// The барахолка safety rules (market/bezpeka.html). Printed on every shipping
+// listing's channel card, so it is tagged as a channel link (tgch), not a bot
+// one: a reader taps it under a channel post.
+export const marketSafetyLink = () => withSrc(APP_URL + 'market/bezpeka.html', SRC.tgch);
+
 // Every store in STORES (stores.json minus the watermark, see build-data.mjs)
 // has a static page at /store/<id>/ with its own canonical and an "open on the
 // map" link. Linking that page, not ?store=<id> (which canonicals to the

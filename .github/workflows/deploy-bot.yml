@@ -35,6 +35,7 @@ on:
       - 'telegram-bot/**'
       - 'shared/**'   # attribution tags, imported and bundled at deploy
       - 'stores.json'
+      - 'cities.json' # the барахолка city list, bundled by build-data.mjs
       - '.github/workflows/deploy-bot.yml'
   workflow_dispatch:
 

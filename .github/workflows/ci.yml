@@ -66,6 +66,15 @@ jobs:
       - name: Check the barakholka language rule
         run: node --no-warnings scripts/check-lang.mjs
 
+      # Nationwide shipping on the барахолка, end to end: the bot's real
+      # webhook handler with its METRICS binding wired to the real metrics
+      # Worker on SQLite. The listings migration on a database built with the
+      # original table, the /sell wizard with and without shipping (city
+      # required), the buyer filters, and complaints hiding a listing at three
+      # distinct people. --dump prints sample moderation messages and posts.
+      - name: Check the barakholka shipping, filters and complaints
+        run: node --no-warnings scripts/check-market.mjs
+
       - name: Syntax-check the Telegram bot Worker
         run: node --check telegram-bot/worker.js
 
