@@ -36,12 +36,13 @@ const slim = STORES.filter((s) => !s.watermark).map(slimStore);
 // city router use, so a new city reaches the bot with no second copy to edit.
 const CITIES = JSON.parse(readFileSync(fileURLToPath(new URL('../cities.json', import.meta.url)), 'utf8'));
 if (!Array.isArray(CITIES) || !CITIES.length) throw new Error('cities.json did not parse to a non-empty array');
-const cities = CITIES.map((c) => ({ slug: c.slug, host: c.host, nameUa: c.nameUa, nameEn: c.nameEn, nameUaLoc: c.nameUaLoc }));
+const cities = CITIES.map((c) => ({ slug: c.slug, host: c.host, nameUa: c.nameUa, nameEn: c.nameEn, nameUaLoc: c.nameUaLoc, center: c.center }));
 
 // Every other city's stores, by city slug, for the schedule commands (/today,
 // /day, /rare, /cheap), which follow the person's /city. STORES stays Lviv
-// alone: the field-agent flows, store lookup, QR materials and the sponsored
-// slot all work on Lviv ids and must not start matching another city's.
+// alone — the sponsored slot, restock alerts and per-store QR posters exist
+// for Lviv only. The field-agent flows (/visit, /route, bounties) read both,
+// one city at a time: the city the agent is standing in.
 const cityStores = {};
 for (const c of CITIES) {
   if (c.slug === 'lviv') continue;

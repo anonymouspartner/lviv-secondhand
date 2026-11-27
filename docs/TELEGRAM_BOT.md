@@ -24,8 +24,11 @@ they answer for Lviv. Every schedule reply names its city and ends with how to
 change it.
 
 `build-data.mjs` bundles each `cities/<slug>/stores.json` as `CITY_STORES`;
-`STORES` stays Lviv alone, so store lookup, `/materials`, the sponsored slot and
-the field-agent flows remain Lviv-only. Other cities' stores link to their own
+`STORES` stays Lviv alone, so `/materials` per-store QR posters, restock alerts
+and the sponsored slot remain Lviv-only. The field-agent flows (`/apply`,
+`/visit`, `/route`, bounties) work in every city — see "Міста · Cities" in the
+[Field Agent Handbook](FIELD_AGENT.md); `scripts/check-agent-cities.mjs` covers
+them. Other cities' stores link to their own
 host (`https://kyiv.lvivsecondhand.com/?store=kv1`), and a reply listing stores
 marked `verified: false` carries an "unconfirmed schedule" note. Lists are cut
 at 16 stores (Telegram's 4096-character limit) with a link to the map for the

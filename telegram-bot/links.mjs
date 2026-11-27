@@ -33,6 +33,10 @@ export const citySite = (slug, path = '') => {
 // Which city a non-Lviv store id belongs to, so its ?store= link opens on the
 // host that knows it — on www the id is unknown and the link opened nothing.
 const CITY_BY_STORE = new Map(Object.entries(CITY_STORES).flatMap(([slug, list]) => list.map((s) => [s.id, slug])));
+// 'lviv' for a Lviv id (and for an id nobody knows — the old behaviour).
+export const storeCity = (id) => CITY_BY_STORE.get(id) || 'lviv';
+// A field agent's round, drawn on the map of the city its stores are in.
+export const routeLink = (ids) => citySite(storeCity(ids[0]), '?route=' + ids.join(','));
 export function storeLink(id) {
   if (PAGE_IDS.has(id)) return site('store/' + encodeURIComponent(id) + '/');
   return citySite(CITY_BY_STORE.get(id), '?store=' + encodeURIComponent(id));

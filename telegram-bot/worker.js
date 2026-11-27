@@ -71,7 +71,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { STORES, CITIES, CITY_STORES } from './stores.gen.js';
 import { qrLink } from '../shared/attribution.mjs';
-import { APP_URL, site, citySite, storeLink, marketSafetyLink } from './links.mjs';
+import { APP_URL, site, citySite, storeLink, storeCity, routeLink, marketSafetyLink } from './links.mjs';
 import { detectLang, listingLang, RU_REFUSAL } from './lang-check.mjs';
 import {
   getCycleLengthKeyboard, getDayOfWeekKeyboard, getOpenTimeKeyboard, getCloseTimeKeyboard,
@@ -236,6 +236,25 @@ function activePromo(s) {
 // did. Before this they read STORES — Lviv alone — whatever the city, so
 // someone in Kyiv could set Kyiv and still only ever be shown Lviv restocks.
 // ─────────────────────────────────────────────────────────────────────────────
+// One city's stores, and any store by id whatever its city — for the
+// field-agent flows, which are open in every city in cities.json.
+const storesOfCity = (slug) => (slug === 'lviv' ? STORES : (CITY_STORES[slug] || []));
+const ANY_STORE = new Map([...STORES, ...Object.values(CITY_STORES).flat()].map((s) => [s.id, s]));
+const anyStoreById = (id) => ANY_STORE.get(id) || null;
+const cityOf = (slug) => CITIES.find((x) => x.slug === slug) || null;
+// The covered city nearest to a GPS point, and how far its centre is. An
+// agent's working city is where they are standing, not a setting to forget.
+function nearestCity(pt) {
+  let best = null;
+  for (const c of CITIES) {
+    const d = distM(pt, { lat: c.center[0], lng: c.center[1] });
+    if (!best || d < best.d) best = { city: c, d };
+  }
+  return best;
+}
+// Past this from every city centre the agent is not in a city we map.
+const CITY_RADIUS_M = 40000;
+
 function scheduleCtx(slug) {
   const city = CITIES.find((x) => x.slug === slug) || CITIES.find((x) => x.slug === 'lviv');
   const lviv = city.slug === 'lviv';
@@ -1120,30 +1139,33 @@ async function handleFeedbackFlow(env, ctx) {
 const APPLY_WAIT_TTL = 300; // 5 min
 const applyWaitKey = (uid) => `applywait:${uid}`;
 
-async function submitAgentApplication(env, c, ctx, whyText) {
+async function submitAgentApplication(env, c, ctx, whyText, citySlug) {
   const { chatId, from } = ctx;
   const text = String(whyText || '').trim().slice(0, 2000);
   if (!text) return false;
   const name = [from.first_name, from.last_name].filter(Boolean).join(' ') || String(chatId);
   const handle = from.username ? `@${from.username}` : '—';
+  const city = cityOf(citySlug);
   if (c.ownerId) {
     await tg(env, 'sendMessage', {
       chat_id: c.ownerId, parse_mode: 'HTML',
       text: `🧭 <b>Заявка в польові агенти · Field agent application</b>\n` +
         `${esc(name)} (${esc(handle)})\n` +
-        `ID: <code>${chatId}</code>\n\n` +
+        `ID: <code>${chatId}</code>\n` +
+        `📍 Місто · City: <b>${city ? `${esc(city.nameUa)} · ${esc(city.nameEn)}` : 'не вказано · not given'}</b>\n\n` +
         `${esc(text)}\n\n` +
         `Додайте id до AGENT_IDS у telegram-bot/wrangler.toml і розгорніть, щоб надати доступ. · ` +
         `Add the id to AGENT_IDS in telegram-bot/wrangler.toml and redeploy to grant access.`,
     });
   }
-  await tg(env, 'sendMessage', {
-    chat_id: chatId,
-    text: '🧭 Дякуємо! Заявку надіслано власнику. · Thanks — your application was sent to the owner.',
-  });
+  await sayMenu(env, c, ctx.userId, chatId, '🧭 Дякуємо! Заявку надіслано власнику. · Thanks — your application was sent to the owner.');
   return true;
 }
 
+// Two steps: the city (buttons — the role is open in every city in
+// cities.json, and the owner has to know where an applicant would work), then
+// one free-text message. The pending state is JSON {step, city}; a bare '1'
+// is a prompt sent before the city step existed and reads as "text, no city".
 async function handleAgentApplyFlow(env, c, ctx) {
   if (!env.BOT_TOKEN || !env.VISITS) return false;
   const { userId, chatId, text } = ctx;
@@ -1156,25 +1178,44 @@ async function handleAgentApplyFlow(env, c, ctx) {
       await tg(env, 'sendMessage', { chat_id: chatId, text: '🧭 У вас вже є доступ. · You already have access.' });
       return true;
     }
-    await env.VISITS.put(applyWaitKey(userId), '1', { expirationTtl: APPLY_WAIT_TTL });
-    await tg(env, 'sendMessage', {
-      chat_id: chatId, parse_mode: 'HTML',
-      text: `🧭 <b>Заявка в польові агенти · Field agent application</b>\n` +
-        `Спершу прочитайте опис ролі: <a href="${JOB_BRIEF_URL}">Опис вакансії · Job brief</a>\n\n` +
-        `Напишіть одним повідомленням: чому цікавить, доступність (дні/години), чи є телефон з GPS. · ` +
-        `Send one message: why you're interested, your availability (days/hours), and whether you have a GPS-capable phone.`,
-    });
+    let remembered = null;
+    try { remembered = (await getMarketPrefs(env, userId)).city || null; } catch (e) {}
+    await env.VISITS.put(applyWaitKey(userId), JSON.stringify({ step: 'city' }), { expirationTtl: APPLY_WAIT_TTL });
+    await say(env, chatId,
+      `🧭 <b>Заявка в польові агенти · Field agent application</b>\n` +
+      `Спершу прочитайте опис ролі: <a href="${JOB_BRIEF_URL}">Опис вакансії · Job brief</a>\n\n` +
+      `1️⃣ <b>У якому місті ви працюватимете?</b> Оберіть кнопкою. · <b>Which city would you work in?</b> Pick a button.`,
+      cityKb(remembered));
     return true;
   }
-  // Not a command — might be the pending application text the prompt above
-  // asked for. Bail on anything command-shaped so this can never swallow an
-  // unrelated command as an application.
+  // Not a command — might be an answer to one of the two prompts above. Bail
+  // on anything command-shaped so this can never swallow an unrelated command
+  // as an application.
   if (!raw || raw.startsWith('/')) return false;
   let waiting = null;
   try { waiting = await env.VISITS.get(applyWaitKey(userId)); } catch (e) {}
   if (!waiting) return false;
+  let state = { step: 'why', city: null };
+  try { const j = JSON.parse(waiting); if (j && typeof j === 'object') state = j; } catch (e) {}
+  if (state.step === 'city') {
+    const city = cityByLabel(raw);
+    if (!city) {
+      // End the question rather than trap the person in it for five minutes.
+      await env.VISITS.delete(applyWaitKey(userId));
+      await sayMenu(env, c, userId, chatId, 'Заявку скасовано — місто треба обрати кнопкою. Почати знову: /apply · Application cancelled — the city has to be picked with a button. Start again: /apply');
+      return true;
+    }
+    await env.VISITS.put(applyWaitKey(userId), JSON.stringify({ step: 'why', city: city.slug }), { expirationTtl: APPLY_WAIT_TTL });
+    // The same city the schedule buttons, the барахолка and /route use.
+    try { await putMarketPrefs(env, userId, { ...(await getMarketPrefs(env, userId)), city: city.slug }); } catch (e) {}
+    await sayMenu(env, c, userId, chatId,
+      `📍 ${esc(city.nameUa)}.\n\n` +
+      `2️⃣ Напишіть одним повідомленням: чому цікавить, доступність (дні/години), чи є телефон з GPS. · ` +
+      `Send one message: why you're interested, your availability (days/hours), and whether you have a GPS-capable phone.`);
+    return true;
+  }
   await env.VISITS.delete(applyWaitKey(userId));
-  return await submitAgentApplication(env, c, ctx, raw);
+  return await submitAgentApplication(env, c, ctx, raw, state.city);
 }
 
 // `/start bounty_{token}` — the deep-link entry point. Returns true if it
@@ -1189,7 +1230,7 @@ async function handleBountyStart(env, c, ctx) {
     await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Це посилання застаріле або недійсне. Спробуйте ще раз з карти. · This link expired or is invalid — try again from the map.' });
     return true;
   }
-  const store = STORES.find((s) => s.id === storeId);
+  const store = anyStoreById(storeId);
   if (!store) {
     await tg(env, 'sendMessage', { chat_id: chatId, text: '⚠️ Магазин не знайдено. · Store not found.' });
     return true;
@@ -1500,12 +1541,15 @@ function norm(s) {
   return String(s || '').toLowerCase().trim();
 }
 
-function searchStores(query) {
+// Within one city: half of every city's map is called some variant of
+// "Second hand", and a Kyiv agent must never be handed a Kharkiv match.
+function searchStores(query, citySlug = 'lviv') {
   const q = norm(query);
   if (!q) return [];
-  const byId = STORES.find((s) => s.id.toLowerCase() === q);
+  const list = storesOfCity(citySlug);
+  const byId = list.find((s) => s.id.toLowerCase() === q);
   if (byId) return [byId];
-  return STORES.filter((s) => norm(s.name).includes(q) || (s.address && norm(s.address).includes(q))).slice(0, MATCH_LIMIT + 1);
+  return list.filter((s) => norm(s.name).includes(q) || (s.address && norm(s.address).includes(q))).slice(0, MATCH_LIMIT + 1);
 }
 
 // Metres between two {lat,lng} points (haversine).
@@ -1528,8 +1572,8 @@ function distM(a, b) {
 // filtering it out here too just means an agent is steered toward stores
 // that are actually available, not shown a dead end. Over-fetches from the
 // plain distance sort since some nearby candidates will be skipped.
-async function nearestUnvisitedStores(env, uid, from, n) {
-  const candidates = STORES
+async function nearestUnvisitedStores(env, uid, from, n, citySlug = 'lviv') {
+  const candidates = storesOfCity(citySlug)
     .filter((s) => !s.watermark && typeof s.lat === 'number' && typeof s.lng === 'number')
     .map((s) => ({ s, d: distM(from, s) }))
     .sort((a, b) => a.d - b.d);
@@ -1734,7 +1778,17 @@ async function startVisit(env, uid, chatId) {
 // the agent is free to work through stores in whatever order suits the day.
 async function promptStorePick(env, uid, chatId, session) {
   const from = { lat: session.data.lat, lng: session.data.lng };
-  const near = await nearestUnvisitedStores(env, uid, from, 8);
+  // The city is read off the GPS point, every visit: only that city's stores
+  // are offered (and searched by name below), and the visit is filed under it.
+  const where = nearestCity(from);
+  if (where.d > CITY_RADIUS_M) {
+    await say(env, chatId,
+      `📍 Ви за ${fmtDist(where.d)} від найближчого міста на карті (${esc(where.city.nameUa)}). Працюємо у: ${CITIES.map((x) => esc(x.nameUa)).join(', ')}.\n` +
+      `You are ${fmtDist(where.d)} from the nearest city we map. Send a location from one of those cities, or /cancel.`);
+    return;
+  }
+  session.data.city = where.city.slug;
+  const near = await nearestUnvisitedStores(env, uid, from, 8, where.city.slug);
   session.data.nearby = near.map(({ s }) => ({ id: s.id, name: s.name, address: s.address || '', lat: s.lat, lng: s.lng, cycle: s.cycle }));
   session.step = 'store';
   await putSession(env, uid, session);
@@ -1742,10 +1796,10 @@ async function promptStorePick(env, uid, chatId, session) {
     `${i + 1}. <b>${esc(s.name)}</b> · ${fmtDist(d)}${s.address ? ' — ' + esc(s.address) : ''}`);
   // Always this list's own stores, in this list's own order -- so pin N on
   // the map link below is always item N in the message above it.
-  const mapIds = near.map(({ s }) => s.id).join(',');
   await say(env, chatId,
+    `📍 <b>${esc(where.city.nameUa)}</b>\n` +
     '2️⃣ Який це магазин? Надішліть номер · Which store? Reply with the number:\n' + lines.join('\n') +
-    `\n\n🗺️ <a href="${esc(site('?route=' + mapIds))}">Ці магазини на карті · These stores on the map</a>` +
+    (near.length ? `\n\n🗺️ <a href="${esc(routeLink(near.map(({ s }) => s.id)))}">Ці магазини на карті · These stores on the map</a>` : '') +
     '\n\nНемає у списку — надішліть назву, або <code>new Назва</code>.\nNot listed — send a name, or <code>new Name</code>.' +
     '\n\n/cancel щоб вийти · to abort',
     near.map((_, i) => [String(i + 1)]));
@@ -1869,6 +1923,7 @@ async function finishVisit(env, c, uid, chatId, session, from) {
     agentId: uid,
     agentName: [from.first_name, from.last_name].filter(Boolean).join(' ') || from.username || String(uid),
     store: d.store,
+    city: d.city || 'lviv',
     lat: d.lat ?? null,
     lng: d.lng ?? null,
     distM: d.distM ?? null,
@@ -1910,9 +1965,9 @@ async function finishVisit(env, c, uid, chatId, session, from) {
   // Real-time push to the owner (photo + summary) for verification, if configured.
   if (c.ownerId) {
     const isNewStore = !(rec.store && rec.store.id);
-    let caption = summary(session).replace('🧾 <b>Перевірте візит · Review visit</b>', `🆕 <b>Візит · Visit</b> — ${esc(rec.agentName)}`);
+    let caption = summary(session).replace('🧾 <b>Перевірте візит · Review visit</b>', `🆕 <b>Візит · Visit</b> — ${esc(rec.agentName)} · ${esc((cityOf(rec.city) || {}).nameUa || rec.city)}`);
     if (isNewStore) {
-      caption += '\n\n🆕 Новий магазин — ще немає в stores.json, потрібно додати вручну. · New store — not in stores.json yet, needs adding by hand.';
+      caption += '\n\n🆕 Новий магазин — ще немає на карті, потрібно додати вручну' + (rec.city !== 'lviv' ? ` у cities/${rec.city}/stores.json` : ' у stores.json') + '. · New store — not on the map yet, needs adding by hand.';
     }
     // A survey collects exactly the fields stores.json holds, so offer to put
     // them on the map right here rather than leaving the owner to retype a CSV.
@@ -2109,6 +2164,8 @@ function jobText() {
     '📋 <b>Опис вакансії · Job brief</b>',
     'Повний опис ролі, як це працює та схема оплати (UA/EN):',
     'Full role, workflow and pay scheme.',
+    '',
+    `📍 Шукаємо агентів у · Hiring in: ${CITIES.map((x) => esc(x.nameUa)).join(', ')}.`,
     '',
     `👉 <a href="${JOB_BRIEF_URL}">Відкрити опис вакансії · Open the job brief</a>`,
     '',
@@ -2312,6 +2369,17 @@ const QR_WAIT_TTL = 300; // 5 min
 async function cmdStoreQr(env, chatId, rawId) {
   const id = String(rawId || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const store = STORES.find((s) => s.id.toLowerCase() === id);
+  // Per-store posters are built for Lviv only so far (scripts/build-qr-posters.mjs).
+  // Say so rather than "no such store" — the id is real, the poster is not.
+  const elsewhere = !store && [...ANY_STORE.values()].find((s) => s.id.toLowerCase() === id);
+  if (elsewhere) {
+    const c = cityOf(storeCity(elsewhere.id));
+    await say(env, chatId,
+      `🎯 <b>${esc(elsewhere.id.toUpperCase())}</b> — ${esc(elsewhere.name)} (${esc(c.nameUa)})\n` +
+      `Окремих QR-плакатів для цього міста ще немає — поки що лише для Львова. · Per-store QR posters are not built for this city yet (Lviv only so far).\n` +
+      `Сторінка магазину · Store page: ${esc(storeLink(elsewhere.id))}`);
+    return;
+  }
   if (!store) {
     await say(env, chatId,
       `🤷 Не знайшов магазин <code>${esc(rawId)}</code>. · No store with that id.\n` +
@@ -2354,8 +2422,12 @@ async function handleRouteMapData(env, request) {
   const uid = await verifyInitData(env.BOT_TOKEN, request.headers.get('X-Telegram-Init-Data'));
   if (!uid) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
 
+  // One city per map — the agent's /city (Lviv when none is set). Also keeps
+  // the availability lookups (two KV reads a store) to one city's worth.
+  let citySlug = 'lviv';
+  try { citySlug = (await getMarketPrefs(env, uid)).city || 'lviv'; } catch (e) {}
   const stores = [];
-  for (const s of STORES) {
+  for (const s of storesOfCity(citySlug)) {
     if (s.watermark || typeof s.lat !== 'number' || typeof s.lng !== 'number') continue;
     const status = await isStoreAvailable(env, s.id, uid);
     if (!status.available) continue;
@@ -2385,7 +2457,7 @@ async function handleRouteMapSubmit(env, request) {
   const claimed = [];
   const skipped = [];
   for (const id of ids) {
-    const s = STORES.find((st) => st.id === id);
+    const s = anyStoreById(id);
     if (!s) { skipped.push(id); continue; }
     const status = await isStoreAvailable(env, id, uid);
     if (!status.available) { skipped.push(s.name); continue; }
@@ -2410,7 +2482,7 @@ async function handleRouteMapSubmit(env, request) {
     + (from ? `&origin=${from.lat},${from.lng}` : '')
     + `&destination=${ordered[ordered.length - 1].lat},${ordered[ordered.length - 1].lng}`
     + (ordered.length > 1 ? '&waypoints=' + ordered.slice(0, -1).slice(0, 9).map((s) => `${s.lat},${s.lng}`).join('|') : '');
-  const routeUrl = site('?route=' + ordered.map((s) => s.id).join(','));
+  const routeUrl = routeLink(ordered.map((s) => s.id));
   const skipNote = skipped.length
     ? `\n\n⚠️ Пропущено (вже зайнято іншим агентом): ${skipped.map((n) => esc(n)).join(', ')}. · ` +
       `Skipped (already taken by another agent): ${skipped.map((n) => esc(n)).join(', ')}.`
@@ -2440,9 +2512,11 @@ async function handleRouteMapSubmit(env, request) {
 // hardcoded, since unlike APP_URL (the public site's stable custom domain)
 // this Worker has no configured domain of its own.
 async function cmdRoute(env, userId, chatId, origin) {
+  let city = cityOf('lviv');
+  try { city = cityOf((await getMarketPrefs(env, userId)).city) || city; } catch (e) {}
   await tg(env, 'sendMessage', {
     chat_id: chatId, parse_mode: 'HTML',
-    text: '🧭 <b>Маршрут · Route</b>\n' +
+    text: `🧭 <b>Маршрут · Route</b> · ${esc(city.nameUa)} (інше місто · another city: /city)\n` +
       `Оберіть на карті магазини, які хочете відвідати сьогодні (до ${ROUTE_SIZE}) — там показані лише вільні: не обстежені останні 6 місяців і не закріплені за іншим агентом. · ` +
       `Pick the stores you want to visit today on the map (up to ${ROUTE_SIZE}) — it only shows ones that are free: not surveyed in the last 6 months, and not claimed by another agent.`,
     reply_markup: { inline_keyboard: [[{ text: '🗺 Відкрити карту вибору · Open selection map', web_app: { url: origin + '/route-map' } }]] },
@@ -2945,7 +3019,7 @@ async function handleVisit(env, c, msg, ctx) {
       return true;
     }
     // Otherwise fall back to name search, for a store that isn't nearby.
-    const hits = searchStores(raw);
+    const hits = searchStores(raw, session.data.city || 'lviv');
     if (!hits.length) { await say(env, chatId, '🤷 Не знайдено. Оберіть номер, спробуйте іншу назву, або <code>new Назва</code>.\nNo match — pick a number, try another name, or <code>new Name</code>.'); return true; }
     if (hits.length === 1) {
       const s = hits[0];

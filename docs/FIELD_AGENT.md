@@ -6,13 +6,40 @@
 для власника.
 
 > **Ролі.** *Власник* — ви (спілкується англійською). *Агент* — польовий
-> представник у Львові (спілкується українською). *Модель роботи* —
+> представник у своєму місті (спілкується українською; див. «Міста»
+> нижче). *Модель роботи* —
 > **обстеження й реклама**: агент отримує оплату за кожен перевірений
 > візит, плюс бонус, коли візит дає результат (розміщено QR-плакат або
 > зареєструвався власник).
-> *Owner = you (English). Agent = the field representative in Lviv
-> (Ukrainian). Sale model = survey & advertise — paid per verified visit,
+> *Owner = you (English). Agent = the field representative in their own
+> city (Ukrainian; see "Cities" below). Sale model = survey & advertise — paid per verified visit,
 > plus a bonus when a visit produces a result.*
+
+---
+
+## Міста · Cities
+
+Роль відкрита в кожному місті, що є на карті: **Львів, Київ, Харків, Дніпро, Одеса, Житомир, Тернопіль, Луцьк, Рівне, Чернівці, Івано-Франківськ** (список —
+`cities.json`; нове місто там одразу з'являється і в боті).
+
+- **`/apply`** спершу питає місто (кнопками); власник бачить його в заявці.
+- **`/visit`** визначає місто з вашої геолокації щоразу: пропонує лише
+  магазини цього міста, а пошук за назвою шукає тільки в ньому. Якщо ви
+  далі ніж за 40 км від центру будь-якого з міст, бот попросить іншу точку.
+- **`/route`** показує карту вільних магазинів **вашого міста** — того, що
+  обрано командою `/city` (його ж запам'ятовує `/apply`).
+- Ставки, ліміти й правило «один магазин раз на 6 місяців» однакові в усіх
+  містах.
+- **Окремі QR-плакати магазинів (`/materials <код>`) поки що є лише для
+  Львова.** В інших містах бот скаже про це й дасть посилання на сторінку
+  магазину; бонус за плакат там поки що можливий лише із загальним плакатом.
+
+*The role is open in every city on the map. `/apply` asks the city first;
+`/visit` reads the city off the GPS point each time and only offers that
+city's stores (refusing a point more than 40 km from every city centre);
+`/route` shows the free stores of the agent's `/city`. Rates, caps and the
+six-month revisit rule are the same everywhere. Per-store QR posters exist
+for Lviv only so far.*
 
 ---
 

@@ -83,6 +83,13 @@ jobs:
       - name: Check the bot's schedule commands follow the city
         run: node --no-warnings scripts/check-bot-cities.mjs
 
+      # The field-agent role is open in every city: /apply asks the city,
+      # /visit reads it off the GPS point and offers only that city's stores,
+      # /route follows the agent's /city. An agent in Kyiv used to be offered
+      # the "nearest" Lviv shops, 470 km away.
+      - name: Check the field-agent flows work in every city
+        run: node --no-warnings scripts/check-agent-cities.mjs
+
       - name: Syntax-check the Telegram bot Worker
         run: node --check telegram-bot/worker.js
 
