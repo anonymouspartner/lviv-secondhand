@@ -63,7 +63,7 @@ execFileSync(process.execPath, ['build-data.mjs'], { cwd: join(ROOT, 'telegram-b
 const L = await import('../telegram-bot/links.mjs');
 check(L.site() === 'https://www.lvivsecondhand.com/?src=tgbot', `bot site() = ${L.site()}`);
 check(L.storeLink('c68') === 'https://www.lvivsecondhand.com/store/c68/?src=tgbot', `bot storeLink(c68) = ${L.storeLink('c68')}`);
-check(L.storeLink('kv1') === 'https://www.lvivsecondhand.com/?store=kv1&src=tgbot', `bot storeLink(kv1) = ${L.storeLink('kv1')}`);
+check(L.storeLink('kv1') === 'https://kyiv.lvivsecondhand.com/?store=kv1&src=tgbot', `bot storeLink(kv1) = ${L.storeLink('kv1')}`);
 check(srcOf(L.site('?route=c1,c2')) === 'tgbot' && new URL(L.site('?route=c1,c2')).searchParams.get('route') === 'c1,c2', 'bot route link keeps its ids');
 {
   // Static: every link to our site in the bot goes through site()/storeLink()/

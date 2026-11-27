@@ -356,6 +356,10 @@ let shipId;
   check(restored.status === 'live' && restored.expires_at === '2026-12-01' && restored.reports_cleared_at, `restore: ${JSON.stringify(restored)} (was ${before})`);
   const back = tgCalls.find((c) => c.method === 'editMessageCaption' && c.body.chat_id === '@Test_Channel');
   check(back && back.body.caption.includes('📦 Відправка по Україні · Нова Пошта, Meest · накладений платіж ✓') && back.body.reply_markup, 'restore did not put the card and the button back');
+  // Reports count when created_at > reports_cleared_at, both millisecond ISO
+  // strings. In-process the next report can land in the restore's own
+  // millisecond and read as an older one (about 1 run in 8) — step past it.
+  await new Promise((r) => setTimeout(r, 5));
   a = await tap(7005);
   check(ownerMsgs().some((m) => m.body.text.includes(`Скарга на #${id} (1/3)`)), 'after restore, older reports still count');
   check(row('SELECT status FROM listings WHERE id = ?', id).status === 'live', 'one new report after restore re-hid the listing');

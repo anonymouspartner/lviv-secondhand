@@ -69,9 +69,9 @@
 // stores.json at build time into stores.gen.js (see build-data.mjs). Visit records
 // live in the VISITS KV namespace, keyed so they sort chronologically.
 // ─────────────────────────────────────────────────────────────────────────────
-import { STORES, CITIES } from './stores.gen.js';
+import { STORES, CITIES, CITY_STORES } from './stores.gen.js';
 import { qrLink } from '../shared/attribution.mjs';
-import { APP_URL, site, storeLink, marketSafetyLink } from './links.mjs';
+import { APP_URL, site, citySite, storeLink, marketSafetyLink } from './links.mjs';
 import { detectLang, listingLang, RU_REFUSAL } from './lang-check.mjs';
 import {
   getCycleLengthKeyboard, getDayOfWeekKeyboard, getOpenTimeKeyboard, getCloseTimeKeyboard,
@@ -209,7 +209,8 @@ function esc(s) {
 // One rendered store block (name, address, deep link into the app).
 function storeBlock(s, extra) {
   const lines = [`🏪 <b>${esc(s.name)}</b>`];
-  if (s.address) lines.push(`📍 ${esc(s.address)}`);
+  // Imported city stores are often named by their address — don't print it twice.
+  if (s.address && s.address !== s.name) lines.push(`📍 ${esc(s.address)}`);
   if (extra) lines.push(extra);
   lines.push(`<a href="${esc(storeLink(s.id))}">Деталі й карта · Details &amp; map →</a>`);
   return lines.join('\n');
@@ -227,9 +228,45 @@ function activePromo(s) {
   return p;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WHICH CITY THE SCHEDULE COMMANDS ANSWER FOR
+// /today, /day, /rare and /cheap follow the city the person picked with /city
+// (market-prefs:<uid>, the same one the барахолка filters use); with none
+// picked, or with the stateful tier off, they answer for Lviv as they always
+// did. Before this they read STORES — Lviv alone — whatever the city, so
+// someone in Kyiv could set Kyiv and still only ever be shown Lviv restocks.
+// ─────────────────────────────────────────────────────────────────────────────
+function scheduleCtx(slug) {
+  const city = CITIES.find((x) => x.slug === slug) || CITIES.find((x) => x.slug === 'lviv');
+  const lviv = city.slug === 'lviv';
+  return { city, lviv, stores: lviv ? STORES : (CITY_STORES[city.slug] || []), site: (path) => citySite(city.slug, path) };
+}
+const LVIV_CTX = scheduleCtx('lviv');
+// " · Київ" after a heading, so a reply always says whose schedule it is.
+const cityMark = (cx) => ` · ${esc(cx.city.nameUa)}`;
+// Under every schedule reply: which city this was, and how to change it —
+// the only place a Lviv-default reader learns other cities exist.
+const cityFooter = (cx) => `\n\n📍 Місто · City: <b>${esc(cx.city.nameUa)}</b> — змінити · change: /city`;
+// Other cities' stores were imported, not walked by us (verified: false in
+// their stores.json). Said once per reply, only when a listed store is one.
+const unverifiedNote = (list) => (list.some((s) => s.unverified)
+  ? ['⚠️ <i>Непідтверджений розклад — дані ще не перевірені нами, уточнюйте в магазині.',
+    'Unconfirmed schedule — not yet verified by us, check with the store.</i>', ''] : []);
+
+// Telegram refuses a message over 4096 characters, and a refused reply is
+// silence. Kyiv has 35 rarely-restocking stores (6,300 characters); cap every
+// store list and send the rest to the map.
+const LIST_MAX = 16;
+function listBlocks(list, cx, render) {
+  const blocks = list.slice(0, LIST_MAX).map(render).join('\n\n');
+  const rest = list.length - LIST_MAX;
+  return rest > 0 ? `${blocks}\n\n…і ще ${rest} на карті · and ${rest} more on the map: ${cx.site()}` : blocks;
+}
+
 // Sponsored slot shown atop /today and /cheap — always clearly labelled as
 // advertising. Rotates daily when several stores are featured. Empty when none.
-function featuredBlock() {
+function featuredBlock(cx = LVIV_CTX) {
+  if (!cx.lviv) return ''; // promotions are sold for Lviv stores only
   const promoted = STORES.filter((s) => activePromo(s));
   if (!promoted.length) return '';
   const s = promoted[new Date().getDate() % promoted.length];
@@ -238,13 +275,15 @@ function featuredBlock() {
   return ['⭐ <b>Реклама · Sponsored</b>', storeBlock(s, extra), '', '➖➖➖', ''].join('\n');
 }
 
-function helpText() {
+function helpText(cx = LVIV_CTX) {
+  const others = CITIES.length - 1;
   return [
     '👋 <b>Lviv Second Hand</b>',
-    'Find &amp; track second-hand clothing stores in Lviv.',
-    'Знаходьте та відстежуйте секонд-хенди Львова.',
+    `Find &amp; track second-hand clothing stores in Lviv and ${others} more cities.`,
+    `Знаходьте та відстежуйте секонд-хенди Львова і ще ${others} міст.`,
     '',
     '<b>Commands</b>',
+    `/city — your city (now: ${esc(cx.city.nameEn)}) · ваше місто (зараз: ${esc(cx.city.nameUa)})`,
     '/today — stores restocking today · магазини із завезенням сьогодні',
     '/day — pick any weekday · обрати будь-який день тижня',
     '/rare — stores that restock every 14+ days · рідко оновлювані магазини',
@@ -255,7 +294,6 @@ function helpText() {
     '/my — your listings · ваші оголошення',
     '/sold — close a listing you sold · закрити продане',
     '/market — browse: your city or with delivery · переглянути: моє місто або з доставкою',
-    '/city — your city · ваше місто',
     '',
     '/submit — add your store (for owners) · додати свій магазин',
     '/job — vacancy: field agent · вакансії: польовий агент',
@@ -263,7 +301,7 @@ function helpText() {
     '/materials — print-ready flyers, stickers, poster · рекламні матеріали для друку',
     '/help — this message · ця довідка',
     '',
-    `🗺️ Full map, hours &amp; price tracker: ${site()}`,
+    `🗺️ Full map, hours &amp; price tracker: ${cx.site()}`,
     `📸 Instagram — щотижневі ціни та нові магазини · weekly prices and new stores: https://www.instagram.com/secondhandlvivbot/`,
   ].join('\n');
 }
@@ -294,7 +332,7 @@ function materialsText() {
   ].join('\n');
 }
 
-function todayText() {
+function todayText(cx = LVIV_CTX) {
   const wd = kyivWeekday();
   const today = isoDay(0);
   // A store restocking today shows up either way: a fixed weekly day, or a
@@ -303,24 +341,25 @@ function todayText() {
   // checking both means neither source of "today" data goes unseen.
   // A published calendar (restockDates) is checked too — a chain that states
   // its drop dates outright is the most reliable "today" signal there is.
-  const todays = STORES.filter((s) =>
+  const todays = cx.stores.filter((s) =>
     s.restockDay === wd || s.restockDate === today
     || (Array.isArray(s.restockDates) && s.restockDates.includes(today)));
   if (!todays.length) {
-    return featuredBlock() + [
-      `📦 <b>No scheduled restocks today (${DAY_NAMES[wd]}).</b>`,
-      'The tracked by-weight stores restock Mon–Fri.',
+    return featuredBlock(cx) + [
+      `📦 <b>No scheduled restocks today (${DAY_NAMES[wd]})${cityMark(cx)}.</b>`,
+      cx.lviv ? 'The tracked by-weight stores restock Mon–Fri.' : 'Сьогодні за розкладом завозів немає.',
       '',
       'Try /cheap for the stores longest since a restock, or open the full map:',
-      site(),
-    ].join('\n');
+      cx.site(),
+    ].join('\n') + cityFooter(cx);
   }
-  const blocks = todays.map((s) => storeBlock(s, '🆕 Fresh stock today')).join('\n\n');
-  return featuredBlock() + [
-    `📦 <b>Fresh stock today (${DAY_NAMES[wd]})</b> — ${todays.length} store${todays.length > 1 ? 's' : ''}:`,
+  const blocks = listBlocks(todays, cx, (s) => storeBlock(s, '🆕 Fresh stock today'));
+  return featuredBlock(cx) + [
+    `📦 <b>Fresh stock today (${DAY_NAMES[wd]})${cityMark(cx)}</b> — ${todays.length} store${todays.length > 1 ? 's' : ''}:`,
     '',
+    ...unverifiedNote(todays.slice(0, LIST_MAX)),
     blocks,
-  ].join('\n');
+  ].join('\n') + cityFooter(cx);
 }
 
 // Latest published restock date that is not in the future, or null. The list
@@ -333,12 +372,12 @@ function lastCalendarDate(s, todayIso) {
   return null;
 }
 
-function cheapText() {
+function cheapText(cx = LVIV_CTX) {
   const idx = DAYS.indexOf(kyivWeekday());
   const today = isoDay(0);
   // A dated restock is the more precise signal when a store has one — it
   // beats the weekday fallback, which only ever encodes 0–6 days.
-  const scored = STORES
+  const scored = cx.stores
     .map((s) => {
       // A published calendar wins: it gives the exact last drop, so "days since
       // restock" stays right even across an irregular gap (HUMANA's 2026
@@ -365,7 +404,7 @@ function cheapText() {
     .filter(Boolean)
     .sort((a, b) => b.days - a.days)
     .slice(0, 6);
-  if (!scored.length) return cheapEmpty();
+  if (!scored.length) return cheapEmpty(cx);
   const blocks = scored
     .map(({ s, days }) => {
       const label = days === 0
@@ -374,16 +413,17 @@ function cheapText() {
       return storeBlock(s, label);
     })
     .join('\n\n');
-  return featuredBlock() + [
-    '💸 <b>Найдовше без завозу · Longest since a restock</b>',
+  return featuredBlock(cx) + [
+    `💸 <b>Найдовше без завозу · Longest since a restock${cityMark(cx)}</b>`,
     'Скільки днів минуло від останнього завозу. Карта не називає цін — вона рахує дні · Days since each store last restocked. The map counts days, not prices:',
     '',
+    ...unverifiedNote(scored.map((x) => x.s)),
     blocks,
-  ].join('\n');
+  ].join('\n') + cityFooter(cx);
 }
 
-function cheapEmpty() {
-  return `Поки немає даних про завози. · No restock dates tracked yet. Open the full map: ${site()}`;
+function cheapEmpty(cx = LVIV_CTX) {
+  return `Поки немає даних про завози${cityMark(cx)}. · No restock dates tracked yet. Open the full map: ${cx.site()}` + cityFooter(cx);
 }
 
 // Stores with a fixed weekly restock day — any day, not just today. This is a
@@ -391,24 +431,25 @@ function cheapEmpty() {
 // applies to dated (restock_date/restockDates) or non-weekly-cycle stores,
 // same as /today's weekday branch, since a bare weekday can't place a store on
 // a 14- or 35-day cycle (see getDayInfo() in index.html).
-function dayText(wd) {
-  const stores = STORES.filter((s) => s.restockDay === wd);
+function dayText(wd, cx = LVIV_CTX) {
+  const stores = cx.stores.filter((s) => s.restockDay === wd);
   const label = DAY_NAMES[wd];
   const labelUk = DAY_NAMES_UK[wd];
   if (!stores.length) {
-    return featuredBlock() + [
-      `📦 <b>No stores have a fixed ${label} (${labelUk}) restock day on record.</b>`,
+    return featuredBlock(cx) + [
+      `📦 <b>No stores have a fixed ${label} (${labelUk}) restock day on record${cityMark(cx)}.</b>`,
       'Спробуйте інший день · Try another day: /day mon, /day tue, /day wed…',
       '',
       `🐢 Rarely-restocking stores instead: /rare`,
-    ].join('\n');
+    ].join('\n') + cityFooter(cx);
   }
-  const blocks = stores.map((s) => storeBlock(s, `🗓️ Restocks every ${label} · Щотижня в ${labelUk.toLowerCase()}`)).join('\n\n');
-  return featuredBlock() + [
-    `📦 <b>Fixed ${label} (${labelUk}) restocks</b> — ${stores.length} store${stores.length > 1 ? 's' : ''}:`,
+  const blocks = listBlocks(stores, cx, (s) => storeBlock(s, `🗓️ Restocks every ${label} · Щотижня в ${labelUk.toLowerCase()}`));
+  return featuredBlock(cx) + [
+    `📦 <b>Fixed ${label} (${labelUk}) restocks${cityMark(cx)}</b> — ${stores.length} store${stores.length > 1 ? 's' : ''}:`,
     '',
+    ...unverifiedNote(stores.slice(0, LIST_MAX)),
     blocks,
-  ].join('\n');
+  ].join('\n') + cityFooter(cx);
 }
 
 function dayPickerHelp() {
@@ -424,17 +465,18 @@ function dayPickerHelp() {
 // "Rarely restocks" — any store on a longer-than-weekly cycle (14, 35 days…).
 // Pure read of the existing `cycle` field, sorted slowest-first so the chains
 // shoppers ask about least often ("does this place even get new stock?") lead.
-function rareText() {
-  const rare = STORES.filter((s) => s.cycle > 7).sort((a, b) => b.cycle - a.cycle);
+function rareText(cx = LVIV_CTX) {
+  const rare = cx.stores.filter((s) => s.cycle > 7).sort((a, b) => b.cycle - a.cycle);
   if (!rare.length) {
-    return `No rarely-restocking stores on record. Open the full map: ${site()}`;
+    return `No rarely-restocking stores on record${cityMark(cx)}. Open the full map: ${cx.site()}` + cityFooter(cx);
   }
-  const blocks = rare.map((s) => storeBlock(s, `🐢 Restocks every ${s.cycle} days`)).join('\n\n');
-  return featuredBlock() + [
-    `🐢 <b>Rarely-restocking stores</b> (14+ day cycle) — ${rare.length} store${rare.length > 1 ? 's' : ''}:`,
+  const blocks = listBlocks(rare, cx, (s) => storeBlock(s, `🐢 Restocks every ${s.cycle} days`));
+  return featuredBlock(cx) + [
+    `🐢 <b>Rarely-restocking stores${cityMark(cx)}</b> (14+ day cycle) — ${rare.length} store${rare.length > 1 ? 's' : ''}:`,
     '',
+    ...unverifiedNote(rare.slice(0, LIST_MAX)),
     blocks,
-  ].join('\n');
+  ].join('\n') + cityFooter(cx);
 }
 
 // Owner-submission: point owners at the web form (compliant first-party source).
@@ -461,8 +503,8 @@ function submitText() {
 // someone ends up without it.
 //
 // WHAT IS ON IT, AND WHY THAT IS LESS THAN WHAT EXISTS
-// Five buttons: the two ways to find stock, the two sides of selling, and
-// help. 🐢 Рідко оновлюють, ➕ Додати магазин and 💬 Залишити відгук were
+// Six buttons: the two ways to find stock, the two sides of selling, the
+// city those answer for, and help. 🐢 Рідко оновлюють, ➕ Додати магазин and 💬 Залишити відгук were
 // taken off deliberately — a shopper opening the bot for the first time was
 // reading eight buttons to find the two they came for, and a menu that lists
 // everything ranks nothing. All three still work: /rare, /submit and
@@ -482,6 +524,9 @@ const MENU_SOLD = '✅ Продано';
 const MENU_MARKET = '🛍 Барахолка';
 const MENU_HELP = '❓ Довідка';
 const MENU_BACK = '⬅️ Назад';
+// The city the schedule buttons answer for. Its own label, not the
+// барахолка's «📍 Моє місто», so the answer comes back to THIS keyboard.
+const MENU_CITY = '🏙 Змінити місто';
 // Extra row, appended only for the owner/agents (see mainMenuMarkupFor) — the
 // public rows above stay identical for everyone else. Same labels cmdAgentMenu
 // and cmdAdminMenu already use, so this reads as "the same menu, one tap
@@ -497,7 +542,8 @@ function kbMarkup(rows) {
 const PUBLIC_MENU_ROWS = [
   [MENU_DAY, MENU_CHEAP],
   [MENU_SELL, MENU_SOLD],
-  [MENU_MARKET, MENU_HELP],
+  [MENU_MARKET, MENU_CITY],
+  [MENU_HELP],
 ];
 const MAIN_MENU_MARKUP = kbMarkup(PUBLIC_MENU_ROWS);
 // isOwner/isAgent gate real access everywhere these menus are actually used
@@ -519,8 +565,8 @@ const DAY_MENU_MARKUP = kbMarkup([
 ]);
 const DAY_LABEL_TO_CODE = Object.fromEntries(DAY_OPTIONS.map((o) => [o.label, o.code]));
 
-function daySubmenuPrompt() {
-  return '📅 <b>Оберіть день · Pick a day</b>';
+function daySubmenuPrompt(cx = LVIV_CTX) {
+  return `📅 <b>Оберіть день · Pick a day</b>${cityMark(cx)}`;
 }
 
 // Map a public command OR a tapped menu-keyboard button to { text, markup }.
@@ -534,23 +580,24 @@ function daySubmenuPrompt() {
 // which keyboard comes back (mainMenuMarkupFor) — actual access to /agent
 // and /admin is still enforced where those commands are handled
 // (handleVisit), same as if someone typed them without ever seeing a button.
-function replyFor(text, isOwner, isAgent) {
+function replyFor(text, isOwner, isAgent, citySlug) {
+  const cx = scheduleCtx(citySlug);
   const trimmed = text.trim();
   const menuMarkup = mainMenuMarkupFor(isOwner, isAgent);
 
   // Reply-keyboard taps arrive as plain text identical to the button label —
   // checked before the slash-command parse below since none of these start
   // with "/".
-  if (trimmed === MENU_DAY) return { text: daySubmenuPrompt(), markup: DAY_MENU_MARKUP };
+  if (trimmed === MENU_DAY) return { text: daySubmenuPrompt(cx), markup: DAY_MENU_MARKUP };
   if (trimmed === MENU_BACK) return { text: 'Головне меню · Main menu', markup: menuMarkup };
-  if (trimmed in DAY_LABEL_TO_CODE) return { text: dayText(DAY_LABEL_TO_CODE[trimmed]), markup: DAY_MENU_MARKUP };
-  if (trimmed === MENU_CHEAP) return { text: cheapText(), markup: menuMarkup };
+  if (trimmed in DAY_LABEL_TO_CODE) return { text: dayText(DAY_LABEL_TO_CODE[trimmed], cx), markup: DAY_MENU_MARKUP };
+  if (trimmed === MENU_CHEAP) return { text: cheapText(cx), markup: menuMarkup };
   // Off the keyboard since the menu was cut down, still recognised: a client
   // that last drew the old keyboard keeps showing it until a reply replaces
   // it, and the reply carrying the new one only arrives AFTER the tap.
-  if (trimmed === MENU_RARE) return { text: rareText(), markup: menuMarkup };
+  if (trimmed === MENU_RARE) return { text: rareText(cx), markup: menuMarkup };
   if (trimmed === MENU_ADD) return { text: submitText(), markup: menuMarkup };
-  if (trimmed === MENU_HELP) return { text: helpText(), markup: menuMarkup };
+  if (trimmed === MENU_HELP) return { text: helpText(cx), markup: menuMarkup };
   // MENU_FEEDBACK, MENU_AGENT and MENU_ADMIN are deliberately not handled
   // here — handleFeedbackFlow (Feature 7) and handleVisit's command router
   // recognize them too and run before this stateless fallback.
@@ -561,20 +608,20 @@ function replyFor(text, isOwner, isAgent) {
   switch (m[1].toLowerCase()) {
     case 'start':
     case 'help':
-      return { text: helpText(), markup: menuMarkup };
+      return { text: helpText(cx), markup: menuMarkup };
     case 'today':
-      return { text: todayText(), markup: menuMarkup };
+      return { text: todayText(cx), markup: menuMarkup };
     case 'day': {
       const arg = trimmed.replace(/^\/day(?:@\w+)?\s*/i, '').trim();
       if (!arg) return { text: dayPickerHelp(), markup: menuMarkup };
       const wd = parseDayArg(arg);
       if (!wd) return { text: `Не розпізнав день · Didn't recognize that day: "${arg}".\n\n` + dayPickerHelp(), markup: menuMarkup };
-      return { text: dayText(wd), markup: menuMarkup };
+      return { text: dayText(wd, cx), markup: menuMarkup };
     }
     case 'rare':
-      return { text: rareText(), markup: menuMarkup };
+      return { text: rareText(cx), markup: menuMarkup };
     case 'cheap':
-      return { text: cheapText(), markup: menuMarkup };
+      return { text: cheapText(cx), markup: menuMarkup };
     case 'submit':
     case 'owner':
       return { text: submitText(), markup: menuMarkup };
@@ -3937,8 +3984,8 @@ async function marketBrowse(env, chatId, filter, citySlug) {
   return say(env, chatId, `${head}\n\n${lines.join('\n')}${more}${safety}\n\nОголошення від користувачів · ми не беремо участі в угоді`, MARKET_KB);
 }
 
-async function askMarketCity(env, uid, chatId, then, current) {
-  await env.VISITS.put(marketSessionKey(uid), JSON.stringify({ step: 'city', then: then || null }), { expirationTtl: MARKET_SESSION_TTL });
+async function askMarketCity(env, uid, chatId, then, current, back) {
+  await env.VISITS.put(marketSessionKey(uid), JSON.stringify({ step: 'city', then: then || null, back: back || null }), { expirationTtl: MARKET_SESSION_TTL });
   const now = cityBySlug(current);
   const intro = now ? `📍 Зараз ваше місто: <b>${esc(now.nameUa)}</b>. Змінити?` : '📍 <b>Ваше місто?</b> Запитую один раз — змінити можна командою /city.';
   return say(env, chatId, intro, cityKb(current));
@@ -3957,6 +4004,12 @@ async function handleMarketFlow(env, c, ctx) {
       await env.VISITS.delete(marketSessionKey(uid));
       await putMarketPrefs(env, uid, { ...prefs, city: city.slug });
       if (session.then) return marketBrowse(env, chatId, session.then, city.slug).then(() => true);
+      // Asked from the main menu (or by typing /city): back to the main menu,
+      // and say what the choice changed — the schedule buttons now follow it.
+      if (session.back === 'menu') {
+        await sayMenu(env, c, uid, chatId, `✅ Ваше місто: <b>${esc(city.nameUa)}</b>.\nРозклад завозів (/today, /day, /cheap) і барахолка тепер для нього · Restock schedules now follow this city.`);
+        return true;
+      }
       await say(env, chatId, `✅ Ваше місто: <b>${esc(city.nameUa)}</b>.`, MARKET_KB);
       return true;
     }
@@ -3977,8 +4030,8 @@ async function handleMarketFlow(env, c, ctx) {
     ].join('\n'), MARKET_KB);
     return true;
   }
-  if (text === MKT_CITY || text === '/city' || text === '/settings') {
-    await askMarketCity(env, uid, chatId, null, prefs.city);
+  if (text === MKT_CITY || text === MENU_CITY || text === '/city' || text === '/settings') {
+    await askMarketCity(env, uid, chatId, null, prefs.city, text === MKT_CITY ? null : 'menu');
     return true;
   }
   if (text === MKT_MY_CITY || text === MKT_SHIPS) {
@@ -4122,7 +4175,11 @@ export default {
     // work through handleVisit, which never runs otherwise.
     const isOwner = c.enabled && Boolean(c.ownerId) && String(from.id) === c.ownerId;
     const isAgent = c.enabled && c.agentIds.includes(String(from.id));
-    const reply = replyFor(text, isOwner, isAgent);
+    // The schedule commands answer for the person's /city. Without the
+    // stateful tier (or if KV is down) there is no city to read: Lviv.
+    let citySlug = null;
+    if (c.enabled) { try { citySlug = (await getMarketPrefs(env, from.id)).city || null; } catch {} }
+    const reply = replyFor(text, isOwner, isAgent, citySlug);
     return sendMessage(chatId, reply.text, reply.markup);
   },
 };
