@@ -15,6 +15,22 @@ chat. It lives in [`telegram-bot/`](../telegram-bot).
 Every result links back into the app with a `?store=<id>` deep link, so tapping
 it opens that store's page, map pin, and price tracker.
 
+### Cities
+
+`/today`, `/day`, `/rare` and `/cheap` answer for the person's city — the one
+picked with `/city` or the **🏙 Змінити місто** button (the same city the
+барахолка filters use, kept in KV as `market-prefs:<uid>`). With no city picked
+they answer for Lviv. Every schedule reply names its city and ends with how to
+change it.
+
+`build-data.mjs` bundles each `cities/<slug>/stores.json` as `CITY_STORES`;
+`STORES` stays Lviv alone, so store lookup, `/materials`, the sponsored slot and
+the field-agent flows remain Lviv-only. Other cities' stores link to their own
+host (`https://kyiv.lvivsecondhand.com/?store=kv1`), and a reply listing stores
+marked `verified: false` carries an "unconfirmed schedule" note. Lists are cut
+at 16 stores (Telegram's 4096-character limit) with a link to the map for the
+rest. `scripts/check-bot-cities.mjs` covers all of this in CI.
+
 There is also an opt-in **field-agent subsystem** (`/visit`, `/report`, `/export`)
 for a hired rep to log store surveys — off by default, enabled per
 [`telegram-bot/wrangler.toml`](../telegram-bot/wrangler.toml). See the

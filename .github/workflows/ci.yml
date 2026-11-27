@@ -75,6 +75,14 @@ jobs:
       - name: Check the barakholka shipping, filters and complaints
         run: node --no-warnings scripts/check-market.mjs
 
+      # /today, /day, /rare and /cheap read Lviv's stores whatever city the
+      # person had picked, so 136 scheduled stores in ten other cities could
+      # not be reached from the bot. Drives the real webhook handler per city:
+      # the right stores, links on that city's host, the "unconfirmed" label on
+      # imported schedules, and every reply under Telegram's 4096 characters.
+      - name: Check the bot's schedule commands follow the city
+        run: node --no-warnings scripts/check-bot-cities.mjs
+
       - name: Syntax-check the Telegram bot Worker
         run: node --check telegram-bot/worker.js
 

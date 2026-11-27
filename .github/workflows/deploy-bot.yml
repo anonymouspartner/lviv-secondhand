@@ -36,6 +36,7 @@ on:
       - 'shared/**'   # attribution tags, imported and bundled at deploy
       - 'stores.json'
       - 'cities.json' # the барахолка city list, bundled by build-data.mjs
+      - 'cities/**'   # every other city's stores, bundled for /today, /day, /rare, /cheap
       - '.github/workflows/deploy-bot.yml'
   workflow_dispatch:
 
